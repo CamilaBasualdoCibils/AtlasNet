@@ -4,5 +4,4 @@ Makefile
 compile_commands.json
 obj
 bin
-lib/.cache
 .cache
