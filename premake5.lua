@@ -11,21 +11,14 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-
-    libdirs{}
-    links{}
-    includedirs{}
-    files{}
-
-        
-        files{"lib/imgui/*.cpp"}
-        includedirs{"lib/imgui"}
     filter "configurations:DebugDocker"
         symbols "On"
         defines {"_DOCKER"}
 
     filter "configurations:DebugLocal"
         defines {"_LOCAL","_DISPLAY"}
+        files{"lib/imgui/*.cpp"}
+        includedirs{"lib/imgui"}
         files{"lib/imgui/backends/*.cpp"}
         symbols "On"        
         includedirs{"lib/glfw/include","lib/glew/include"}
