@@ -31,3 +31,6 @@ using vec = glm::vec<L, T>;
 #include <iostream>
 #include <cstdlib>
 #include <thread>
+#include <span>
+#include <vector>
+#include <functional>
