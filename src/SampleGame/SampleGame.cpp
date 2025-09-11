@@ -1,5 +1,5 @@
 #include "pch.hpp"
-
+#include "KDNet/KDNet.hpp"
 /**
  * @brief A simple entity that moves in a circular path.
  */
@@ -48,6 +48,9 @@ public:
  * @brief Main function to run the sample game.
  */
 int main() {
+    KDNetServer::InitializeProperties InitProperties;
+    KDNetServer::Initialize(InitProperties);
+
     Scene scene;
     // create an entity
     scene.entities.emplace_back(10.0f, 0.5f); // radius =10, slower
@@ -58,6 +61,10 @@ int main() {
 
     while (true) 
     {
+        std::span<KDEntity> myspan;
+        std::vector<KDEntity> Incoming;
+        std::vector<KDEntityID> Outgoing;
+         KDNetServer::Update(myspan,Incoming,Outgoing);
         auto now = clock::now();
         std::chrono::duration<float> delta = now - previous;
         previous = now;

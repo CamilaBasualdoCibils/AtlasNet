@@ -31,28 +31,44 @@ workspace "GuacNet"
         defines {"_DOCKER"}
         optimize "On"
 
-  project "God"
-    dependson {"KDNet"}
-        links{"KDNet"}
-    kind "ConsoleApp"
-    language "C++"
-    files { "src_runners/GodRun.cpp" }
+    project "KDNetServer"
+        dependson {"KDNetInternal"}
+            links{"KDNetInternal"}
+        kind "SharedLib"
+        language "C++"
+        files { "src/KDNet/**.cpp" }
+    project "KDNetClient"
+        dependson {"KDNetInternal"}
+            links{"KDNetInternal"}
+        kind "SharedLib"
+        language "C++"
+        files { "src/KDNet/**.cpp" }
 
-  project "Partition"
-    dependson "KDNet"
-    kind "ConsoleApp"
-    language "C++"
-    files { "src_runners/PartitionRun.cpp" }
-    links{"KDNet"}
+    project "God"
+        dependson {"KDNetInternal"}
+            links{"KDNetInternal"}
+        kind "ConsoleApp"
+        language "C++"
+        files { "src_runners/GodRun.cpp" }
 
-  project "KDNet"
-    kind "StaticLib"
-    language "C++"
-    files { "src/**.hpp","src/**.cpp" }
-  project "SampleGame"
-    kind "ConsoleApp"
-    language "C++"
-    files { "src/SampleGame/**.cpp" }
+    project "Partition"
+        dependson "KDNetInternal"
+        kind "ConsoleApp"
+        language "C++"
+        files { "src_runners/PartitionRun.cpp" }
+        links{"KDNetInternal"}
+
+    project "KDNetInternal"
+        kind "StaticLib"
+        language "C++"
+        files { "src/**.hpp","src/**.cpp" }
+
+    project "SampleGame"
+        kind "ConsoleApp"
+        dependson "KDNetServer"
+        links "KDNetServer"
+        language "C++"
+        files { "src/SampleGame/**.cpp" }
 function customClean()
     -- Specify the directories or files to be cleaned
     local dirsToRemove = {
@@ -64,7 +80,7 @@ function customClean()
 
     local filesToRemove = {
         "Makefile",
-        "KDNet.make",
+        "KDNetInternal.make",
         "Partition.make",
         "God.make",
         "imgui.ini",

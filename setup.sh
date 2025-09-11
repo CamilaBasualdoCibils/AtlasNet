@@ -9,6 +9,8 @@ sudo apt install bear libx11-dev libxrandr-dev libwayland-dev -y
     docker.docker                 # Docker DX
     yzhang.markdown-all-in-one          # Markdown All in One
     pkief.material-icon-theme           # Material Icon Theme
+    cschlosser.doxdocgen
+    mhutchie.git-graph
 )
 
 # Install each extension
