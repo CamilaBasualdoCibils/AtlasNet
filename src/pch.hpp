@@ -1,10 +1,11 @@
 #pragma once
 
-#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
-#define IMGUI_DEFINE_MATH_OPERATORS
+
 
 
 #ifdef _DISPLAY 
+#define IMGUI_DISABLE_OBSOLETE_FUNCTIONS
+#define IMGUI_DEFINE_MATH_OPERATORS
 #define GLEW_STATIC
 #define GLEW_NO_GLU
 #include <GL/glew.h>
@@ -12,8 +13,8 @@
 #define IMGUI_IMPL_OPENGL_LOADER_CUSTOM
 #include <backends/imgui_impl_opengl3.h>
 #include <backends/imgui_impl_glfw.h>
-#endif
 #include <imgui.h>
+#endif
 
 
 #include <iostream>
