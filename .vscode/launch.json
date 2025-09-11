@@ -1,0 +1,45 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+  
+    {
+      "name": "Debug God Docker",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/DebugDocker/God/God",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerServerAddress": "localhost:1234",
+      "stopAtEntry": false,
+      "preLaunchTask": "Run Docker Container",
+    },
+    {
+      "name": "Debug God Local",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/DebugLocal/God/God",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "stopAtEntry": false,
+      "preLaunchTask": "Compile For Local",
+    },
+    {
+      "name": "Attach To Docker",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/DebugLocal/Partition/Partition",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "miDebuggerServerAddress": "localhost:${input:debugPort}",
+      "stopAtEntry": false,
+    },
+  ],
+  "inputs": [
+    {
+      "id": "debugPort",
+      "type": "promptString",
+      "description": "Enter gdbserver port",
+      "default": "1234"
+    }
+  ]
+}
