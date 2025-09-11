@@ -31,25 +31,28 @@ workspace "GuacNet"
         defines {"_DOCKER"}
         optimize "On"
 
-project "God"
+  project "God"
     dependson {"KDNet"}
         links{"KDNet"}
     kind "ConsoleApp"
     language "C++"
     files { "src_runners/GodRun.cpp" }
 
-project "Partition"
+  project "Partition"
     dependson "KDNet"
     kind "ConsoleApp"
     language "C++"
     files { "src_runners/PartitionRun.cpp" }
     links{"KDNet"}
 
-project "KDNet"
+  project "KDNet"
     kind "StaticLib"
     language "C++"
     files { "src/**.hpp","src/**.cpp" }
-
+  project "SampleGame"
+    kind "ConsoleApp"
+    language "C++"
+    files { "src/SampleGame/**.cpp" }
 function customClean()
     -- Specify the directories or files to be cleaned
     local dirsToRemove = {
