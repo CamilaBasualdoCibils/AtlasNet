@@ -11,9 +11,9 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    includedirs{"lib/GNS/include","lib/glm"}
-    links{"GameNetworkingSockets_s"}
-    libdirs{"lib/GNS/lib"}
+    includedirs{"lib/GameNetworkingSockets/include","lib/glm"}
+    links{"GameNetworkingSockets_s","protobuf","crypto","ssl"}
+    libdirs{"lib/GameNetworkingSockets/lib"}
     filter "configurations:DebugDocker"
         symbols "On"
         defines {"_DOCKER"}
@@ -31,42 +31,40 @@ workspace "GuacNet"
         defines {"_DOCKER"}
         optimize "On"
 
-    project "KDNetServer"
-        dependson {"KDNetInternal"}
-            links{"KDNetInternal"}
-        kind "SharedLib"
+    project "Interlink"
+        kind "StaticLib"
         language "C++"
-        files { "src/KDNet/**.cpp" }
-    project "KDNetClient"
-        dependson {"KDNetInternal"}
-            links{"KDNetInternal"}
-        kind "SharedLib"
+        files {"src/Interlink/**.cpp"}
+    project "KDNet"
+        kind "StaticLib"
+        dependson "Interlink"
+        links "Interlink"
         language "C++"
         files { "src/KDNet/**.cpp" }
 
     project "God"
-        dependson {"KDNetInternal"}
-            links{"KDNetInternal"}
+        dependson "Interlink"
+        links {"Interlink"}
         kind "ConsoleApp"
         language "C++"
-        files { "src_runners/GodRun.cpp" }
-
+        files { "src/God/**.cpp" }
+   project "GodView"
+        dependson {"God","Interlink"}
+        links {"God","Interlink"}
+        kind "ConsoleApp"
+        language "C++"
+        files { "src/GodView/**.cpp" }
     project "Partition"
-        dependson "KDNetInternal"
+        dependson "Interlink"
+        links "Interlink"
         kind "ConsoleApp"
         language "C++"
-        files { "src_runners/PartitionRun.cpp" }
-        links{"KDNetInternal"}
-
-    project "KDNetInternal"
-        kind "StaticLib"
-        language "C++"
-        files { "src/**.hpp","src/**.cpp" }
+        files { "src/Partition/**.cpp" }
 
     project "SampleGame"
         kind "ConsoleApp"
-        dependson "KDNetServer"
-        links "KDNetServer"
+        dependson {"KDNet","Interlink"}
+        links {"KDNet","Interlink"}
         language "C++"
         files { "src/SampleGame/**.cpp" }
 function customClean()
@@ -80,13 +78,13 @@ function customClean()
 
     local filesToRemove = {
         "Makefile",
-        "KDNetInternal.make",
-        "Partition.make",
-        "God.make",
         "imgui.ini",
         "compile_commands.json"
     }
 
+    local extensionsToRemove = {
+        ".make",
+    }
     -- Remove specified directories
     for _, dir in ipairs(dirsToRemove) do
         if os.isdir(dir) then
@@ -100,6 +98,15 @@ function customClean()
         if os.isfile(file) then
             os.remove(file)
             print("Removed file: " .. file)
+        end
+    end
+        local rootFiles = os.matchfiles("*") -- only root files
+    for _, file in ipairs(rootFiles) do
+        for _, ext in ipairs(extensionsToRemove) do
+            if file:sub(-#ext) == ext then
+                os.remove(file)
+                print("Removed file by extension: " .. file)
+            end
         end
     end
 end

@@ -49,7 +49,7 @@ public:
  */
 int main() {
     KDNetServer::InitializeProperties InitProperties;
-    KDNetServer::Initialize(InitProperties);
+    KDNetServer::Get().Initialize(InitProperties);
 
     Scene scene;
     // create an entity
@@ -64,7 +64,7 @@ int main() {
         std::span<KDEntity> myspan;
         std::vector<KDEntity> Incoming;
         std::vector<KDEntityID> Outgoing;
-         KDNetServer::Update(myspan,Incoming,Outgoing);
+         KDNetServer::Get().Update(myspan,Incoming,Outgoing);
         auto now = clock::now();
         std::chrono::duration<float> delta = now - previous;
         previous = now;
@@ -73,7 +73,6 @@ int main() {
         scene.update(dt);
 
         // Print positions every second
-        system("clear");
         scene.printPositions();
 
 

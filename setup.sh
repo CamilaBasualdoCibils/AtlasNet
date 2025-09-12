@@ -1,5 +1,5 @@
 sudo apt update
-sudo apt install bear libx11-dev libxrandr-dev libwayland-dev -y
+sudo apt install bear libx11-dev libxrandr-dev libwayland-dev libprotobuf-dev protobuf-compiler libssl-dev -y
 
 
  extensions=(
