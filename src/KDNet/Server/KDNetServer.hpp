@@ -1,5 +1,7 @@
-#include "pch.hpp"
 #include "KDNet/KDEntity.hpp"
+#include "KDNet/KDNetInterface.hpp"
+#include "Singleton.hpp"
+#include "pch.hpp"
 enum KDServerRequestType {
     Raycast,
     SphereOverlap,
@@ -9,8 +11,9 @@ struct KDServerRequest {
     KDServerRequestType Type;
 };
 using KDServerResponseType = std::vector<std::byte>;
-class KDNetServer {
+class KDNetServer : public KDNetInterface, public Singleton<KDNetServer> {
    public:
+    KDNetServer() {};
     /**
      * @brief
      *
@@ -22,7 +25,7 @@ class KDNetServer {
      * @brief Initializes the KDNet Front end
      *
      */
-    static void Initialize(InitializeProperties properties = {});
+    void Initialize(InitializeProperties properties = {});
 
     /**
      * @brief Update tick for KDNet.
@@ -31,6 +34,6 @@ class KDNetServer {
      * @param IncomingEntities Entities incoming that you must store and keep track of.
      * @param OutgoingEntities Entity IDs of entities you should get rid of.
      */
-    static void Update(std::span<KDEntity> entities, std::vector<KDEntity>& IncomingEntities,
-		       std::vector<KDEntityID>& OutgoingEntities);
+    void Update(std::span<KDEntity> entities, std::vector<KDEntity>& IncomingEntities,
+		std::vector<KDEntityID>& OutgoingEntities);
 };
