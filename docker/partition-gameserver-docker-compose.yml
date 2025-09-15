@@ -1,0 +1,25 @@
+
+version: "3.9"
+services:
+  game-server:
+    image: game-server-image
+    container_name: game-server
+    restart: "no"
+    networks:
+      - shared_network
+    ports:
+      - ":1234"   # host:container
+
+  partition:
+    image: partition-image:latest
+    container_name: partition_container
+    restart: "no"
+    networks:
+      - shared_network
+    ports:
+      - ":1234"   # host:container
+
+networks:
+  shared_network:
+    driver: bridge
+

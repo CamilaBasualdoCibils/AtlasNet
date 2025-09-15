@@ -82,7 +82,6 @@ function customClean()
         "docker"
         
     }
-
     local filesToRemove = {
         "Makefile",
         "imgui.ini",

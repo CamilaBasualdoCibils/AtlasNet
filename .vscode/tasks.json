@@ -48,54 +48,32 @@
       }
     },
     {
-      "label": "Remove All Docker Containers",
-      "type": "shell",
-      "command": "docker ps -aq | xargs -r docker rm -f",
-      "dependsOn": "Startup Docker",
-      "problemMatcher": [],
-      "group": {
-          "kind": "build",
-          "isDefault": false
-      },
-      "presentation": {
-          "echo": true,
-          "reveal": "always",
-          "focus": false,
-          "panel": "shared",
-          "showReuseMessage": true,
-          "clear": true
-      }
-    },
-    {
-      "label": "Build God Docker Image",
+      "label": "Setup Docker Images. SampleGame",
       "type": "shell",
       "dependsOn": "Remove All Docker Containers",
-      "command": "docker",
-      "args": ["build","-f","Dockerfile.god", "-t", "godimage:latest", "."]
+      "command": "./Setup.sh",
+      "args":["SampleGame"],
+        "options": {
+        "cwd": "${workspaceFolder}" // working directory
+      },
     },
     {
-      "label": "Build Partition Docker Image",
+      "label": "Run God",
       "type": "shell",
-      "dependsOn": "Build God Docker Image",
-      "command": "docker",
-      "args": ["build","-f","Dockerfile.partition", "-t", "partitionimage:latest", "."]
+      "dependsOn": "Setup Docker Images. SampleGame",
+      "command": "./Start.sh",
+      "args": ["God",],
+      "options": {
+        "cwd": "${workspaceFolder}" // working directory
+      },
     },
     {
-      "label": "Run Docker Container",
+      "label": "get-god-gdb-port",
       "type": "shell",
-      "dependsOn": "Build Partition Docker Image",
-      "command": "docker",
-      "args": ["run", "-v", "/var/run/docker.sock:/var/run/docker.sock", "--cap-add=SYS_PTRACE", "--security-opt", "seccomp=unconfined", "--name", "God_container", "-d", "-p", "1234:1234", "godimage:latest"],
-    },
-    {
-      "label": "Build Partition Image",
-      "type": "shell",
-      "command": "docker build -t partition_server -f Dockerfile.partition .",
+      "command": "./GetGDBPort.sh god-image ",   // or your actual command
       "problemMatcher": [],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
+      
+     
     }
   ],
   "inputs": [

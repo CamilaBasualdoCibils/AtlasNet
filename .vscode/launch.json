@@ -34,9 +34,11 @@
       "program": "${workspaceFolder}/bin/DebugDocker/God/God",
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
-      "miDebuggerServerAddress": "localhost:1234",
+      "preLaunchTask": "get-god-gdb-port",
+      "envFile": "${workspaceFolder}/god-port.tmp",
+      "miDebuggerServerAddress": "localhost:${input:debugPort}",
       "stopAtEntry": false,
-      "preLaunchTask": "Run Docker Container",
+      
     },
     {
       "name": "Debug God Local",
@@ -55,9 +57,9 @@
       "program": "${workspaceFolder}/bin/DebugDocker/Partition/Partition",
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
+      "preLaunchTask": "Compile For Docker",
       "miDebuggerServerAddress": "localhost:${input:debugPort}",
       "stopAtEntry": false,
-      "preLaunchTask": "Compile For Docker",
     },
   ],
   "inputs": [
