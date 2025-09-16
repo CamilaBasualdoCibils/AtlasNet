@@ -22,7 +22,8 @@ ARG="$1"
 case "$ARG" in
     God)
         echo "Runing God"
-        docker run -v /var/run/docker.sock:/var/run/docker.sock --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --name God-Container -d -p :1234 $GOD_IMAGE_NAME
+        docker rm -f $GOD_CONTAINER_NAME 2>/dev/null || true 
+        docker run -v /var/run/docker.sock:/var/run/docker.sock --cap-add=SYS_PTRACE --security-opt seccomp=unconfined --name $GOD_CONTAINER_NAME -d -p 1234:1234 $GOD_IMAGE_NAME
         ;;
 
     Partition)

@@ -1,4 +1,4 @@
-#include "Interlink.hpp"
+#include "Interlink/Interlink.hpp"
 
 void Interlink::Initialize(const InterlinkProperties& Properties)
 {

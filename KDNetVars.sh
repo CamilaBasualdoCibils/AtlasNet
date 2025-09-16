@@ -1,13 +1,16 @@
 
+NAME_OF_THIS_FILE="KDNetVars.sh"
+
 BUILD_CONFIG="DebugDocker"
 
 GOD_IMAGE_NAME="god-image"
 GOD_DOCKER_FILE="DockerFile.god"
-GOD_CONTAINER_BASE_NAME="god"
+GOD_CONTAINER_NAME="god"
 
 PARTITION_IMAGE_NAME="partition-image"
 PARTITION_DOCKER_FILE="DockerFile.partition"
 PARTITION_CONTAINER_NAME="partition"
+IN_COMPOSE_PARTITION_PORT="80085"
 
 GAME_SERVER_IMAGE="game-server-image"
 GAME_SERVER_DOCKER_FILE="DockerFile.gameserver"
@@ -29,14 +32,15 @@ WORKDIR /app
 # Copy local files into the image
 # Install dependencies
 RUN apt-get update && \
-apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev
+apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev
 
 
 COPY {EXECUTABLE_PATH} /app/
+COPY $NAME_OF_THIS_FILE /app/
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD [\"gdbserver\", \":${GDBSERVER_INTERNAL_PORT}\",\"{EXECUTABLE_NAME}\"]
+CMD /bin/bash -c \"source $NAME_OF_THIS_FILE && gdbserver :${GDBSERVER_INTERNAL_PORT} {EXECUTABLE_NAME}\"
 "
 
 BASE_PARTITION_COMPOSE_DOCKER_FILE="

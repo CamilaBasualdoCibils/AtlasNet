@@ -1,12 +1,11 @@
+#include "Globals.hpp"
 #include "God/God.hpp"
 #include "Partition/Partition.hpp"
 #include "pch.hpp"
-
 int main(int argc, char **argv) {
     std::cerr << "Hello\n";
     std::cerr << "From\n";
     std::cerr << "God\n";
-
     for (int i = 0; i < argc; i++) {
 	std::cerr << argv[i] << std::endl;
     }
@@ -15,11 +14,11 @@ int main(int argc, char **argv) {
 
     // Example: spawn 4 partitions
     for (int i = 1; i <= 4; i++) {
-        int port = 7000 + i;
-        god.spawnPartition(i, port);
+	int port = 7000 + i;
+	god.spawnPartition(i, port);
     }
 
-    std::this_thread::sleep_for(std::chrono::seconds(100));  
+    std::this_thread::sleep_for(std::chrono::seconds(100));
     god.cleanupPartitions();
     return 0;
 }

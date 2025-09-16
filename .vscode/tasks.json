@@ -13,7 +13,7 @@
       "label": "Compile For Docker",
       "type": "shell",
       "dependsOn": "Premake",
-      "command": "bear -- make -C ./build/ config=debugdocker",
+      "command": "bear -- make -C ./build/ config=debugdocker -j 12",
       "args": [],
       "group": "build",
       "problemMatcher": ["$gcc"]
@@ -23,7 +23,7 @@
       "label": "Compile For Local",
       "type": "shell",
       "dependsOn": "Premake",
-      "command": "bear -- make -C ./build/ config=debuglocal",
+      "command": "bear -- make -C ./build/ config=debuglocal -j 12",
       "args": [],
       "group": "build",
       "problemMatcher": ["$gcc"]
@@ -33,6 +33,25 @@
       "type": "shell",
       "command": "docker ps -aq | xargs -r docker rm -f",
       "dependsOn": "Compile For Docker",
+      "problemMatcher": [],
+      "group": {
+          "kind": "build",
+          "isDefault": false
+      },
+      "presentation": {
+          "echo": true,
+          "reveal": "always",
+          "focus": false,
+          "panel": "shared",
+          "showReuseMessage": true,
+          "clear": true
+      }
+    },
+    {
+      "label": "Remove All Docker Containers",
+      "type": "shell",
+      "command": "docker ps -aq >nul 2>&1 && docker rm -f $(docker ps -aq) || echo $USER",
+      "dependsOn": "Startup Docker",
       "problemMatcher": [],
       "group": {
           "kind": "build",

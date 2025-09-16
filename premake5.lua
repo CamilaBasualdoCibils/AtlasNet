@@ -19,10 +19,12 @@ workspace "GuacNet"
         defines {"_DOCKER"}
 
     filter "configurations:DebugLocal"
-        defines {"_LOCAL","_DISPLAY"}
-        files{"lib/imgui/*.cpp"}
-        includedirs{"lib/imgui"}
-        files{"lib/imgui/backends/*.cpp"}
+        defines {"_LOCAL",
+        --"_DISPLAY"
+    }
+        --files{"lib/imgui/*.cpp"}
+        --includedirs{"lib/imgui"}
+        --files{"lib/imgui/backends/*.cpp"}
         symbols "On"        
         includedirs{"lib/glfw/include","lib/glew/include"}
         links{"GLEW","glfw3","GL","X11"}

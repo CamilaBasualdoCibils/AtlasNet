@@ -36,6 +36,8 @@ build_compose_function()
     echo "$BASE_PARTITION_COMPOSE_DOCKER_FILE" > "$DOCKER_FILES_PATH"/"$PARTITION_GAMESERVER_COMPOSE_FILE"
 }
 
+echo "Compiling"
+make -C ./build/ config=${BUILD_CONFIG,,} -j 16
 
 
 echo "Building God Image"
