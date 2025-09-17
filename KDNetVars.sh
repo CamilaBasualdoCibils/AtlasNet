@@ -1,4 +1,3 @@
-#!/bin/bash
 
 NAME_OF_THIS_FILE="KDNetVars.sh"
 
@@ -33,22 +32,23 @@ WORKDIR /app
 # Copy local files into the image
 # Install dependencies
 RUN apt-get update && \
-apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev
+apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev curl
 
 
 COPY {EXECUTABLE_PATH} /app/
 COPY $NAME_OF_THIS_FILE /app/
+COPY "Start.sh" /app/
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD [\"./{EXECUTABLE_NAME}\"]
+CMD /bin/bash -c \"source $NAME_OF_THIS_FILE && gdbserver :${GDBSERVER_INTERNAL_PORT} {EXECUTABLE_NAME} &\"
 "
 
 BASE_PARTITION_COMPOSE_DOCKER_FILE="
 version: \"3.9\"
 services:
-  gameserver:
-    image: ${GAME_SERVER_IMAGE}:latest
+  ${GAME_SERVER_CONTAINER_NAME}:
+    image: ${GAME_SERVER_IMAGE}
     container_name: ${GAME_SERVER_CONTAINER_NAME}
     restart: \"no\"
     networks:
@@ -58,12 +58,12 @@ services:
 
   partition:
     image: ${PARTITION_IMAGE_NAME}:latest
-    container_name: ${PARTITION_CONTAINER_NAME}
+    container_name: partition_container
     restart: \"no\"
     networks:
       - shared_network
     ports:
-      - \"1235:${GDBSERVER_INTERNAL_PORT:-1234}\"   # host:container
+      - \":${GDBSERVER_INTERNAL_PORT:-1234}\"   # host:container
 
 networks:
   shared_network:
