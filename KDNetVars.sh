@@ -1,3 +1,4 @@
+#!/bin/bash
 
 NAME_OF_THIS_FILE="KDNetVars.sh"
 
@@ -40,14 +41,14 @@ COPY $NAME_OF_THIS_FILE /app/
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD /bin/bash -c \"source $NAME_OF_THIS_FILE && gdbserver :${GDBSERVER_INTERNAL_PORT} {EXECUTABLE_NAME}\"
+CMD [\"./{EXECUTABLE_NAME}\"]
 "
 
 BASE_PARTITION_COMPOSE_DOCKER_FILE="
 version: \"3.9\"
 services:
-  ${GAME_SERVER_CONTAINER_NAME}:
-    image: ${GAME_SERVER_IMAGE}
+  gameserver:
+    image: ${GAME_SERVER_IMAGE}:latest
     container_name: ${GAME_SERVER_CONTAINER_NAME}
     restart: \"no\"
     networks:
@@ -57,12 +58,12 @@ services:
 
   partition:
     image: ${PARTITION_IMAGE_NAME}:latest
-    container_name: partition_container
+    container_name: ${PARTITION_CONTAINER_NAME}
     restart: \"no\"
     networks:
       - shared_network
     ports:
-      - \":${GDBSERVER_INTERNAL_PORT:-1234}\"   # host:container
+      - \"1235:${GDBSERVER_INTERNAL_PORT:-1234}\"   # host:container
 
 networks:
   shared_network:

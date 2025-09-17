@@ -2,6 +2,8 @@
 #include "Singleton.hpp"
 #include "pch.hpp"
 #include "Globals.hpp"
+const static inline int32 CJ_PARTITION_PORT = 22877;
+const static inline int32 CJ_GAMESERVER_PORT = 22878;
 enum class InterlinkType {
     eInvalid = -1,
     ePartition = 1,   // partition Server
@@ -10,6 +12,7 @@ enum class InterlinkType {
     eGameClient = 4,  // Game Client / Player
     eGameServer = 5   // Game Server
 };
+
 struct InterlinkProperties {
     InterlinkType Type = InterlinkType::eInvalid;
 };

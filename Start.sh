@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 . ./KDNetVars.sh   
 # Run docker-compose
 
@@ -28,6 +27,8 @@ case "$ARG" in
 
     Partition)
         echo "Running Partition Compose"
+        docker compose -p gameserver -f $DOCKER_FILES_PATH/$PARTITION_GAMESERVER_COMPOSE_FILE down --remove-orphans -v
+        
         docker compose -p gameserver -f $DOCKER_FILES_PATH/$PARTITION_GAMESERVER_COMPOSE_FILE up --remove-orphans 
         ;;
 

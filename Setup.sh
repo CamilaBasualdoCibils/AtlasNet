@@ -1,5 +1,4 @@
 #!/bin/bash
-#!/bin/bash
 . ./KDNetVars.sh   
 # Run docker-compose
 
@@ -37,6 +36,7 @@ build_compose_function()
 }
 
 echo "Compiling"
+./premake5 gmake
 make -C ./build/ config=${BUILD_CONFIG,,} -j 16
 
 

@@ -1,8 +1,8 @@
 
 version: "3.9"
 services:
-  game-server:
-    image: game-server-image
+  gameserver:
+    image: game-server-image:latest
     container_name: game-server
     restart: "no"
     networks:
@@ -12,12 +12,12 @@ services:
 
   partition:
     image: partition-image:latest
-    container_name: partition_container
+    container_name: partition
     restart: "no"
     networks:
       - shared_network
     ports:
-      - ":1234"   # host:container
+      - "1235:1234"   # host:container
 
 networks:
   shared_network:

@@ -26,7 +26,18 @@
           }
       ]
     },
-  
+    {
+      "name": "Debug Partition Docker",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "${workspaceFolder}/bin/DebugDocker/Partition/Partition",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "preLaunchTask": "Run Partition",
+      "miDebuggerServerAddress": "localhost:1235",
+      "stopAtEntry": false,
+      
+    },
     {
       "name": "Debug God Docker",
       "type": "cppdbg",

@@ -6,12 +6,13 @@ WORKDIR /app
 
 # Copy local files into the image
 # Install dependencies
-RUN apt-get update && apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev
+RUN apt-get update && apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev
 
 
 COPY ../bin/DebugDocker/SampleGame/SampleGame /app/
+COPY KDNetVars.sh /app/
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD ["gdbserver", ":1234","SampleGame"]
+CMD ["./SampleGame"]
 

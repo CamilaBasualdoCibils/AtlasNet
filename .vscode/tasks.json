@@ -86,6 +86,16 @@
         "cwd": "${workspaceFolder}" // working directory
       },
     },
+     {
+      "label": "Run Partition",
+      "type": "shell",
+      "dependsOn": "Setup Docker Images. SampleGame",
+      "command": "./Start.sh",
+      "args": ["Partition",],
+      "options": {
+        "cwd": "${workspaceFolder}" // working directory
+      },
+    },
     {
       "label": "get-god-gdb-port",
       "type": "shell",

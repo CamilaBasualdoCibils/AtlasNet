@@ -1,9 +1,9 @@
 #include "pch.hpp"
 #include "Partition.hpp"
-
+#include "Interlink/Interlink.hpp"
 Partition::Partition()
 {
-
+Interlink::Get().Initialize(InterlinkProperties{.Type = InterlinkType::ePartition});
 }
 Partition::~Partition()
 {

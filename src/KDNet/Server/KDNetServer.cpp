@@ -2,7 +2,7 @@
 
 #include "Interlink/Interlink.hpp"
 void KDNetServer::Initialize(KDNetServer::InitializeProperties properties) {
-    std::cout << "KDNet Initialize\n";
+    std::cerr << "KDNet Initialize\n";
     Interlink::Check();
 
     Interlink::Get().Initialize(InterlinkProperties{.Type = InterlinkType::eGameServer});
