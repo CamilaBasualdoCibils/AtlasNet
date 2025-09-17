@@ -27,9 +27,40 @@ case "$ARG" in
         ;;
 
     Partition)
-        echo "Running Partition Compose"
-        docker compose -p gameserver -f $DOCKER_FILES_PATH/$PARTITION_GAMESERVER_COMPOSE_FILE up --remove-orphans 
+        if [ $# -lt 3 ]; then
+            echo "Usage: $0 Partition <id> <port>"
+            exit 1
+        fi
+        ID=$2
+        PORT=$3
+        echo "Spawning Partition $ID on port $PORT"
+
+        # Call Docker REST API via curl (inside WSL with mounted socket)
+        curl --unix-socket /var/run/docker.sock -X POST \
+            -H "Content-Type: application/json" \
+            -d "{
+                  \"Image\": \"$PARTITION_IMAGE_NAME\",
+                  \"Env\": [
+                      \"PARTITION_ID=$ID\"
+                  ],
+                  \"ExposedPorts\": {
+                      \"1234/tcp\": {}
+                  },
+                  \"HostConfig\": {
+                      \"PortBindings\": {
+                          \"1234/tcp\": [{\"HostPort\": \"$PORT\"}]
+                      }
+                  }
+                }" \
+            http://localhost/containers/create?name=partition_$ID
+
+        # Start container
+        curl --unix-socket /var/run/docker.sock -X POST \
+            http://localhost/containers/partition_$ID/start
+
+        echo "✅ Partition $ID started on port $PORT"
         ;;
+
 
     *)
         echo "Unknown argument: $ARG"
