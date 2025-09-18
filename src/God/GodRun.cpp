@@ -10,12 +10,22 @@ int main(int argc, char **argv) {
 	std::cerr << argv[i] << std::endl;
     }
 
-    God god;
+    God& god = God::Get();
 
+    int32 port = 7000;
     // Example: spawn 4 partitions
-    for (int i = 1; i <= 4; i++) {
-	int port = 7000 + i;
-	god.spawnPartition(i, port);
+    for (int32 i = 1; i <= 4; i++) {
+      ++port;
+      god.spawnPartition(i, port);
+    }
+
+    std::this_thread::sleep_for(std::chrono::seconds(4));
+    god.removePartition(4);
+
+    for (size_t i = 4; i < 8; i++)
+    {
+      ++port;
+      god.spawnPartition(i, port);
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(100));

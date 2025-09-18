@@ -41,7 +41,7 @@ COPY "Start.sh" /app/
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD /bin/bash -c \"source $NAME_OF_THIS_FILE && gdbserver :${GDBSERVER_INTERNAL_PORT} {EXECUTABLE_NAME} &\"
+CMD /bin/bash -c \"source $NAME_OF_THIS_FILE && gdbserver :${GDBSERVER_INTERNAL_PORT} {EXECUTABLE_NAME} \"
 "
 
 BASE_PARTITION_COMPOSE_DOCKER_FILE="
