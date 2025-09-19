@@ -6,3 +6,5 @@ obj
 bin
 .cache
 docker
+god_watcher.log
+nohup.out
