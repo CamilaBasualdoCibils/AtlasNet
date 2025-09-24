@@ -11,17 +11,18 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    includedirs{"lib/GameNetworkingSockets/include","lib/glm"}
+    includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/imgui"}
     links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
     libdirs{"lib/GameNetworkingSockets/lib"}
+    
     filter "configurations:DebugDocker"
         symbols "On"
         defines {"_DOCKER"}
 
     filter "configurations:DebugLocal"
         defines {"_LOCAL",
-        --"_DISPLAY"
-    }
+        "_DISPLAY"}
+    files { "lib/imgui/**.cpp" }
         --files{"lib/imgui/*.cpp"}
         --includedirs{"lib/imgui"}
         --files{"lib/imgui/backends/*.cpp"}
