@@ -1,7 +1,6 @@
 #include <cstdio>
 #include <string>
 #include <sstream>
-#include "curl/curl.h"   // requires libcurl
 #include "KDNetUnityAPIHelper.hpp"  // Include helper functions
 
 // ---- Export macros (cross-platform) ----
