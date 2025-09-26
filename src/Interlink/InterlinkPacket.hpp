@@ -1,20 +1,48 @@
 #pragma once
+#include "InterlinkEnums.hpp"
 #include "pch.hpp"
-
-
-struct InterlinkPacket
+struct InterlinkPacketHeader
 {
 	uint32_t packetID;
-	size_t size;
-	std::byte data[];
+	InterlinkPacketType packetType;
+};
+class IInterlinkPacket
+{
+  public:
+	virtual void Serialize(std::vector<std::byte> &data) const = 0;
+	virtual void Deserialize(const std::vector<std::byte> &data) = 0;
 };
 
-template <typename SubPacket>
-std::pair<std::unique_ptr<InterlinkPacket>, SubPacket &> MakeInterlinkPacket()
+class InterlinkPacketWrap : public IInterlinkPacket
 {
-	char *data = new char[sizeof(InterlinkPacket) + sizeof(SubPacket)];
-	new (data) InterlinkPacket();
-	std::unique_ptr<InterlinkPacket> Packet =
-		std::unique_ptr<InterlinkPacket>(reinterpret_cast<InterlinkPacket *>(data));
-	return {Packet, Packet->data};
-}
+public:
+	std::shared_ptr<IInterlinkPacket> SubPacket;
+	template <typename T>
+	std::weak_ptr<T> CreateSubPacket()
+	{
+		std::shared_ptr<T> ptr = std::make_shared<T>();
+		SubPacket = ptr;
+		return ptr;
+	}
+};
+
+class InterlinkRelayPacket : public InterlinkPacketWrap
+{
+
+};
+class InterlinkDataPacket : public IInterlinkPacket
+{
+	size_t DataSize;
+	std::unique_ptr<std::byte[]> RawData;
+
+  public:
+	void SetData(void *data, size_t size)
+	{
+		DataSize = size;
+		RawData = std::make_unique<std::byte[]>(size);
+		std::memcpy(RawData.get(), data, size);
+	}
+
+};
+
+

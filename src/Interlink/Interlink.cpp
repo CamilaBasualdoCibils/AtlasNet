@@ -48,9 +48,9 @@ void Interlink::GenerateNewConnections()
 			   (void *)SteamNetConnectionStatusChanged);
 	for (auto it = PreConnectingConnections.first; it != PreConnectingConnections.second; ++it)
 	{
-
 		const Connection &connection = *it;
 		Print("Connecting to {}", connection.address.ToString());
+
 		HSteamNetConnection conn =
 			networkInterface->ConnectByIPAddress(connection.address.ToSteamIPAddr(), 1, &opt);
 		if (conn == k_HSteamNetConnection_Invalid)
@@ -84,15 +84,16 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
 	}
 	else // if it is not then its not mine, this is a new incoming connection
 	{
+
+
+		// IdentityPacket identity = IdentityPacket::FromString(info->m_info.m_nUserData);
 		Connection newCon;
 		newCon.Connection = info->m_hConn;
 		newCon.SetNewState(ConnectionState::eConnecting);
 		newCon.address = IPAddress(info->m_info.m_addrRemote);
 		newCon.TargetType = InterlinkType::eUnknown;
 		// request user for permission to connect
-		if (_acceptConnectionFunc(newCon))
-		{
-			if (EResult result = networkInterface->AcceptConnection(newCon.Connection);
+		if (EResult result = networkInterface->AcceptConnection(newCon.Connection);
 				result != k_EResultOK)
 			{
 
@@ -106,12 +107,7 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
 			{
 				Connections.insert(newCon);
 			}
-		}
-		else
-		{
-			// Reject the connection
-			networkInterface->CloseConnection(info->m_hConn, 0, nullptr, false);
-		}
+		
 	}
 }
 

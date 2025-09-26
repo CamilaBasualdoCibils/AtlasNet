@@ -66,3 +66,4 @@ using vec = glm::vec<L, T>;
 #include <set>
 #include <cstring>
 #include <unordered_set>
+#include <emmintrin.h> // SSE2

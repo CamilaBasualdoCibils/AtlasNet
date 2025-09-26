@@ -17,6 +17,7 @@ enum class ConnectionState
     ePreConnecting, /// The Connection request has not been sent yet
 	eConnecting,	/// This Connection is trying to connect
 	eConnected,		/// Successfully Connected
+	eConnectedVerifyingIndentity, /// Successfully Connected but now asking credentials and user for permission before continuing
 	eDisconnecting, /// Trying to disconnect
 	eClosed,
 	eError

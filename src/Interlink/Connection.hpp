@@ -4,49 +4,39 @@
 using PortType = uint16;
 using IPv4_Type = uint32;
 using IPv6_Type = std::array<uint8, 16>;
+
+class ServerIdentifier
+{
+	InterlinkType Type = InterlinkType::eInvalid;
+	uint32 ID = -1;
+
+  public:
+	ServerIdentifier() = default;
+	void SetGod();
+	void SetPartition(uint32 _ID);
+	void SetGameServer(uint32 _ID);
+	void SetGameClient(uint32 _ID);
+	void SetGodView();
+	static ServerIdentifier MakeIDGod();
+	static ServerIdentifier MakeIDPartition(uint32 _ID);
+	static ServerIdentifier MakeIDGameServer(uint32 _ID);
+	static ServerIdentifier MakeIDGameClient(uint32 _ID);
+	static ServerIdentifier MakeIDGodView();
+};
 class IPAddress
 {
 	SteamNetworkingIPAddr SteamAddress;
 
   public:
-	IPAddress()
-	{
-		SteamAddress.Clear();
-	}
-	IPAddress(SteamNetworkingIPAddr addr)
-	{
-		SteamAddress.Clear();
-		SteamAddress = addr;
-	}
+	IPAddress();
+	IPAddress(SteamNetworkingIPAddr addr);
 
-	static IPAddress MakeLocalHost(PortType port)
-	{
-		IPAddress address;
-		address.SetLocalHost(port);
-		return address;
-	};
+	static IPAddress MakeLocalHost(PortType port);
+	void SetLocalHost(PortType port);
+	void SetIPv4(uint8_t a, uint8_t b, uint8_t c, uint8_t d, PortType port);
 
-	void SetLocalHost(PortType port)
-	{
-		SetIPv4(127, 0, 0, 1, port);
-		ASSERT(SteamAddress.IsLocalHost(), "Fuck?");
-	}
-	void SetIPv4(uint8_t a, uint8_t b, uint8_t c, uint8_t d, PortType port)
-	{
-		SteamAddress.SetIPv4((a << 24) | (b << 16) | (c << 8) | d, port);
-	}
-
-	std::string ToString(bool IncludePort = true) const
-	{
-		std::string str;
-		str.resize(SteamAddress.k_cchMaxString);
-		SteamAddress.ToString(str.data(), str.size(), IncludePort);
-		return str;
-	}
-	SteamNetworkingIPAddr ToSteamIPAddr() const
-	{
-		return SteamAddress;
-	}
+	std::string ToString(bool IncludePort = true) const;
+	SteamNetworkingIPAddr ToSteamIPAddr() const;
 };
 
 struct ConnectionProperties
@@ -60,9 +50,13 @@ struct Connection
 	InterlinkType TargetType = InterlinkType::eInvalid;
 	HSteamNetConnection Connection;
 
-	void SetNewState(ConnectionState newState)
-	{
-		oldState = state;
-		state = newState;
-	}
+	void SetNewState(ConnectionState newState);
+};
+
+struct IdentityPacket
+{
+	InterlinkType type;
+
+	std::string ToString() const;
+	static IdentityPacket FromString(const std::string &str);
 };
