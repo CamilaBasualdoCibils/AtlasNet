@@ -1,7 +1,7 @@
 #include <cstdio>
 #include <string>
 #include <sstream>
-#include "KDNetUnityAPIHelper.hpp"  // Include helper functions
+#include "EntityJsonSender.hpp"  // Include helper functions
 
 // ---- Export macros (cross-platform) ----
 #if defined(_WIN32)

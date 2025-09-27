@@ -1,6 +1,6 @@
 // TestPartition.hpp
 // Minimal, single-threaded HTTP listener using POSIX sockets.
-// Accepts POST /entity with a JSON body and calls KDNet::PrintEntityFromJson().
+// Accepts POST /entity with a JSON body
 //
 // This is "quick & dirty": good for testing. Not production-hardened.
 // - Single-threaded: handles one request at a time
@@ -24,7 +24,7 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 
-#include "CatchJsonHelper.hpp"  // uses nlohmann/json
+#include "EntityJsonReciever.hpp"  // uses nlohmann/json
 
 class TestPartition {
 public:
@@ -94,6 +94,10 @@ private:
         while (running_) {
             sockaddr_in cli{}; socklen_t clilen = sizeof(cli);
             int fd = ::accept(listen_fd_, (sockaddr*)&cli, &clilen);
+
+            //std::cout << "[TestPartition] Accepted connection" << std::endl;
+
+
             if (fd < 0) {
                 if (running_) perror("[TestPartition] accept");
                 continue;
@@ -105,52 +109,56 @@ private:
             bool headers_done = false;
             size_t header_end = std::string::npos;
 
+            
+            
             // Read until "\r\n\r\n" found
             while (!headers_done) {
-                ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
-                if (r <= 0) break;
-                req.append(buf, buf + r);
-                header_end = req.find("\r\n\r\n");
-                if (header_end != std::string::npos) headers_done = true;
-                if (req.size() > 1<<20) break; // 1MB cap
+              ssize_t r = ::recv(fd, buf, sizeof(buf), 0);
+              if (r <= 0) break;
+              req.append(buf, buf + r);
+              header_end = req.find("\r\n\r\n");
+              if (header_end != std::string::npos) headers_done = true;
+              if (req.size() > 1<<20) break; // 1MB cap
             }
-
+            
+            
+            
             if (!headers_done) {
-                ::close(fd);
-                continue;
+              ::close(fd);
+              continue;
             }
-
+            
             // Parse first line + headers
             auto first_line_end = req.find("\r\n");
             std::string first_line = req.substr(0, first_line_end);
-
+            
             // method + target (very basic split)
             std::string method, target;
             {
-                size_t sp1 = first_line.find(' ');
-                size_t sp2 = (sp1==std::string::npos)?std::string::npos:first_line.find(' ', sp1+1);
-                if (sp1 != std::string::npos) method = first_line.substr(0, sp1);
-                if (sp2 != std::string::npos) target = first_line.substr(sp1+1, sp2 - (sp1+1));
+              size_t sp1 = first_line.find(' ');
+              size_t sp2 = (sp1==std::string::npos)?std::string::npos:first_line.find(' ', sp1+1);
+              if (sp1 != std::string::npos) method = first_line.substr(0, sp1);
+              if (sp2 != std::string::npos) target = first_line.substr(sp1+1, sp2 - (sp1+1));
             }
 
             // Find Content-Length
             size_t content_length = 0;
             {
-                size_t pos = 0;
-                while (true) {
-                    size_t line_start = (pos==0)? first_line_end + 2 : pos;
-                    size_t line_end = req.find("\r\n", line_start);
-                    if (line_end == std::string::npos || line_start >= header_end) break;
-                    std::string line = req.substr(line_start, line_end - line_start);
-                    pos = line_end + 2;
-
-                    const char* key = "Content-Length:";
-                    if (line.size() >= strlen(key) && strncasecmp(line.c_str(), key, strlen(key)) == 0) {
-                        content_length = std::strtoul(line.c_str() + strlen(key), nullptr, 10);
-                    }
+              size_t pos = 0;
+              while (true) {
+                size_t line_start = (pos==0)? first_line_end + 2 : pos;
+                size_t line_end = req.find("\r\n", line_start);
+                if (line_end == std::string::npos || line_start >= header_end) break;
+                std::string line = req.substr(line_start, line_end - line_start);
+                  pos = line_end + 2;
+                  
+                  const char* key = "Content-Length:";
+                  if (line.size() >= strlen(key) && strncasecmp(line.c_str(), key, strlen(key)) == 0) {
+                    content_length = std::strtoul(line.c_str() + strlen(key), nullptr, 10);
+                  }
                 }
-            }
-
+              }
+              
             // Read body
             std::string body;
             size_t already = req.size() - (header_end + 4);
