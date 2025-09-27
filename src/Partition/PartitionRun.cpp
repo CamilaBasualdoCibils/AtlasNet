@@ -1,5 +1,4 @@
 #include "Partition/Partition.hpp"
-#include "TestUnityAPI/TestPartition.hpp"
 #include <iostream>
 #include <sys/socket.h>
 #include <netinet/in.h>
@@ -8,13 +7,8 @@
 
 int main(void)
 {
-    //Partition part;
-    //part.Run();
-
-    TestPartition fp{};
-    bool state = fp.start();
-
-    std::cerr << "[TestPartition] Success?: " << state << "\n";
+    Partition part;
+    part.Run();
 
     while (true)
     {
