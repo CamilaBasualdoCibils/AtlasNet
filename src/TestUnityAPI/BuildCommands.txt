@@ -1,16 +1,9 @@
-Linux for docker?:
+# needed for json parsing
+sudo apt-get update && sudo apt-get install -y nlohmann-json3-dev
+# needed for test http intercept
+sudo apt-get install -y libcpp-httplib-dev
 
-# In WSL (Ubuntu)
-sudo apt-get update
-sudo apt-get install -y build-essential cmake ninja-build
-
-rm -rf build-linux
-cmake -B build-linux -S . -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build-linux
-# -> build-linux/KDNet_plugin.so
-
-
-for unity:
+# for unity:
 
 # Install MinGW cross toolchain
 sudo apt-get update

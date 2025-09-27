@@ -12,6 +12,8 @@
   #define KDNET_CALL
 #endif
 
+static std::string g_endpoint = "http://127.0.0.1:18080/entity";
+
 // -----------------------------------------------------------------------------
 // Function: KDNetHelloWorld
 // Purpose : Return a static "Hello World" string for Unity to print.
@@ -47,5 +49,5 @@ KDNET_API int KDNET_CALL KDNetRegisterEntity(
     std::printf("[KDNet] Sending: %s\n", json.c_str());
 
     // Quick & dirty: fixed URL of your server mesher container
-    return send_entity_to_server(json, "http://localhost:5000/entity");
+    return send_entity_to_server(json, g_endpoint);
 }

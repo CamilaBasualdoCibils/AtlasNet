@@ -2,16 +2,10 @@
 #include "God/God.hpp"
 #include "Partition/Partition.hpp"
 #include "pch.hpp"
-int main(int argc, char** argv) {
-    std::cerr << "Hello\n";
-    std::cerr << "From\n";
-    std::cerr << "God\n";
-    for (int i = 0; i < argc; i++) {
-	std::cerr << argv[i] << std::endl;
-    }
+#include "TestUnityAPI/FakePartition.hpp"
 
-    God& god = God::Get();
-
+void SpawnPartitionsTest(God &god) 
+{
     int32 port = 7000;
     // Example: spawn 4 partitions
     for (int32 i = 1; i <= 4; i++) {
@@ -26,6 +20,25 @@ int main(int argc, char** argv) {
 	++port;
 	god.spawnPartition(i, port);
     }
+}
+
+int main(int argc, char** argv) {
+    std::cerr << "Hello\n";
+    std::cerr << "From\n";
+    std::cerr << "God\n";
+    for (int i = 0; i < argc; i++) {
+	std::cerr << argv[i] << std::endl;
+    }
+
+    God& god = God::Get();
+
+    //SpawnPartitionsTest(god);
+
+    FakePartition fp{};
+    std::cout << fp.start() << std::endl;
+
+
+    std::this_thread::sleep_for(std::chrono::seconds(10000));
 
     #ifdef _DISPLAY
     glfwInitHint(GLFW_PLATFORM, GLFW_PLATFORM_X11);

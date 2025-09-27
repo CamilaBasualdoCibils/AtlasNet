@@ -32,7 +32,7 @@ WORKDIR /app
 # Copy local files into the image
 # Install dependencies
 RUN apt-get update && \
-apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev curl tini
+apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev curl tini # libhttplib-dev nlohmann-json3-dev build-essential
 
 
 COPY {EXECUTABLE_PATH} /app/
