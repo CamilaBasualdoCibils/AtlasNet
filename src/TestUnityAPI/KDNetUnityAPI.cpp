@@ -27,8 +27,7 @@ KDNET_API const char* KDNET_CALL HelloWorld()
 // -----------------------------------------------------------------------------
 // Function: KDNetRegisterEntity
 // Purpose : Test function that receives an entity ID + transform data
-//           from Unity and prints/logs it. Later, this can push data to your
-//           Docker server mesher via sockets, HTTP, or gRPC.
+//           from Unity and prints/logs it.
 // -----------------------------------------------------------------------------
 KDNET_API int KDNET_CALL KDNetRegisterEntity(
     const char* entityId,
@@ -52,6 +51,12 @@ KDNET_API int KDNET_CALL KDNetRegisterEntity(
     return send_entity_to_server(json, g_endpoint);
 }
 
+/**
+ * @brief Set the endpoint URL for sending entity data.
+ * 
+ * @param url 
+ * @return KDNET_API 
+ */
 KDNET_API int KDNET_CALL KDNetSetEndpoint(const char* url) {
     if (url && url[0]) {
         g_endpoint = url;
