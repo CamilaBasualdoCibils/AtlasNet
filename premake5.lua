@@ -11,7 +11,7 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/imgui"}
+    includedirs{"lib/GameNetworkingSockets/include","lib/glm"}
     links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
     libdirs{"lib/GameNetworkingSockets/lib"}
     
@@ -20,16 +20,8 @@ workspace "GuacNet"
         defines {"_DOCKER"}
 
     filter "configurations:DebugLocal"
-        defines {"_LOCAL",
-        "_DISPLAY"}
-    files { "lib/imgui/**.cpp" }
-        --files{"lib/imgui/*.cpp"}
-        --includedirs{"lib/imgui"}
-        --files{"lib/imgui/backends/*.cpp"}
+        defines {"_LOCAL"}
         symbols "On"        
-        includedirs{"lib/glfw/include","lib/glew/include"}
-        links{"GLEW","glfw3","GL","X11"}
-        libdirs{"lib/glfw/lib","lib/glew/lib"}
     filter "configurations:Release"
         defines {"_DOCKER"}
         optimize "On"
@@ -58,6 +50,11 @@ workspace "GuacNet"
         kind "ConsoleApp"
         language "C++"
         files { "src/GodView/**.cpp" }
+        files { "lib/imgui/**.cpp","lib/implot/*.cpp" }
+        includedirs{"lib/imgui","lib/implot"}
+        includedirs{"lib/glfw/include","lib/glew/include"}
+        links{"GLEW","glfw3","GL","X11"}
+        libdirs{"lib/glfw/lib","lib/glew/lib"}
         defines "_GODVIEW"
     project "Partition"
         dependson "Interlink"

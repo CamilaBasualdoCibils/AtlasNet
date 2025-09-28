@@ -4,6 +4,8 @@
         "${workspaceFolder}/src",
         "${workspaceFolder}/lib",
         "${workspaceFolder}/lib/GameNetworkingSockets/include",
+        "${workspaceFolder}/lib/imgui",
+        "${workspaceFolder}/lib/implot",
     ],
     "C_Cpp.intelliSenseEngine": "default",
     "cmake.ignoreCMakeListsMissing": true,
@@ -77,5 +79,8 @@
         "typeinfo": "cpp",
         "variant": "cpp"
     },
+    "C_Cpp.default.defines": [
+        "_GODVIEW"
+    ],
    
 }
