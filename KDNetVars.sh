@@ -1,5 +1,5 @@
 
-NAME_OF_THIS_FILE="KDNetVars.sh"
+NAME_OF_THIS_FILE="AtlasNetVars.sh"
 
 BUILD_CONFIG="DebugDocker"
 GOD_IMAGE_NAME="god-image"

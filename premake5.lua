@@ -5,15 +5,17 @@ workspace "GuacNet"
     configurations { "DebugDocker","DebugLocal", "Release" }
     startproject "God"
     includedirs {"src"}
-    pchheader "src/pch.hpp"
-    pchsource "src/pch.cpp"
+
     location "build"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/json/single_include","lib"}
-    links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
-    libdirs{"lib/GameNetworkingSockets/lib"}
+    --includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/json/single_include","lib"}
+    --links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
+    --libdirs{"lib/GameNetworkingSockets/lib"}
+    includedirs{"vcpkg_installed/x64-linux/include"}
+    libdirs "vcpkg_installed/x64-linux/lib"
+    links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui"}
     
     filter "configurations:DebugDocker"
         symbols "On"
@@ -22,7 +24,7 @@ workspace "GuacNet"
     filter "configurations:DebugLocal"
         defines {"_LOCAL",
         "_DISPLAY"}
-    files { "lib/imgui/**.cpp" }
+        files { "lib/imgui/**.cpp" }
         --files{"lib/imgui/*.cpp"}
         --includedirs{"lib/imgui"}
         --files{"lib/imgui/backends/*.cpp"}
@@ -35,88 +37,125 @@ workspace "GuacNet"
         defines {"_DOCKER"}
         optimize "On"
 
-    project "KDNet"
-        kind "StaticLib"
+    project "AtlasNet"
+        kind "SharedLib"
         language "C++"
         files { "src/**.cpp" }
+        pchheader "src/pch.hpp"
+        pchsource "src/pch.cpp"
     project "God"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
-        files { "src/**.cpp","srcRun/GodRun.cpp" }
+        files {"srcRun/GodRun.cpp" }
         defines "_GOD"
    project "GodView"
-        dependson {"God"}
-        links {"God"}
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
-        includedirs{"src"}
-        files { "src/**.cpp","srcRun/GodViewRun.cpp" }
+        files {"srcRun/GodViewRun.cpp" }
         defines "_GODVIEW"
     project "Partition"
-        dependson {"KDNet"}
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
-        files { "src/**.cpp","srcRun/PartitionRun.cpp" }
+        files {"srcRun/PartitionRun.cpp" }
         defines "_PARTITION"
 
     project "SampleGame"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
-        dependson {"KDNet"}
-        links {"KDNet"}
         language "C++"
         files { "examples/SampleGame/**.cpp" }
         defines {"_GAMECLIENT","_GAMESERVER"}
-function customClean()
-    -- Specify the directories or files to be cleaned
-    local dirsToRemove = {
-        "bin",
-        "obj",
-        "Intermediate",
-        ".cache",
-        "build",
-        "docker"
-        
-    }
-    local filesToRemove = {
-        "Makefile",
-        "imgui.ini",
-        "compile_commands.json"
-    }
 
-    local extensionsToRemove = {
---        ".make",
-    }
+        -- Generic cleanup function
+function customClean(dirsToRemove, filesToRemove)
     -- Remove specified directories
-    for _, dir in ipairs(dirsToRemove) do
+    for _, dir in ipairs(dirsToRemove or {}) do
         if os.isdir(dir) then
             os.rmdir(dir)
+            os.execute('rm -rf "' .. dir .. '"')
             print("Removed directory: " .. dir)
         end
     end
 
     -- Remove specified files
-    for _, file in ipairs(filesToRemove) do
+    for _, file in ipairs(filesToRemove or {}) do
         if os.isfile(file) then
             os.remove(file)
             print("Removed file: " .. file)
         end
     end
-        local rootFiles = os.matchfiles("*") -- only root files
-    for _, file in ipairs(rootFiles) do
-        for _, ext in ipairs(extensionsToRemove) do
-            if file:sub(-#ext) == ext then
-                os.remove(file)
-                print("Removed file by extension: " .. file)
-            end
-        end
-    end
 end
-
+function CleanBin()
+    local dirs = {"bin","obj","build","docker"};
+    local files = {}
+    customClean(dirs,files)
+end
+function CleanDeps()
+     local dirs = {"vcpkg","vcpkg_installed"};
+    local files = {}
+    customClean(dirs,files)
+end
+function CleanDocs()
+     local dirs = {"docs"};
+    local files = {}
+    customClean(dirs,files)
+end
 -- Add the custom clean function to the clean action
 newaction {
-    trigger = "clean",
+    trigger = "CleanBin",
     description = "Custom clean action",
     execute = function()
-        customClean()
+        CleanBin()
     end
+}
+newaction {
+    trigger = "CleanDeps",
+    description = "Custom clean action",
+    execute = function()
+        CleanDeps()
+    end
+}
+newaction {
+    trigger = "CleanDocs",
+    description = "Custom clean action",
+    execute = function()
+        CleanDocs()
+    end
+}
+newaction {
+    trigger = "CleanAll",
+    description = "Custom clean action",
+    execute = function()
+        CleanBin()
+        CleanDeps()
+        CleanDocs()
+    end
+}
+newaction 
+{
+    trigger = "setup",
+    description = "Setups up dependencies",
+    execute = function ()
+        --local vcpkgDir = path.join(os.getenv("HOME") or ".", "vcpkg")
+        local manifestDir = os.getcwd()
+         os.execute("git clone https://github.com/microsoft/vcpkg.git ")
+         os.execute("./vcpkg/bootstrap-vcpkg.sh")
+         os.execute("./vcpkg/vcpkg install")
+    end
+}
+newaction
+{
+    trigger = "GenDocs",
+    description = "generate documentation",
+    execute = function ()
+        os.execute("doxygen Doxyfile")
+    end
+
 }

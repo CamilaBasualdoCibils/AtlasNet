@@ -10,3 +10,5 @@ god_watcher.log
 nohup.out
 docs
 nul
+vcpkg
+vcpkg_installed

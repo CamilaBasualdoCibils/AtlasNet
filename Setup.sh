@@ -1,6 +1,6 @@
 #!/bin/bash
 set -e  # Exit immediately if any command fails
-. ./KDNetVars.sh   
+. ./AtlasNetVars.sh   
 
 # Check if at least one argument is provided
 if [ $# -lt 1 ]; then

@@ -1,5 +1,5 @@
 
-. ./KDNetVars.sh   
+. ./AtlasNetVars.sh   
 
 if [ $# -lt 1 ]; then
     echo "Usage: $0 <GameServerExeName>"

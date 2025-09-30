@@ -1,4 +1,8 @@
 {
+    
+  "terminal.integrated.env.linux": {
+    "LD_LIBRARY_PATH": "vcpkg_installed/x64-linux/lib:${LD_LIBRARY_PATH}"
+    },
     "C_Cpp.default.cppStandard": "c++20",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",
