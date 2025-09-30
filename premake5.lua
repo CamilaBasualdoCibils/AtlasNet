@@ -11,9 +11,12 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/json/single_include","lib"}
-    links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
-    libdirs{"lib/GameNetworkingSockets/lib"}
+    --includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/json/single_include","lib"}
+    --links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
+    --libdirs{"lib/GameNetworkingSockets/lib"}
+    includedirs{"vcpkg_installed/x64-linux/include"}
+    libdirs "vcpkg_installed/x64-linux/lib"
+    links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui"}
     
     filter "configurations:DebugDocker"
         symbols "On"
@@ -22,7 +25,7 @@ workspace "GuacNet"
     filter "configurations:DebugLocal"
         defines {"_LOCAL",
         "_DISPLAY"}
-    files { "lib/imgui/**.cpp" }
+        files { "lib/imgui/**.cpp" }
         --files{"lib/imgui/*.cpp"}
         --includedirs{"lib/imgui"}
         --files{"lib/imgui/backends/*.cpp"}
@@ -36,33 +39,35 @@ workspace "GuacNet"
         optimize "On"
 
     project "KDNet"
-        kind "StaticLib"
+        kind "SharedLib"
         language "C++"
         files { "src/**.cpp" }
     project "God"
+        dependson "KDNet"
+        links "KDNet"
         kind "ConsoleApp"
         language "C++"
-        files { "src/**.cpp","srcRun/GodRun.cpp" }
+        files {"srcRun/GodRun.cpp" }
         defines "_GOD"
    project "GodView"
-        dependson {"God"}
-        links {"God"}
+        dependson "KDNet"
+        links "KDNet"
         kind "ConsoleApp"
         language "C++"
-        includedirs{"src"}
-        files { "src/**.cpp","srcRun/GodViewRun.cpp" }
+        files {"srcRun/GodViewRun.cpp" }
         defines "_GODVIEW"
     project "Partition"
-        dependson {"KDNet"}
+        dependson "KDNet"
+        links "KDNet"
         kind "ConsoleApp"
         language "C++"
-        files { "src/**.cpp","srcRun/PartitionRun.cpp" }
+        files {"srcRun/PartitionRun.cpp" }
         defines "_PARTITION"
 
     project "SampleGame"
+        dependson "KDNet"
+        links "KDNet"
         kind "ConsoleApp"
-        dependson {"KDNet"}
-        links {"KDNet"}
         language "C++"
         files { "examples/SampleGame/**.cpp" }
         defines {"_GAMECLIENT","_GAMESERVER"}
@@ -74,7 +79,10 @@ function customClean()
         "Intermediate",
         ".cache",
         "build",
-        "docker"
+        "docker",
+        "vcpkg",
+        "vcpkg_installed",
+        "docs"
         
     }
     local filesToRemove = {
@@ -89,7 +97,8 @@ function customClean()
     -- Remove specified directories
     for _, dir in ipairs(dirsToRemove) do
         if os.isdir(dir) then
-            os.rmdir(dir)
+            os.rmdir(dir,{recursive = true})
+            os.execute('rm -rf "' .. dir .. '"')
             print("Removed directory: " .. dir)
         end
     end
@@ -119,4 +128,25 @@ newaction {
     execute = function()
         customClean()
     end
+}
+newaction 
+{
+    trigger = "setup",
+    description = "Setups up dependencies",
+    execute = function ()
+        --local vcpkgDir = path.join(os.getenv("HOME") or ".", "vcpkg")
+        local manifestDir = os.getcwd()
+         os.execute("git clone https://github.com/microsoft/vcpkg.git ")
+         os.execute("./vcpkg/bootstrap-vcpkg.sh")
+         os.execute("./vcpkg/vcpkg install")
+    end
+}
+newaction
+{
+    trigger = "GenDocs",
+    description = "generate documentation",
+    execute = function ()
+        os.execute("doxygen Doxyfile")
+    end
+
 }

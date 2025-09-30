@@ -20,16 +20,16 @@
 
 /* Valve GameNetworkingSockets */
 #define STEAMNETWORKINGSOCKETS_STATIC_LINK
-#include "steam/steamnetworkingsockets.h"
-#include "steam/isteamnetworkingsockets.h"
-#include "steam/isteamnetworkingutils.h"
-#include "steam/isteamnetworkingmessages.h"
-#include "steam/steam_api_common.h"
-#include "steam/steamclientpublic.h"
-#include "steam/steamnetworkingcustomsignaling.h"
-#include "steam/steamnetworkingtypes.h"
-#include "steam/steamtypes.h"
-#include "steam/steamuniverse.h"
+#include "GameNetworkingSockets/steam/steamnetworkingsockets.h"
+#include "GameNetworkingSockets/steam/isteamnetworkingsockets.h"
+#include "GameNetworkingSockets/steam/isteamnetworkingutils.h"
+#include "GameNetworkingSockets/steam/isteamnetworkingmessages.h"
+#include "GameNetworkingSockets/steam/steam_api_common.h"
+#include "GameNetworkingSockets/steam/steamclientpublic.h"
+#include "GameNetworkingSockets/steam/steamnetworkingcustomsignaling.h"
+#include "GameNetworkingSockets/steam/steamnetworkingtypes.h"
+#include "GameNetworkingSockets/steam/steamtypes.h"
+#include "GameNetworkingSockets/steam/steamuniverse.h"
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
