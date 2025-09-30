@@ -56,7 +56,7 @@
       "type": "cppdbg",
       "request": "launch",
       "program": "${workspaceFolder}/bin/DebugLocal/God/God",
-      "envFile": "${workspaceFolder}/KDNetVars.sh",
+      "envFile": "${workspaceFolder}/AtlasNetVars.sh",
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
       "stopAtEntry": false,

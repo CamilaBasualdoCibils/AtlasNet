@@ -1,5 +1,5 @@
 #include "pch.hpp"
-#include "KDNet/KDNet.hpp"
+#include "AtlasNet/AtlasNet.hpp"
 /**
  * @brief A simple entity that moves in a circular path.
  */
@@ -48,8 +48,8 @@ public:
  * @brief Main function to run the sample game.
  */
 int main() {
-    KDNetServer::InitializeProperties InitProperties;
-    KDNetServer::Get().Initialize(InitProperties);
+    AtlasNetServer::InitializeProperties InitProperties;
+    AtlasNetServer::Get().Initialize(InitProperties);
 
     Scene scene;
     // create an entity
@@ -61,10 +61,10 @@ int main() {
 
     while (true) 
     {
-        std::span<KDEntity> myspan;
-        std::vector<KDEntity> Incoming;
-        std::vector<KDEntityID> Outgoing;
-         KDNetServer::Get().Update(myspan,Incoming,Outgoing);
+        std::span<AtlasEntity> myspan;
+        std::vector<AtlasEntity> Incoming;
+        std::vector<AtlasEntityID> Outgoing;
+         AtlasNetServer::Get().Update(myspan,Incoming,Outgoing);
         auto now = clock::now();
         std::chrono::duration<float> delta = now - previous;
         previous = now;
