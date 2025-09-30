@@ -1,6 +1,6 @@
 #!/bin/bash
 #!/bin/bash
-. ./KDNetVars.sh   
+. ./AtlasNetVars.sh   
 # Run docker-compose
 
 

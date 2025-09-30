@@ -1,5 +1,5 @@
-#include "KDNet/KDEntity.hpp"
-#include "KDNet/KDNetInterface.hpp"
+#include "AtlasNet/AtlasEntity.hpp"
+#include "AtlasNet/AtlasNetInterface.hpp"
 #include "Singleton.hpp"
 #include "pch.hpp"
 #include "Debug/Log.hpp"
@@ -12,12 +12,12 @@ struct KDServerRequest {
     KDServerRequestType Type;
 };
 using KDServerResponseType = std::vector<std::byte>;
-class KDNetServer : public KDNetInterface, public Singleton<KDNetServer> {
+class AtlasNetServer : public AtlasNetInterface, public Singleton<AtlasNetServer> {
     
-    std::shared_ptr<Log> logger = std::make_shared<Log>("KDNetServer");
+    std::shared_ptr<Log> logger = std::make_shared<Log>("AtlasNetServer");
 
    public:
-    KDNetServer() {};
+    AtlasNetServer() {};
     /**
      * @brief
      *
@@ -26,18 +26,18 @@ class KDNetServer : public KDNetInterface, public Singleton<KDNetServer> {
 	std::function<KDServerRequestType(KDServerRequest)> RequestHandleFunction;
     };
     /**
-     * @brief Initializes the KDNet Front end
+     * @brief Initializes the AtlasNet Front end
      *
      */
     void Initialize(InitializeProperties properties = {});
 
     /**
-     * @brief Update tick for KDNet.
+     * @brief Update tick for AtlasNet.
      *
      * @param entities Your current Entity information.
      * @param IncomingEntities Entities incoming that you must store and keep track of.
      * @param OutgoingEntities Entity IDs of entities you should get rid of.
      */
-    void Update(std::span<KDEntity> entities, std::vector<KDEntity>& IncomingEntities,
-		std::vector<KDEntityID>& OutgoingEntities);
+    void Update(std::span<AtlasEntity> entities, std::vector<AtlasEntity>& IncomingEntities,
+		std::vector<AtlasEntityID>& OutgoingEntities);
 };

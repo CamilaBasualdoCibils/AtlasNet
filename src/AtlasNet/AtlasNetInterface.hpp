@@ -1,7 +1,7 @@
 #pragma once
 #include "pch.hpp"
-class KDNetInterface
+class AtlasNetInterface
 {
     public:
-KDNetInterface();
+AtlasNetInterface();
 };

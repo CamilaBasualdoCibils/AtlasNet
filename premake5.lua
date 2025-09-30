@@ -5,8 +5,7 @@ workspace "GuacNet"
     configurations { "DebugDocker","DebugLocal", "Release" }
     startproject "God"
     includedirs {"src"}
-    pchheader "src/pch.hpp"
-    pchsource "src/pch.cpp"
+
     location "build"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
@@ -38,35 +37,37 @@ workspace "GuacNet"
         defines {"_DOCKER"}
         optimize "On"
 
-    project "KDNet"
+    project "AtlasNet"
         kind "SharedLib"
         language "C++"
         files { "src/**.cpp" }
+        pchheader "src/pch.hpp"
+        pchsource "src/pch.cpp"
     project "God"
-        dependson "KDNet"
-        links "KDNet"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
         files {"srcRun/GodRun.cpp" }
         defines "_GOD"
    project "GodView"
-        dependson "KDNet"
-        links "KDNet"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
         files {"srcRun/GodViewRun.cpp" }
         defines "_GODVIEW"
     project "Partition"
-        dependson "KDNet"
-        links "KDNet"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
         files {"srcRun/PartitionRun.cpp" }
         defines "_PARTITION"
 
     project "SampleGame"
-        dependson "KDNet"
-        links "KDNet"
+        dependson "AtlasNet"
+        links "AtlasNet"
         kind "ConsoleApp"
         language "C++"
         files { "examples/SampleGame/**.cpp" }

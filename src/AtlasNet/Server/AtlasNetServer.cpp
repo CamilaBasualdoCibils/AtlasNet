@@ -1,9 +1,9 @@
-#include "KDNetServer.hpp"
+#include "AtlasNetServer.hpp"
 
 #include "Interlink/Interlink.hpp"
-void KDNetServer::Initialize(KDNetServer::InitializeProperties properties)
+void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties properties)
 {
-	logger->Print("KDNet Initialize");
+	logger->Print("AtlasNet Initialize");
 	Interlink::Check();
 
 	Interlink::Get().Initialize(
@@ -13,8 +13,8 @@ void KDNetServer::Initialize(KDNetServer::InitializeProperties properties)
 	Interlink::Get().ConnectToLocalParition();
 }
 
-void KDNetServer::Update(std::span<KDEntity> entities, std::vector<KDEntity> &IncomingEntities,
-						 std::vector<KDEntityID> &OutgoingEntities)
+void AtlasNetServer::Update(std::span<AtlasEntity> entities, std::vector<AtlasEntity> &IncomingEntities,
+						 std::vector<AtlasEntityID> &OutgoingEntities)
 {
 	Interlink::Get().Tick();
 }
