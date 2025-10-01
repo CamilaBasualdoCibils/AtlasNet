@@ -38,7 +38,16 @@
       "stopAtEntry": false,
       
     },
-
+    {
+      "name": "Run Database Redis",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/bin/true",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "preLaunchTask": "Run Database Redis",
+      "stopAtEntry": false
+    },
     {
       "name": "Debug God Docker",
       "type": "cppdbg",

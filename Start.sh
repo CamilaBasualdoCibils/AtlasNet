@@ -70,6 +70,18 @@ case "$ARG" in
         echo "✅ Partition $ID started on port $PORT"
         ;;
 
+    Redis)
+        echo "Starting Redis database container"
+        docker rm -f $REDIS_CONTAINER_NAME 2>/dev/null || true
+        docker run -d \
+          --name $REDIS_CONTAINER_NAME \
+          -p $REDIS_PORT:6379 \
+          $REDIS_IMAGE_NAME \
+          --save 60 1 --loglevel warning
+        echo "✅ Redis started on localhost:$REDIS_PORT"
+        ;;
+
+
 
     *)
         echo "Unknown argument: $ARG"

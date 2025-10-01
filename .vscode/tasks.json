@@ -48,6 +48,15 @@
       }
     },
     {
+      "label": "Run Database Redis",
+      "type": "shell",
+      "command": "./Start.sh",
+      "args": ["Redis"],
+      "options": {
+        "cwd": "${workspaceFolder}"
+      }
+    },
+    {
       "label": "Remove All Docker Containers",
       "type": "shell",
       "command": "docker ps -aq >nul 2>&1 && docker rm -f $(docker ps -aq) || echo $USER",
