@@ -10,11 +10,16 @@ workspace "GuacNet"
     cppdialect "C++20"
     targetdir "bin/%{cfg.buildcfg}/%{prj.name}"
     objdir "obj/%{cfg.buildcfg}/%{prj.name}"
-    --includedirs{"lib/GameNetworkingSockets/include","lib/glm","lib/json/single_include","lib"}
-    --links{"GameNetworkingSockets_s","protobuf","crypto","ssl","curl"}
-    --libdirs{"lib/GameNetworkingSockets/lib"}
-    includedirs{"vcpkg_installed/x64-linux/include"}
-    libdirs "vcpkg_installed/x64-linux/lib"
+    
+    filter "system:windows"
+        includedirs { "vcpkg_installed/x64-windows/include" }
+        libdirs     { "vcpkg_installed/x64-windows/lib" }
+
+    filter "system:linux"
+        includedirs { "vcpkg_installed/x64-linux/include" }
+        libdirs     { "vcpkg_installed/x64-linux/lib" }
+
+    filter {} -- clear filter so it doesn’t leak into other settings
     links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui"}
     
     filter "configurations:DebugDocker"
@@ -143,12 +148,20 @@ newaction
     trigger = "setup",
     description = "Setups up dependencies",
     execute = function ()
-        --local vcpkgDir = path.join(os.getenv("HOME") or ".", "vcpkg")
-        local manifestDir = os.getcwd()
-         os.execute("git clone https://github.com/microsoft/vcpkg.git ")
-         os.execute("./vcpkg/bootstrap-vcpkg.sh")
-         os.execute("./vcpkg/vcpkg install")
+    local manifestDir = os.getcwd()
+    local isWindows = package.config:sub(1,1) == '\\'  -- check if path separator is '\'
+
+    os.execute("git clone https://github.com/microsoft/vcpkg.git")
+
+    if isWindows then
+        os.execute("vcpkg\\bootstrap-vcpkg.bat")
+        os.execute("vcpkg\\vcpkg install")
+    else
+        os.execute("./vcpkg/bootstrap-vcpkg.sh")
+        os.execute("./vcpkg/vcpkg install")
     end
+end
+
 }
 newaction
 {
