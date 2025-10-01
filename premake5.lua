@@ -15,8 +15,7 @@ workspace "GuacNet"
     --libdirs{"lib/GameNetworkingSockets/lib"}
     includedirs{"vcpkg_installed/x64-linux/include"}
     libdirs "vcpkg_installed/x64-linux/lib"
-    links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui"}
-    
+    links{"boost_container","GameNetworkingSockets","GLEW","glfw3","glm","imgui","implot","implot3d","GL","protobuf","ssl","crypto"}
     filter "configurations:DebugDocker"
         symbols "On"
         defines {"_DOCKER"}
@@ -38,7 +37,7 @@ workspace "GuacNet"
         optimize "On"
 
     project "AtlasNet"
-        kind "SharedLib"
+        kind "StaticLib"
         language "C++"
         files { "src/**.cpp" }
         pchheader "src/pch.hpp"
@@ -147,7 +146,7 @@ newaction
         local manifestDir = os.getcwd()
          os.execute("git clone https://github.com/microsoft/vcpkg.git ")
          os.execute("./vcpkg/bootstrap-vcpkg.sh")
-         os.execute("./vcpkg/vcpkg install")
+         os.execute("./vcpkg/vcpkg install ")
     end
 }
 newaction
@@ -159,3 +158,33 @@ newaction
     end
 
 }
+function generateDockerfile(outputFile, macros)
+    -- Simple Dockerfile template with macros
+    local template = [[
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+COPY . /app
+
+RUN ${BUILD_CMD}
+
+CMD ["${RUN_CMD}"]
+]]
+
+    -- Replace macros in template
+    for key, value in pairs(macros) do
+        template = template:gsub("%${" .. key .. "}", value)
+    end
+
+    -- Write to file
+    local f = io.open(outputFile, "w")
+    if f then
+        f:write(template)
+        f:close()
+        print("Generated Dockerfile at " .. outputFile)
+    else
+        print("Failed to open " .. outputFile)
+    end
+end
+

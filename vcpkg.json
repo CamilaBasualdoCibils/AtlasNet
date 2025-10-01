@@ -13,6 +13,8 @@
         "opengl3-binding"
       ]
     },
+    "implot",
+    "implot3d",
     "nlohmann-json",
     "stb",
     "boost-type-traits",
