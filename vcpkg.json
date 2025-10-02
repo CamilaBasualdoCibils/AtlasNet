@@ -22,6 +22,8 @@
     "boost-multi-index",
     "boost-container",
     "gamenetworkingsockets",
-    "curl"
+    "curl",
+    "redis-plus-plus",
+    "hiredis"
   ]
 }

@@ -1,7 +1,7 @@
 #include "GodView.hpp"
 #include "PartitionVisualization.hpp"
 
-int main(void)
+int mains(void)
 {
     std::cerr << "Hello from AtlasView\n";
     

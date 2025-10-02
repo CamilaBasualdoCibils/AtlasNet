@@ -36,6 +36,9 @@
 #include <boost/multi_index/identity.hpp>
 #include <boost/multi_index/member.hpp>
 
+/* Databases */
+#include <sw/redis++/redis++.h>
+
 #include "nlohmann/json.hpp"
 using Json = nlohmann::json;
 using Ordered_Json = nlohmann::ordered_json;

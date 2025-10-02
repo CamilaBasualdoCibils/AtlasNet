@@ -1,4 +1,5 @@
 #include "God.hpp"
+#include "Database/DatabaseRedis.hpp"
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -12,6 +13,32 @@ God::God()
   std::signal(SIGTERM, handleSignal);
   std::signal(SIGKILL, handleSignal);
   std::cout << "[God] Signal handlers registered." << std::endl;
+
+    //      std::string cmd =
+    //    "docker rm -f database-redis >/dev/null 2>&1; "
+    //    "docker run --network AtlasNet -d --name database-redis -p 6379:6379 redis:latest >/dev/null";
+//
+    //        int ret = std::system(cmd.c_str());
+    //if (ret != 0) {
+    //    std::cerr << "❌ Failed to start Redis container\n";
+    //}
+
+    int32 err = StartDatabaseRedis();
+ 
+
+    std::this_thread::sleep_for(std::chrono::seconds(3));
+      try {
+      // Connect to Redis started by Start.sh
+      sw::redis::Redis redis("tcp://database-redis:6379");
+
+      redis.set("foo", "bar");
+      auto val = redis.get("foo");
+      if (val) {
+          std::cerr << "Redis says foo=" << *val << "\n";
+      }
+  } catch (const sw::redis::Error &e) {
+      std::cerr << "Redis error: " << e.what() << std::endl;
+  }
 }
 
 God::~God()

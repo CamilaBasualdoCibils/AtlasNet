@@ -42,18 +42,20 @@ WORKDIR /app
 # Copy local files into the image
 # Install dependencies
 RUN apt-get update && \
-apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev curl tini"
-
-
+apt-get install -y gdbserver docker.io libprotobuf-dev protobuf-compiler libssl-dev libcurl4-openssl-dev mesa-common-dev libgl1-mesa-dev curl tini
+ENV LD_LIBRARY_PATH=/usr/local/lib/
+COPY vcpkg_installed/x64-linux/lib/ /usr/local/lib/"
 GOD_DOCKER_FILE_CONTENT="$BASE_DOCKER_FILE
 COPY ../bin/${BUILD_CONFIG}/God/God /app/
 COPY $NAME_OF_THIS_FILE /app/
 COPY "Start.sh" /app/
 
+
 # For GDBserver
 EXPOSE 1234 
 # Set default command
-CMD [\"gdbserver\", \"0.0.0.0:1234\", \"god\"]
+CMD [\"gdbserver\", \"0.0.0.0:1234\", \"God\"]
+#CMD ["ls","-R"]
 "
 PARTITION_DOCKER_FILE_CONTENT="$BASE_DOCKER_FILE
 

@@ -20,7 +20,7 @@ workspace "GuacNet"
         libdirs     { "vcpkg_installed/x64-linux/lib" }
 
     filter {} -- clear filter so it doesn’t leak into other settings
-    links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui","implot","implot3d","GL"}
+    links{"boost_container","curl","GameNetworkingSockets","GLEW","glfw3","glm","imgui","implot","implot3d","GL",  "redis++","hiredis"}
     
     filter "configurations:DebugDocker"
         symbols "On"
@@ -43,7 +43,7 @@ workspace "GuacNet"
         optimize "On"
 
     project "AtlasNet"
-        kind "SharedLib"
+        kind "StaticLib"
         language "C++"
         files { "src/**.cpp" }
         pchheader "src/pch.hpp"

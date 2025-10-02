@@ -6,5 +6,5 @@
 #include "pch.hpp"
 int main(void)
 {
-    Partition::Get();
+    Partition& partition = Partition::Get();
 }
