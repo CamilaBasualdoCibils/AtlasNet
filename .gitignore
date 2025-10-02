@@ -12,3 +12,4 @@ docs
 nul
 vcpkg
 vcpkg_installed
+/build

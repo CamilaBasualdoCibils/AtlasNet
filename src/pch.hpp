@@ -34,6 +34,10 @@
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/identity.hpp>
 #include <boost/multi_index/member.hpp>
+#include <boost/describe.hpp>
+#include <boost/describe/enum.hpp>
+#include <boost/describe/enum_to_string.hpp>
+#include <boost/describe/enum_from_string.hpp>
 
 #include "nlohmann/json.hpp"
 using Json = nlohmann::json;
@@ -66,3 +70,4 @@ using vec = glm::vec<L, T>;
 #include <cstring>
 #include <unordered_set>
 #include <emmintrin.h> // SSE2
+#include <format>

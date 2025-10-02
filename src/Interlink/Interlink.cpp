@@ -59,7 +59,8 @@ void Interlink::GenerateNewConnections()
 		}
 		else
 		{
-			IndiciesByState.modify(it, [conn = conn](Connection &c) { c.Connection = conn; });
+			IndiciesByState.modify(it, [conn = conn](Connection &c)
+								   { c.Connection = conn; });
 		}
 	}
 }
@@ -79,13 +80,13 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
 	if (ExistingConnection != IndiciesBySteamConnection.end())
 	{
 		IndiciesBySteamConnection.modify(
-			ExistingConnection, [](Connection &c) { c.SetNewState(ConnectionState::eConnecting); });
+			ExistingConnection, [](Connection &c)
+			{ c.SetNewState(ConnectionState::eConnecting); });
 		return;
 	}
 	else // if it is not then its not mine, this is a new incoming connection
 	{
 
-		
 		// IdentityPacket identity = IdentityPacket::FromString(info->m_info.m_nUserData);
 		Connection newCon;
 		newCon.Connection = info->m_hConn;
@@ -94,36 +95,36 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
 		newCon.TargetType = InterlinkType::eUnknown;
 		// request user for permission to connect
 		if (EResult result = networkInterface->AcceptConnection(newCon.Connection);
-				result != k_EResultOK)
-			{
+			result != k_EResultOK)
+		{
 
-				Print("Error accepting connection: {}", uint64(result));
-				networkInterface->CloseConnection(info->m_hConn, 0, nullptr, false);
-				throw std::runtime_error(
-					"This exception is because I have not implemented what to do when it fails "
-					"so i want to know when it does and not have undefined behaviour");
-			}
-			else
-			{
-				Connections.insert(newCon);
-			}
-		
+			Print("Error accepting connection: {}", uint64(result));
+			networkInterface->CloseConnection(info->m_hConn, 0, nullptr, false);
+			throw std::runtime_error(
+				"This exception is because I have not implemented what to do when it fails "
+				"so i want to know when it does and not have undefined behaviour");
+		}
+		else
+		{
+			Connections.insert(newCon);
+		}
 	}
 }
 
 void Interlink::CallbackOnConnected(SteamCBInfo info)
 {
+	printf("OnConnected!\n");
 }
 
 void Interlink::Initialize(const InterlinkProperties &Properties)
 {
 
-	ThisType = Properties.Type;
+	MyIdentity = Properties.ThisID;
 	ASSERT(Properties.logger, "Invalid Logger");
 	logger = Properties.logger;
 
 	Print("Interlink::Initialize called");
-	ASSERT(ThisType != InterlinkType::eInvalid, "Invalid Interlink Type");
+	ASSERT(MyIdentity.Type != InterlinkType::eInvalid, "Invalid Interlink Type");
 
 	ASSERT(Properties.acceptConnectionFunc,
 		   "You must provide a function for accepting connections");
@@ -137,7 +138,8 @@ void Interlink::Initialize(const InterlinkProperties &Properties)
 	}
 	SteamNetworkingUtils()->SetDebugOutputFunction(
 		k_ESteamNetworkingSocketsDebugOutputType_Msg,
-		[](ESteamNetworkingSocketsDebugOutputType eType, const char *pszMsg) {
+		[](ESteamNetworkingSocketsDebugOutputType eType, const char *pszMsg)
+		{
 			Interlink::Get().OnDebugOutput(eType, pszMsg);
 		});
 	networkInterface = SteamNetworkingSockets();

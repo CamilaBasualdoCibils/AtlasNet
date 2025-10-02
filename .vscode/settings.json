@@ -7,9 +7,7 @@
     "C_Cpp.default.cppStandard": "c++20",
     "C_Cpp.default.includePath": [
         "${workspaceFolder}/src",
-        "${workspaceFolder}/lib",
-        "${workspaceFolder}/lib/GameNetworkingSockets/include",
-        "${workspaceFolder}/lib/json/single_include"
+        "${workspaceFolder}/vcpkg_installed/x64-linux/include",
     ],
     "C_Cpp.intelliSenseEngine": "default",
     "cmake.ignoreCMakeListsMissing": true,
@@ -102,7 +100,17 @@
         "future": "cpp",
         "shared_mutex": "cpp",
         "stdfloat": "cpp",
-        "typeindex": "cpp"
+        "typeindex": "cpp",
+        "*.inc": "cpp",
+        "barrier": "cpp",
+        "expected": "cpp",
+        "generator": "cpp",
+        "latch": "cpp",
+        "print": "cpp",
+        "scoped_allocator": "cpp",
+        "spanstream": "cpp",
+        "stacktrace": "cpp",
+        "syncstream": "cpp"
     },
    
 }

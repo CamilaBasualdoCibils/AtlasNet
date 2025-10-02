@@ -118,7 +118,7 @@ void PartitionVisualization::renderGlobalView() {
     if (m_currentClusteringMethod == ClusteringMethod::K_MEANS) {
         ImGui::Separator();
         ImGui::Text("K-Means Settings:");
-        if (ImGui::SliderInt("K Value", &m_kMeansK, 2, 8)) {
+        if (ImGui::SliderInt("K Value", &m_kMeansK, 2, 32)) {
             // K value changed, regenerate clustering
             performKMeansClustering();
         }

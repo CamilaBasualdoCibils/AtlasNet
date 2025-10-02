@@ -4,7 +4,7 @@
 Partition::Partition()
 {
 	Interlink::Get().Initialize(
-		InterlinkProperties{.Type = InterlinkType::ePartition,
+		InterlinkProperties{.ThisID = InterLinkIdentifier(InterlinkType::ePartition,-1),
 							.logger = logger,
 							.bOpenListenSocket = true,
 							.ListenSocketPort = CJ_LOCALHOST_PARTITION_PORT,

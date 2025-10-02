@@ -21,6 +21,7 @@
     "boost-uuid",
     "boost-multi-index",
     "boost-container",
+    "boost-describe",
     "gamenetworkingsockets",
     "curl"
   ]

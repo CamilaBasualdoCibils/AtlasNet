@@ -4,11 +4,12 @@
 #include "Globals.hpp"
 #include "Singleton.hpp"
 #include "pch.hpp"
+#include "InterlinkMessage.hpp"
 const static inline int32 CJ_LOCALHOST_PARTITION_PORT = 25565;
 using AcceptConnectionFunc = std::function<bool(const Connection &)>;
 struct InterlinkProperties
 {
-	InterlinkType Type = InterlinkType::eInvalid;
+	InterLinkIdentifier ThisID;
 	std::shared_ptr<Log> logger;
 
 	bool bOpenListenSocket = false;
@@ -59,7 +60,7 @@ class Interlink : public Singleton<Interlink>
 	// Connections;
 	std::shared_ptr<Log> logger;
 	ISteamNetworkingSockets *networkInterface;
-	InterlinkType ThisType;
+	InterLinkIdentifier MyIdentity;
 	std::optional<HSteamListenSocket> ListeningSocket;
 	std::optional<HSteamNetPollGroup> PollGroup;
 
@@ -86,4 +87,5 @@ class Interlink : public Singleton<Interlink>
 
 	void Tick();
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
+	void SendMessage(const InterlinkMessage& message);
 };

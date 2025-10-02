@@ -1,5 +1,5 @@
 #pragma once
-
+#include <pch.hpp>
 enum class InterlinkType
 {
 	eInvalid = -1,
@@ -10,6 +10,7 @@ enum class InterlinkType
 	eGameClient, // Game Client / Player
 	eGameServer 	 // Game Server
 };
+BOOST_DESCRIBE_ENUM(InterlinkType,eInvalid,ePartition,eGod,eGodView,eGameClient,eGameServer)
 
 enum class ConnectionState
 {
