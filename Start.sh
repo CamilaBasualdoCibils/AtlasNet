@@ -81,6 +81,22 @@ case "$ARG" in
         echo "✅ Redis started on localhost:$REDIS_PORT"
         ;;
 
+        Postgres)
+            echo "Starting Postgres database container"
+            docker rm -f $POSTGRES_CONTAINER_NAME 2>/dev/null || true
+            docker volume create postgres_data >/dev/null 2>&1
+            docker run -d \
+              --name $POSTGRES_CONTAINER_NAME \
+              -e POSTGRES_USER=$POSTGRES_USER \
+              -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
+              -e POSTGRES_DB=$POSTGRES_DB \
+              -p $POSTGRES_PORT:5432 \
+              -v postgres_data:/var/lib/postgresql/data \
+              $POSTGRES_IMAGE_NAME
+            echo "✅ Postgres started on localhost:$POSTGRES_PORT"
+            echo "   User: $POSTGRES_USER  Pass: $POSTGRES_PASSWORD  DB: $POSTGRES_DB"
+            ;;
+
 
 
     *)

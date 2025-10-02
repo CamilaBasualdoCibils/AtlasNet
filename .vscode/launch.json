@@ -49,6 +49,16 @@
       "stopAtEntry": false
     },
     {
+      "name": "Run Database Postgres",
+      "type": "cppdbg",
+      "request": "launch",
+      "program": "/bin/true",
+      "cwd": "${workspaceFolder}",
+      "MIMode": "gdb",
+      "preLaunchTask": "Run Database Postgres",
+      "stopAtEntry": false
+    },
+    {
       "name": "Debug God Docker",
       "type": "cppdbg",
       "request": "launch",
