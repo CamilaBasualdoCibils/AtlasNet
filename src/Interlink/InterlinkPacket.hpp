@@ -1,6 +1,7 @@
 #pragma once
 #include "InterlinkEnums.hpp"
 #include "pch.hpp"
+#include "InterlinkIdentifier.hpp"
 struct InterlinkPacketHeader
 {
 	uint32_t packetID;
@@ -10,7 +11,7 @@ class IInterlinkPacket
 {
   public:
 	virtual void Serialize(std::vector<std::byte> &data) const = 0;
-	virtual void Deserialize(const std::vector<std::byte> &data) = 0;
+	virtual bool Deserialize(const std::vector<std::byte> &data) = 0;
 };
 
 class InterlinkPacketWrap : public IInterlinkPacket
@@ -46,3 +47,13 @@ class InterlinkDataPacket : public IInterlinkPacket
 };
 
 
+class InterlinkIdentityPacket:public IInterlinkPacket
+{
+	InterLinkIdentifier id;
+
+	void SetID(const InterLinkIdentifier& _id){id = _id;}
+	InterLinkIdentifier GetID() const {return id;}
+
+	void Serialize(std::vector<std::byte> &data) const;
+	bool Deserialize(const std::vector<std::byte> &data);
+};
