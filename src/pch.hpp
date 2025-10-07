@@ -1,8 +1,6 @@
 #pragma once
 
 
-
-
 /*GLFW + GLEW*/
 #define GLEW_STATIC
 #define GLEW_NO_GLU
@@ -18,6 +16,7 @@
 #include <imgui.h>
 #include <implot.h>
 
+
 /* Valve GameNetworkingSockets */
 #define STEAMNETWORKINGSOCKETS_STATIC_LINK
 #include "GameNetworkingSockets/steam/steamnetworkingsockets.h"
@@ -31,14 +30,17 @@
 #include "GameNetworkingSockets/steam/steamtypes.h"
 #include "GameNetworkingSockets/steam/steamuniverse.h"
 
+#include "curl/curl.h"
+
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
 #include <boost/multi_index/identity.hpp>
 #include <boost/multi_index/member.hpp>
-
-/* Databases */
-#include <sw/redis++/redis++.h>
-#include "Database/IDatabase.hpp"
+#include <boost/describe.hpp>
+#include <boost/describe/enum.hpp>
+#include <boost/describe/enum_to_string.hpp>
+#include <boost/describe/enum_from_string.hpp>
+#include <boost/stacktrace.hpp>
 
 #include "nlohmann/json.hpp"
 using Json = nlohmann::json;
@@ -68,6 +70,12 @@ using vec = glm::vec<L, T>;
 #include <unordered_map>
 #include <memory>
 #include <set>
+#include <execinfo.h>
 #include <cstring>
 #include <unordered_set>
 #include <emmintrin.h> // SSE2
+#include <format>
+#include <string>
+#include <csignal>
+#include <signal.h>
+#include <unistd.h>

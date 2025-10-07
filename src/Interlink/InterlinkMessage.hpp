@@ -25,7 +25,7 @@ enum class InterlinkMessageSendFlag
 };
 class InterlinkMessage
 {
-	InterlinkMessageSendFlag SendMethod = InterlinkMessageSendFlag::eReliableNow;
+	InterlinkMessageSendFlag SendMethod = InterlinkMessageSendFlag::eReliableBatched;
 	std::shared_ptr<IInterlinkPacket> Packet;
     public:
 	InterlinkMessage()

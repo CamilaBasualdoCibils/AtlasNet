@@ -6,8 +6,8 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties properties)
 	logger->Print("AtlasNet Initialize");
 	Interlink::Check();
 
-	Interlink::Get().Initialize(
-		InterlinkProperties{.Type = InterlinkType::eGameServer,
+	Interlink::Get().Init(
+		InterlinkProperties{.ThisID = InterLinkIdentifier(InterlinkType::eGameServer,-1),
 							.logger = logger,
 							.acceptConnectionFunc = [](const Connection &c) { return true; }});
 	Interlink::Get().ConnectToLocalParition();

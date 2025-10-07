@@ -21,6 +21,8 @@
     "boost-uuid",
     "boost-multi-index",
     "boost-container",
+    "boost-describe",
+    "boost-stacktrace",
     "gamenetworkingsockets",
     "curl",
     "redis-plus-plus",

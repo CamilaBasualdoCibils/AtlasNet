@@ -5,24 +5,6 @@ using PortType = uint16;
 using IPv4_Type = uint32;
 using IPv6_Type = std::array<uint8, 16>;
 
-class ServerIdentifier
-{
-	InterlinkType Type = InterlinkType::eInvalid;
-	uint32 ID = -1;
-
-  public:
-	ServerIdentifier() = default;
-	void SetGod();
-	void SetPartition(uint32 _ID);
-	void SetGameServer(uint32 _ID);
-	void SetGameClient(uint32 _ID);
-	void SetGodView();
-	static ServerIdentifier MakeIDGod();
-	static ServerIdentifier MakeIDPartition(uint32 _ID);
-	static ServerIdentifier MakeIDGameServer(uint32 _ID);
-	static ServerIdentifier MakeIDGameClient(uint32 _ID);
-	static ServerIdentifier MakeIDGodView();
-};
 class IPAddress
 {
 	SteamNetworkingIPAddr SteamAddress;
@@ -53,10 +35,3 @@ struct Connection
 	void SetNewState(ConnectionState newState);
 };
 
-struct IdentityPacket
-{
-	InterlinkType type;
-
-	std::string ToString() const;
-	static IdentityPacket FromString(const std::string &str);
-};
