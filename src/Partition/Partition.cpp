@@ -11,7 +11,7 @@ Partition::Partition()
     // check write capability to database
       char hostname[128];
       gethostname(hostname, sizeof(hostname));
-      cacheDB->Set(hostname, "Partition's Data");
+      cacheDB->Set(hostname, "Partition was here :D");
   }
 
 }

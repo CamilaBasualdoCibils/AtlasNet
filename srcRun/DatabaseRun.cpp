@@ -6,7 +6,7 @@ int main()
   if (!database->Connect())
     return 0;
 
-  database->Set("foo", "bar");
+  database->Set("RedisCacheDatabase", "Database was here :D");
   std::string out = database->Get("foo");
   //std::cerr << out << std::endl;
 
