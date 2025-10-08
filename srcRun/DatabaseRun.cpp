@@ -4,20 +4,20 @@
 int main()
 {
   IDatabase* database = new RedisCacheDatabase(true);
-  if (database->Connect())
-  {
-    database->Set("test", "||||||||||||AddSomethingToDatabaseSuccess||||||||||||||");
-    std::string out = database->Get("test").value();
-    std::cerr << out << std::endl;
-  }
+  if (!database->Connect())
+    return 0;
 
+  database->Set("foo", "bar");
+  std::string out = database->Get("foo");
+  //std::cerr << out << std::endl;
+
+  //database->Remove("foo");
 
   while (true)
   {
-    std::this_thread::sleep_for(std::chrono::seconds(2));
-    std::cerr << "working" << std::endl;
+    std::this_thread::sleep_for(std::chrono::seconds(5));
+    std::cerr << "||||||||||||||Database Enteries|||||||||||||||||" << std::endl;
+    database->PrintEntireDB();
   }
-  
-
   return 0;
 }
