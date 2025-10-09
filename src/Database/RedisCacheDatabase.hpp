@@ -21,17 +21,21 @@ public:
      */
     bool Connect() override;
 
-
+    // --- String operations ---
     bool Set(const std::string &key, const std::string &value) override;
-
     std::string Get(const std::string &key) override;
-
     bool Remove(const std::string &key) override;
-
     bool Exists(const std::string &key) override;
 
-    void PrintEntireDB() override;
+        // --- Hash operations ---
+    bool HashSet(const std::string& key, const std::string& field, const std::string& value);
+    std::string HashGet(const std::string& key, const std::string& field);
+    std::unordered_map<std::string, std::string> HashGetAll(const std::string& key);
+    bool HashRemove(const std::string& key, const std::string& field);
+    bool HashExists(const std::string& key, const std::string& field);
 
+    void PrintEntireDB() override;
+sw::redis::Redis& GetRaw()  {return *_redis;}
 private:
     std::string _host;
     int32 _port;

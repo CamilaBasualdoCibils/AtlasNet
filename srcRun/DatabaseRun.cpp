@@ -6,11 +6,9 @@ int main()
   if (!database->Connect())
     return 0;
 
-  database->Set("RedisCacheDatabase", "Database was here :D");
-  std::string out = database->Get("foo");
-  //std::cerr << out << std::endl;
-
-  //database->Remove("foo");
+  database->Set("RedisCacheDatabase:String", "Database was here :D");
+  database->HashSet("RedisCacheDatabase:Hash", "KeyFoo", "Database hash foo was here :D");
+  database->HashSet("RedisCacheDatabase:Hash", "KeyBar", "Database hash bar was here :D");
 
   while (true)
   {

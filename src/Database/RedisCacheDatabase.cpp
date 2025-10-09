@@ -74,6 +74,78 @@ bool RedisCacheDatabase::Exists(const std::string &key) {
     return _redis->exists(key) > 0;
 }
 
+
+bool RedisCacheDatabase::HashSet(const std::string& key, const std::string& field, const std::string& value)
+{
+    if (!_redis) return false;
+    try {
+        return _redis->hset(key, field, value);
+    } catch (const std::exception& e) {
+        std::cerr << "⚠️ Redis HashSet error for key: " << key << " field: " << field
+                  << " (" << e.what() << ")\n";
+        return false;
+    }
+}
+
+std::string RedisCacheDatabase::HashGet(const std::string& key, const std::string& field)
+{
+    if (!_redis) return "";
+
+    try {
+        auto val = _redis->hget(key, field);
+        if (val) return *val;
+        return "";
+    } catch (const std::exception& e) {
+        std::cerr << "⚠️ Redis HashGet error for key: " << key
+                  << " field: " << field << " (" << e.what() << ")\n";
+        return "";
+    }
+}
+
+std::unordered_map<std::string, std::string> RedisCacheDatabase::HashGetAll(const std::string& key)
+{
+    if (!_redis) return {};
+
+    try {
+        std::unordered_map<std::string, std::string> result;
+        _redis->hgetall(key, std::inserter(result, result.begin()));
+        return result;
+    } catch (const std::exception& e) {
+        std::cerr << "⚠️ Redis HashGetAll error for key: " << key
+                  << " (" << e.what() << ")\n";
+        return {};
+    }
+}
+
+bool RedisCacheDatabase::HashRemove(const std::string& key, const std::string& field)
+{
+    if (!_redis) return false;
+
+    try {
+        return _redis->hdel(key, field) > 0;
+    } catch (const std::exception& e) {
+        std::cerr << "⚠️ Redis HashRemove error for key: " << key << " field: " << field
+                  << " (" << e.what() << ")\n";
+        return false;
+    }
+}
+
+bool RedisCacheDatabase::HashExists(const std::string& key, const std::string& field)
+{
+    if (!_redis) return false;
+
+    try {
+        return _redis->hexists(key, field);
+    } catch (const std::exception& e) {
+        std::cerr << "⚠️ Redis HashExists error for key: " << key << " field: " << field
+                  << " (" << e.what() << ")\n";
+        return false;
+    }
+}
+
+
+
+
 void RedisCacheDatabase::PrintEntireDB()
 {
       if (!_redis) {
