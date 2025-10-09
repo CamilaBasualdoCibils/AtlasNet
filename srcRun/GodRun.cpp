@@ -10,6 +10,7 @@ void spawnDatabaseSimple() {
         {"Image", "database"},
         {"Cmd", {"database-redis", "--appendonly", "yes"}},
         {"HostConfig", {
+            {"Binds", Json::array({"redis_data:/data"})},
             {"NetworkMode", "AtlasNet"},
             {"PortBindings", {
                 {"6379/tcp", Json::array({ Json{{"HostPort", "6379"}} }) }

@@ -1,14 +1,23 @@
 #include "pch.hpp"
 
+
 int main()
 {
   IDatabase* database = new RedisCacheDatabase(true);
+
+  std::future
+
   if (!database->Connect())
     return 0;
-
-  database->Set("RedisCacheDatabase:String", "Database was here :D");
-  database->HashSet("RedisCacheDatabase:Hash", "KeyFoo", "Database hash foo was here :D");
-  database->HashSet("RedisCacheDatabase:Hash", "KeyBar", "Database hash bar was here :D");
+    
+    std::cerr << "DATA WITHIN PERSISTENT VOLUME" << std::endl;
+    database->PrintEntireDB();
+    std::cerr << "=============================" << std::endl;
+    
+    database->Set("RedisCacheDatabase:String", "Database was here :D");
+    database->HashSet("RedisCacheDatabase:Hash", "KeyFoo", "Database hash foo was here :D");
+    database->HashSet("RedisCacheDatabase:Hash", "KeyBar", "Database hash bar was here :D");
+    
 
   while (true)
   {

@@ -7,16 +7,29 @@ RedisCacheDatabase::RedisCacheDatabase(bool createDatabase, const std::string &h
         _network(network),
         _autoStart(createDatabase) 
 {
-      if (_autoStart) {
-    // Start Redis process locally (inside same container)
-    std::string startCmd = "redis-server --appendonly yes --protected-mode no --daemonize yes";
-    int ret = std::system(startCmd.c_str());
-    if (ret != 0) {
-        std::cerr << "❌ Failed to start local Redis process.\n";
-        return;
+    if (_autoStart) {
+        // Ensure data directory exists (mounted volume target)
+        std::system("mkdir -p /data");
+
+        // Start Redis process locally (inside same container)
+        std::string startCmd =
+            "redis-server "
+            "--appendonly yes "
+            "--appendfilename appendonly.aof "
+            "--save 1 1 "
+            "--dir /data "
+            "--protected-mode no "
+            "--daemonize yes";
+
+        int ret = std::system(startCmd.c_str());
+        if (ret != 0) {
+            std::cerr << "❌ Failed to start local Redis process.\n";
+            return;
+        }
+
+        std::cerr << "🐳 Started Redis (persistent) on host " << _host
+                  << ":" << _port << " with /data volume mount.\n";
     }
-    std::cerr << "🐳 Started local Redis process on host + port " << _host << ":" << _port << "\n";
-  }
 }
 
 bool RedisCacheDatabase::Connect()

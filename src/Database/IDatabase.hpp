@@ -6,8 +6,12 @@ class IDatabase {
 public:
     virtual ~IDatabase() = default;
 
-    /// Initialize connection
+    /// Initialize connection, halts program until connection established
     virtual bool Connect() = 0;
+    /// Initialize connection, returns immidiately
+    /// must use .get() if you want to halt program until connection established
+    std::future<bool> ConnectAsync() = 0;
+
 
     /// Set key -> value. return true if success      
     virtual bool Set(const std::string& key, const std::string& value) = 0;
@@ -23,6 +27,7 @@ public:
 
     // hash functions
     /// set key -> field -> value
+    /// Ex. HashSet(partition1:foo, bar, baz)
     virtual bool HashSet(const std::string& key, const std::string& field, const std::string& value) = 0;
     /// get value from key -> field 
     virtual std::string HashGet(const std::string& key, const std::string& field) = 0;

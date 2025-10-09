@@ -405,6 +405,7 @@ newaction {
     trigger = "AtlasNetStart",
     description = "build",
     execute = function()
+      os.execute("docker volume create redis_data")
           MakeDockerImages()
          RunDockerImage("God","DebugDocker")
     end
