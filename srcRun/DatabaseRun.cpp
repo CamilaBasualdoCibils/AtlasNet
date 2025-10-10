@@ -5,8 +5,6 @@ int main()
 {
   IDatabase* database = new RedisCacheDatabase(true);
 
-  std::future
-
   if (!database->Connect())
     return 0;
     

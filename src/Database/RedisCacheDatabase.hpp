@@ -14,12 +14,8 @@ class RedisCacheDatabase : public IDatabase {
 public:
     RedisCacheDatabase(bool createDatabase = false, const std::string &host = "database-redis", int32 port = 6379, const std::string &network = "AtlasNet");
 
-    // --- Public interface ---
-    /**
-     * Initializes connection to Redis.
-     * If autoStart==true, will spin up database 
-     */
     bool Connect() override;
+    std::future<bool> ConnectAsync() override;
 
     // --- String operations ---
     bool Set(const std::string &key, const std::string &value) override;

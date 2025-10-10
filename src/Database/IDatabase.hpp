@@ -1,6 +1,6 @@
 #pragma once
-#include <string>
-#include <optional>
+#include <pch.hpp>
+#include <future>
 
 class IDatabase {
 public:
@@ -10,7 +10,7 @@ public:
     virtual bool Connect() = 0;
     /// Initialize connection, returns immidiately
     /// must use .get() if you want to halt program until connection established
-    std::future<bool> ConnectAsync() = 0;
+    virtual std::future<bool> ConnectAsync() = 0;
 
 
     /// Set key -> value. return true if success      

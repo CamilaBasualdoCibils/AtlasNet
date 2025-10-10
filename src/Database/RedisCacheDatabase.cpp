@@ -61,6 +61,11 @@ bool RedisCacheDatabase::Connect()
   return true;
 }
 
+std::future<bool> RedisCacheDatabase::ConnectAsync()
+{
+  return std::async((std::launch::deferred, []() { return false; }));
+}
+
 bool RedisCacheDatabase::Set(const std::string &key, const std::string &value) {
     if (!_redis) return false;
     return _redis->set(key, value);
