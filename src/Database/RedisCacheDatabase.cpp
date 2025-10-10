@@ -34,36 +34,53 @@ RedisCacheDatabase::RedisCacheDatabase(bool createDatabase, const std::string &h
 
 bool RedisCacheDatabase::Connect()
 {
-    //if (_autoStart) {
-  //    // Try to remove and restart Redis container (dev mode)
-  //    std::string cmd =
-  //        "docker rm -f " + _host + " >/dev/null 2>&1; "
-  //        "docker run --network " + _network +
-  //        " -d --name " + _host +
-  //        " -p " + std::to_string(_port) + ":6379 redis:latest >/dev/null";
-//
-  //    int32 ret = std::system(cmd.c_str());
-  //    if (ret != 0) {
-  //        std::cerr << "❌ Failed to start Redis container. Command: " << cmd << "\n";
-  //        return false;
-  //    }
-  //    std::cerr << "🐳 Started Redis container " << _host << " on port " << _port << "\n";
-  //}
+    auto future = ConnectAsync();
 
-  try {
-      std::string uri = "tcp://" + _host + ":" + std::to_string(_port);
-      _redis = std::make_unique<sw::redis::Redis>(uri);
-  } catch (const std::exception &e) {
-      std::cerr << "❌ Redis connection failed: " << e.what() << "\n";
-      return false;
-  }
-  std::cerr << "✅ DatabasePointer connected to " << _host << ":" << _port << "\n";
-  return true;
+    // Wait up to 10 seconds (or customize)
+    auto status = future.wait_for(std::chrono::seconds(10));
+    if (status == std::future_status::ready) {
+        return future.get();
+    }
+
+    std::cerr << "❌ Redis connection timed out.\n";
+    return false;
 }
 
 std::future<bool> RedisCacheDatabase::ConnectAsync()
 {
-  return std::async((std::launch::deferred, []() { return false; }));
+    using namespace std::chrono_literals;
+
+    return std::async(std::launch::async, [this]() -> bool {
+        const int maxAttempts = 20;
+        const int delayMs = 500;
+
+        for (int attempt = 1; attempt <= maxAttempts; ++attempt) {
+            try {
+                // Construct the Redis URI
+                std::string uri = "tcp://" + _host + ":" + std::to_string(_port);
+
+                // Try to connect
+                _redis = std::make_unique<sw::redis::Redis>(uri);
+
+                // Test the connection
+                auto pong = _redis->ping();
+                if (pong == "PONG") {
+                    std::cerr << "✅ Connected to Redis at " << uri
+                              << " on attempt " << attempt << ".\n";
+                    return true;
+                }
+
+            } catch (const std::exception& e) {
+                std::cerr << "⏳ Attempt " << attempt
+                          << ": Redis not ready (" << e.what() << ")\n";
+            }
+
+            std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+        }
+
+        std::cerr << "❌ Failed to connect to Redis after " << maxAttempts << " attempts.\n";
+        return false;
+    });
 }
 
 bool RedisCacheDatabase::Set(const std::string &key, const std::string &value) {
