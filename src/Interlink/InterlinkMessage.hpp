@@ -34,5 +34,6 @@ class InterlinkMessage
 
 	InterlinkMessage &SetSendMethod(InterlinkMessageSendFlag _SendMethod);
     InterlinkMessage& SetPacket(std::shared_ptr<IInterlinkPacket> _Packet);
+	void SendTo(const InterLinkIdentifier& identifier);
     bool Validate() const;
 };

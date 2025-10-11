@@ -2,8 +2,7 @@
 #include <pch.hpp>
 enum class InterlinkType
 {
-	eInvalid = -1,
-    eUnknown, 
+	eInvalid,
 	ePartition,	 // partition Server
 	eGod,		 // God
 	eGodView,	 // God Debug Tool
@@ -18,7 +17,7 @@ enum class ConnectionState
     ePreConnecting, /// The Connection request has not been sent yet
 	eConnecting,	/// This Connection is trying to connect
 	eConnected,		/// Successfully Connected
-	eConnectedVerifyingIndentity, /// Successfully Connected but now asking credentials and user for permission before continuing
+	//eConnectedVerifyingIndentity, /// Successfully Connected but now asking credentials and user for permission before continuing
 	eDisconnecting, /// Trying to disconnect
 	eClosed,
 	eError

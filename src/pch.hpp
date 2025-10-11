@@ -34,6 +34,8 @@
 
 #include <boost/multi_index_container.hpp>
 #include <boost/multi_index/ordered_index.hpp>
+#include <boost/multi_index/hashed_index.hpp>
+#include <boost/multi_index/global_fun.hpp>
 #include <boost/multi_index/identity.hpp>
 #include <boost/multi_index/member.hpp>
 #include <boost/describe.hpp>
@@ -59,8 +61,6 @@ using vec = glm::vec<L, T>;
 
 /* Database */
 #include <sw/redis++/redis++.h>
-#include "Database/IDatabase.hpp"
-#include "Database/RedisCacheDatabase.hpp"
 
 #include <cassert>
 #define ASSERT(check,message) assert(check && message)
@@ -83,3 +83,4 @@ using vec = glm::vec<L, T>;
 #include <csignal>
 #include <signal.h>
 #include <unistd.h>
+#include <fstream>
