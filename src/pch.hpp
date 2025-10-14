@@ -71,6 +71,7 @@ using vec = glm::vec<L, T>;
 #include <vector>
 #include <functional>
 #include <chrono>
+#include <bitset>
 #include <unordered_map>
 #include <memory>
 #include <set>

@@ -11,6 +11,7 @@ struct InterlinkCallbacks
 {
 	std::function<bool(const Connection &)> acceptConnectionCallback;
 	std::function<void(const InterLinkIdentifier &)> OnConnectedCallback;
+	std::function<void(const Connection &, std::span<const std::byte>)> OnMessageArrival;
 };
 struct InterlinkProperties
 {
@@ -18,9 +19,9 @@ struct InterlinkProperties
 	std::shared_ptr<Log> logger;
 	InterlinkCallbacks callbacks;
 };
-inline  InterlinkType GetTargetType(const Connection& c)
+inline InterlinkType GetTargetType(const Connection &c)
 {
-    return c.target.Type;
+	return c.target.Type;
 }
 using InterlinkContainereID = DockerContainerID;
 class Interlink : public Singleton<Interlink>
@@ -61,7 +62,7 @@ class Interlink : public Singleton<Interlink>
 			boost::multi_index::ordered_unique<
 				boost::multi_index::tag<IndexByHSteamNetConnection>,
 				boost::multi_index::member<Connection, HSteamNetConnection,
-										   &Connection::Connection>>>>
+										   &Connection::SteamConnection>>>>
 		Connections;
 
 	std::shared_ptr<Log> logger;
@@ -71,6 +72,11 @@ class Interlink : public Singleton<Interlink>
 	std::optional<HSteamNetPollGroup> PollGroup;
 
 	InterlinkCallbacks callbacks;
+	PortType ListenPort;
+
+	const static inline std::unordered_map<InterlinkType, uint32> Type2ListenPort = {{InterlinkType::eGod, _PORT_GOD},
+																					 {InterlinkType::ePartition, _PORT_PARTITION},
+																					 {InterlinkType::eGameServer, _PORT_GAMESERVER}};
 
 private:
 	void GenerateNewConnections();
@@ -78,10 +84,10 @@ private:
 	void OnDebugOutput(ESteamNetworkingSocketsDebugOutputType eType, const char *pszMsg);
 
 	template <typename... Args>
-	void Print(std::string_view fmt, Args &&...args) const
+	void Debug(std::string_view fmt, Args &&...args) const
 	{
 		std::string msg = "Interlink> " + std::string(fmt);
-		logger->Print(msg, std::forward<Args>(args)...);
+		logger->Debug(msg, std::forward<Args>(args)...);
 	}
 
 	using SteamCBInfo = SteamNetConnectionStatusChangedCallback_t *;
@@ -91,12 +97,14 @@ private:
 	void ReceiveMessages();
 
 	bool EstablishConnectionTo(const InterLinkIdentifier &who);
-
-public:
+	
+	public:
 	void Init(const InterlinkProperties &properties);
 	void Shutdown();
-
+	
 	void Tick();
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
+
+	void SendMessageRaw(const InterLinkIdentifier& who, std::span<const std::byte> data,InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
 	void SendMessage(const InterlinkMessage &message);
 };

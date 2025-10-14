@@ -24,7 +24,10 @@ public:
 	static InterLinkIdentifier MakeIDGodView();
 
 	std::string ToString() const;
+	std::array<std::byte,32> ToEncodedByteStream() const;
 	[[nodiscard]] static std::optional<InterLinkIdentifier> FromString(const std::string& input);
+	[[nodiscard]] static std::optional<InterLinkIdentifier> FromEncodedByteStream(const std::array<std::byte,32>& input);
+	[[nodiscard]] static std::optional<InterLinkIdentifier> FromEncodedByteStream(const std::byte *data, size_t size);
 
 	bool operator==(const InterLinkIdentifier& other) const noexcept
 	{

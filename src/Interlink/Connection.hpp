@@ -34,7 +34,10 @@ struct Connection
 	ConnectionState oldState, state;
 	//InterlinkType TargetType = InterlinkType::eInvalid;
 	InterLinkIdentifier target;
-	HSteamNetConnection Connection;
+	HSteamNetConnection SteamConnection;
+	
+	uint64 MessagesSent;
+	std::vector<std::pair<InterlinkMessageSendFlag,std::vector<std::byte>>> MessagesToSendOnConnect;
 
 	void SetNewState(ConnectionState newState);
 };

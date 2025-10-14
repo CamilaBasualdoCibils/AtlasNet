@@ -8,11 +8,9 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
 {
 	CrashHandler::Get().Init(properties.ExePath);
 	DockerEvents::Get().Init(DockerEventsInit{.OnShutdownRequest = properties.OnShutdownRequest});
-	logger->Print("AtlasNet Initialize");
 	InterLinkIdentifier myID = InterLinkIdentifier(InterlinkType::eGameServer, DockerIO::Get().GetSelfContainerName());
-	IPAddress addrs;
-	addrs.Parse(DockerIO::Get().GetSelfContainerIP() + ":" + std::to_string(_PORT_GAMESERVER));
-	ServerRegistry::Get().RegisterSelf(myID, addrs);
+	logger = std::make_shared<Log>(myID.ToString());
+	logger->Debug("AtlasNet Initialize");
 	Interlink::Check();
 	Interlink::Get().Init(
 		InterlinkProperties{.ThisID = myID,

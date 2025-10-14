@@ -318,7 +318,7 @@ ${ENTRYPOINT}
     else
         print("Failed to open " .. dockerFilePath)
     end
-    os.execute("DOCKER_BUILDKIT=1 docker build --build-arg HOST_HOME=$HOME -f "..dockerFilePath.." -t ".. string.lower(buildTarget)..":latest .")
+    os.execute("DOCKER_BUILDKIT=1 docker build --pull --build-arg HOST_HOME=$HOME -f "..dockerFilePath.." -t ".. string.lower(buildTarget)..":latest .")
 end
 
 function BuildDockerImageFromTarget(target,build_config,app_bundle)
