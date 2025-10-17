@@ -95,6 +95,11 @@ public:
     std::set<int32> partitionIds;
 
     /**
+     * @brief Set of partitions that were assigned shapes in the last computeAndStorePartitions call.
+     */
+    std::set<InterLinkIdentifier> assignedPartitions;
+
+    /**
      * @brief Cache database pointer for storing partition metadata.
      *
      */

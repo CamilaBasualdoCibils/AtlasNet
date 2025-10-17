@@ -6,7 +6,8 @@ enum HeuristicType
 {
     BigSquare,
     QuadTree,
-    KDTree
+    KDTree,
+    Grid
 };
 class Heuristic
 {
@@ -15,5 +16,5 @@ public:
 
     std::vector<Shape> computePartition();
     std::vector<Shape> computeBigSquareShape();
-
+    std::vector<Shape> computeGridShape();
 };

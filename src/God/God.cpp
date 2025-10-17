@@ -129,13 +129,11 @@ bool God::removePartition(const DockerContainerID &id, uint32 TimeOutSeconds)
 
 void God::notifyPartitionsToFetchShapes()
 {
-  for (const auto &container : ServerRegistry::Get().GetServers())
+  // Only notify partitions that we just assigned shapes to
+  for (const auto& id : assignedPartitions)
   {
-    if (container.first.Type != InterlinkType::ePartition)
-      continue;
-    InterLinkIdentifier id = container.first;
     std::string Fetch = "Fetch Shape";
-    logger->DebugFormatted("Sending shape notify to {}", id.ToString());
+    logger->DebugFormatted("Sending shape notify to partition {} which was assigned a shape", id.ToString());
     Interlink::Get().SendMessageRaw(id, std::as_bytes(std::span(Fetch)));
   }
 }
@@ -190,6 +188,9 @@ bool God::computeAndStorePartitions()
     size_t numShapesToAssign = std::min(partitionShapes.size(), partitionIds.size());
     logger->DebugFormatted("Assigning {} shapes to {} partitions", numShapesToAssign, partitionIds.size());
 
+    // Keep track of which partitions were assigned shapes
+    assignedPartitions.clear();
+    
     // Serialize and store shapes, mapping them to partition IDs
     for (size_t i = 0; i < numShapesToAssign; ++i)
     {
@@ -214,6 +215,9 @@ bool God::computeAndStorePartitions()
         return false;
       }
 
+      // Track this partition as having a shape assigned
+      assignedPartitions.insert(partitionIds[i]);
+      
       logger->DebugFormatted("Stored shape for partition {} with {} triangles", partitionIds[i].ToString(), partitionShapes[i].triangles.size());
     }
 
