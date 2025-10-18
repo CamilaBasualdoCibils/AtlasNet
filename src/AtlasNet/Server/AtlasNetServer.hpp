@@ -1,6 +1,6 @@
 #pragma once
-#include "AtlasNet/AtlasEntity.hpp"
-#include "AtlasNet/AtlasNetInterface.hpp"
+#include "../AtlasEntity.hpp"
+#include "../AtlasNetInterface.hpp"
 #include "Singleton.hpp"
 #include "pch.hpp"
 #include "Debug/Log.hpp"
