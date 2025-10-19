@@ -455,3 +455,93 @@ newoption {
     value = "-1",
     description = "Specify the id to run from unit tests"
 }
+
+
+--
+-- Unity Plugin: AtlasUnityBridge
+-- Builds the shared library (.dll or .so) used by Unity.
+--
+project "AtlasUnityBridge"
+    kind "SharedLib"
+    language "C++"
+    cppdialect "C++20"
+    staticruntime "off"
+
+    -- Output directories
+    targetdir ("%{wks.location}/bin/%{cfg.buildcfg}")
+    objdir ("%{wks.location}/bin-int/%{cfg.buildcfg}")
+
+    -- Source files
+    files {
+        "src/AtlasNet/Server/**.cpp",
+        "src/AtlasNet/Server/**.hpp",
+        "src/Partition/**.cpp",
+        "src/Partition/**.hpp",
+        "src/TestUnityAPI/Server/**.cpp",
+        "src/TestUnityAPI/Server/**.hpp"
+    }
+
+    -- Include directories (same as main backend)
+    includedirs {
+        "src",
+        "src/AtlasNet",
+        "src/AtlasNet/Server",
+        "src/Partition",
+        "src/Interlink",
+        "src/TestUnityAPI/Server",
+        "vcpkg_installed/x64-windows/include",
+        "vcpkg_installed/x64-linux/include"
+    }
+
+    -- Defines (mirror those from AtlasNetStart)
+    defines {
+        "_PORT_GOD=25564",
+        "_PORT_PARTITION=25565",
+        "_PORT_GAMESERVER=25566",
+        "BOOST_STACKTRACE_LINK",
+        "BOOST_STACKTRACE_USE_ADDR2LINE"
+    }
+
+    -- Third-party libs (same as backend)
+    links {
+        "boost_stacktrace_addr2line",
+        "boost_container",
+        "curl",
+        "GameNetworkingSockets",
+        "GLEW",
+        "glfw3",
+        "glm",
+        "imgui",
+        "implot",
+        "GL",
+        "ssl",
+        "crypto",
+        "z",
+        "dl",
+        "redis++",
+        "hiredis"
+    }
+
+    -- Platform-specific setup
+    filter "system:windows"
+        systemversion "latest"
+        defines { "PLATFORM_WINDOWS" }
+        postbuildcommands {
+            "{MKDIR} ../../YourUnityProject/Assets/Plugins/Windows",
+            "{COPY} %{cfg.buildtarget.relpath} ../../YourUnityProject/Assets/Plugins/Windows/%{cfg.buildtarget.name}"
+        }
+
+    filter "system:linux"
+        pic "on"
+        defines { "PLATFORM_LINUX" }
+        postbuildcommands {
+            "{MKDIR} ../../YourUnityProject/Assets/Plugins/Linux/x86_64",
+            "{COPY} %{cfg.buildtarget.relpath} ../../YourUnityProject/Assets/Plugins/Linux/x86_64/%{cfg.buildtarget.name}"
+        }
+
+    -- Configurations
+    filter "configurations:Debug"
+        symbols "On"
+
+    filter "configurations:Release"
+        optimize "On"
