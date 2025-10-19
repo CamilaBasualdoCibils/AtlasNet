@@ -2,3 +2,8 @@ cd /mnt/d/KDNet/KDNet
 ./premake5 gmake2
 cd build
 make AtlasUnityBridge config=release
+
+
+cd /mnt/d/KDNet/KDNet
+premake5 vs2022
+msbuild AtlasUnityBridge.sln /p:Configuration=Release # doesnt work rn and has build errors
