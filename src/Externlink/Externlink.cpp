@@ -13,14 +13,14 @@ bool Externlink::Start(const ExternlinkProperties& props)
     SteamDatagramErrMsg errMsg;
     if (!GameNetworkingSockets_Init(nullptr, errMsg))
     {
-        std::cerr << "[Externlink] Init failed: " << errMsg << std::endl;
+        logger->ErrorFormatted("[Externlink] Init failed: {}", errMsg);
         return false;
     }
 
     SteamNetworkingUtils()->SetGlobalCallback_SteamNetConnectionStatusChanged(SteamNetConnectionStatusChanged);
     Interface = SteamNetworkingSockets();
 
-    std::cout << "[Externlink] Initialized on port " << Props.port << std::endl;
+    logger->DebugFormatted("[Externlink] Initialized on port {}", Props.port);
     return true;
 }
 
@@ -35,12 +35,32 @@ bool Externlink::StartListening()
 
     if (ListenSocket == k_HSteamListenSocket_Invalid)
     {
-        std::cerr << "[Externlink] Failed to create listen socket!" << std::endl;
+        logger->ErrorFormatted("[Externlink] Failed to create listen socket!");
         return false;
     }
 
-    std::cout << "[Externlink] Listening on port " << Props.port << std::endl;
+    logger->DebugFormatted("[Externlink] Listening on port {}", Props.port);
+
+    if (Props.tickAsyncOnStartListening)
+    {
+      logger->DebugFormatted("[Externlink] Polling async on port {}", Props.port);
+      pollTask = PollAsync();
+    }
+
     return true;
+}
+
+std::future<void> Externlink::PollAsync()
+{
+    running = true;
+    return std::async(std::launch::async, [this]()
+    {
+        while (running)
+        {
+            Poll();
+            std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        }
+    });
 }
 
 void Externlink::Poll()
@@ -66,7 +86,45 @@ void Externlink::Poll()
 
         msg->Release();
     }
+    
+    if (num > 0)
+        logger->DebugFormatted("[Externlink] Polled: received {} messages", num);
 }
+
+bool Externlink::Connect(const std::string& address, uint16_t port)
+{
+    if (!Interface)
+    {
+        SteamDatagramErrMsg errMsg;
+        if (!GameNetworkingSockets_Init(nullptr, errMsg))
+        {
+            logger->ErrorFormatted("[Externlink] Init failed: {}", errMsg);
+            return false;
+        }
+        Interface = SteamNetworkingSockets();
+        SteamNetworkingUtils()->SetGlobalCallback_SteamNetConnectionStatusChanged(SteamNetConnectionStatusChanged);
+        s_Instance = this;
+    }
+
+    SteamNetworkingIPAddr addr;
+    addr.Clear();
+    addr.ParseString(address.c_str());
+    addr.m_port = port;
+
+    HSteamNetConnection conn = Interface->ConnectByIPAddress(addr, 0, nullptr);
+    if (conn == k_HSteamNetConnection_Invalid)
+    {
+        logger->ErrorFormatted("[Externlink] Failed to connect to server {}:{}", address, port);
+        return false;
+    }
+
+    logger->DebugFormatted("[Externlink] Connecting to {}:{}", address, port);
+    if (Props.tickAsyncOnStartListening)
+        pollTask = PollAsync();
+
+    return true;
+}
+
 
 void Externlink::Send(const ExternlinkConnection& conn, const std::string& msg)
 {
@@ -88,6 +146,10 @@ void Externlink::Broadcast(const ExternlinkConnection& sender, const std::string
 
 void Externlink::Stop()
 {
+    running = false;
+    if (pollTask.valid())
+        pollTask.wait();
+
     if (Interface)
     {
         if (ListenSocket != k_HSteamListenSocket_Invalid)
@@ -123,7 +185,7 @@ void Externlink::SteamNetConnectionStatusChanged(SteamNetConnectionStatusChanged
             if (self->OnConnected)
                 self->OnConnected(ExternlinkConnection{id});
 
-            std::cout << "[Externlink] Client connected (id=" << id << ")" << std::endl;
+            s_Instance->logger->DebugFormatted("[Externlink] Client connected (id={})", id);
             break;
         }
 
@@ -138,7 +200,7 @@ void Externlink::SteamNetConnectionStatusChanged(SteamNetConnectionStatusChanged
                 self->OnDisconnected(ExternlinkConnection{id});
 
             iface->CloseConnection(info->m_hConn, 0, nullptr, false);
-            std::cout << "[Externlink] Client disconnected (id=" << id << ")" << std::endl;
+            s_Instance->logger->DebugFormatted("[Externlink] Client disconnected (id={})", id);
             break;
         }
 

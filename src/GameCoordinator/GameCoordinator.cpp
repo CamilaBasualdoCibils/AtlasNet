@@ -8,7 +8,7 @@ GameCoordinator::~GameCoordinator() { Shutdown(); }
 bool GameCoordinator::Init()
 {
   uint16_t port = 9000;
-    ExternlinkProperties props = {"Coordinator", port};
+    ExternlinkProperties props = {"Coordinator", port, true};
     if (!Link.Start(props))
         return false;
 
@@ -19,7 +19,7 @@ bool GameCoordinator::Init()
     if (!Link.StartListening())
         return false;
 
-    std::cout << "[Coordinator] Initialized and listening on port " << port << std::endl;
+    logger->DebugFormatted("[Coordinator] Initialized and listening on port {}", port);
     return true;
 }
 
@@ -41,17 +41,17 @@ void GameCoordinator::Shutdown()
 void GameCoordinator::OnClientConnected(const ExternlinkConnection& conn)
 {
     Clients[conn.id] = "Client-" + std::to_string(conn.id);
-    std::cout << "[Coordinator] Connected: " << conn.id << std::endl;
+    logger->DebugFormatted("[Coordinator] Connected: {}", conn.id);
 }
 
 void GameCoordinator::OnClientDisconnected(const ExternlinkConnection& conn)
 {
     Clients.erase(conn.id);
-    std::cout << "[Coordinator] Disconnected: " << conn.id << std::endl;
+    logger->DebugFormatted("[Coordinator] Disconnected: {}", conn.id);
 }
 
 void GameCoordinator::OnClientMessage(const ExternlinkConnection& conn, const std::string& msg)
 {
-    std::cout << "[Coordinator] Message from " << conn.id << ": " << msg << std::endl;
+    logger->DebugFormatted("[Coordinator] Message from {}: {}", conn.id, msg);
     Link.Broadcast(conn, msg);
 }

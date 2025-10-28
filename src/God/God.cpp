@@ -5,6 +5,7 @@
 #include "Database/ServerRegistry.hpp"
 #include "Interlink/InterlinkEnums.hpp"
 #include "Interlink/Connection.hpp"
+#include "GameCoordinator/GameCoordinator.hpp"
 God::God()
 {
 }
@@ -39,6 +40,8 @@ void God::Init()
   {
     std::cerr << server.second.identifier.ToString() << " " << server.second.address.ToString() << std::endl;
   }
+
+  GameCoordinator::Get().Init();
 
   // std::this_thread::sleep_for(std::chrono::seconds(4));
   // god.removePartition(4);

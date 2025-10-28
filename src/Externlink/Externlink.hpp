@@ -1,6 +1,7 @@
 #pragma once
 #include "pch.hpp"
 #include "Debug/Log.hpp"
+#include <future>
 
 /// A backend-agnostic connection identifier
 struct ExternlinkConnection
@@ -14,6 +15,7 @@ struct ExternlinkProperties
 {
     std::string uuid;
     uint16_t port;
+    bool tickAsyncOnStartListening = false;
 };
 
 /// @brief Lightweight, backend-agnostic networking interface built over Valve GameNetworkingSockets
@@ -29,7 +31,10 @@ public:
 
     bool Start(const ExternlinkProperties& props);
     bool StartListening();
+    std::future<void> PollAsync();
     void Poll();
+
+    bool Externlink::Connect(const std::string& address, uint16_t port);
 
     void Send(const ExternlinkConnection& conn, const std::string& msg);
     void Broadcast(const ExternlinkConnection& sender, const std::string& msg);
@@ -40,6 +45,8 @@ public:
     void SetOnMessage(OnMessageFn fn);
 
 private:
+    std::shared_ptr<Log> logger = std::make_shared<Log>("Externlink");
+
     ISteamNetworkingSockets* Interface = nullptr;
     HSteamListenSocket ListenSocket = k_HSteamListenSocket_Invalid;
     HSteamNetPollGroup PollGroup = k_HSteamNetPollGroup_Invalid;
@@ -53,6 +60,9 @@ private:
     OnConnectedFn OnConnected;
     OnDisconnectedFn OnDisconnected;
     OnMessageFn OnMessage;
+
+    std::future<void> pollTask;
+    std::atomic<bool> running = false;
 
     static Externlink* s_Instance;
     static void SteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t* info);

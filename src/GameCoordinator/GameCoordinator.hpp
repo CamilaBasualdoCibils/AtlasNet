@@ -18,6 +18,7 @@ public:
     void Shutdown();
 
 private:
+    std::shared_ptr<Log> logger = std::make_shared<Log>("GameCoordinator");
     Externlink Link;
     std::unordered_map<uint64_t, std::string> Clients;
     std::atomic<bool> ShouldShutdown = false;
