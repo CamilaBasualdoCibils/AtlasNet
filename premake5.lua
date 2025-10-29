@@ -70,13 +70,13 @@ workspace "GuacNet"
         language "C++"
         files { "srcRun/GodRun.cpp" }
         defines "_GOD"
-    project "GodView"
+    project "Cartograph"
         dependson "AtlasNetLib"
         links "AtlasNetLib"
         kind "ConsoleApp"
         language "C++"
-        files { "srcRun/GodViewRun.cpp" }
-        defines "_GODVIEW"
+        files { "srcRun/CartographRun.cpp" }
+        defines "_CARTOGRAPH"
     project "Partition"
         dependson "AtlasNetLib"
         links {"AtlasNetLib",}

@@ -864,7 +864,7 @@ void AtlasNetBootstrap::GetWorkersSSHCredentials()
         ow.publicKeyPath = publicKeyPath;
         ow.PrivateKeyPath = privateKeyPath;
         static std::mutex pushVectorMutex;
-        std::unique_lock(pushVectorMutex);
+        std::unique_lock lock(pushVectorMutex);
         onlineWorkers.push_back(ow); });
 }
 void AtlasNetBootstrap::SendTLSCertificateToWorkers()

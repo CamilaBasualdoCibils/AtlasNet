@@ -27,13 +27,13 @@
     },
     
     {
-      "name": "Debug GodView",
+      "name": "Debug Cartograph",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/bin/DebugDocker/GodView/GodView",
+      "program": "${workspaceFolder}/bin/DebugDocker/Cartograph/Cartograph",
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
-      "preLaunchTask": "Compile For Docker",
+      "preLaunchTask": "make",
       "stopAtEntry": false,
       
     }

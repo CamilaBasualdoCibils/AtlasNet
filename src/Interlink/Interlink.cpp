@@ -46,6 +46,7 @@ void Interlink::GenerateNewConnections()
 {
 	auto &IndiciesByState = Connections.get<IndexByState>();
 	auto PreConnectingConnections = IndiciesByState.equal_range(ConnectionState::ePreConnecting);
+	
 	// auto& ByState = Connections.equal_range(ConnectionState::ePreConnecting);
 	SteamNetworkingConfigValue_t opt[1];
 	opt[0].SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
@@ -390,6 +391,7 @@ void Interlink::SendMessageRaw(const InterLinkIdentifier &who, std::span<const s
 	auto QueueMessageOnConnect = [&]()
 	{
 		auto it = Connections.get<IndexByTarget>().find(who);
+		
 		Connections.get<IndexByTarget>().modify(it, [&](Connection &c)
 												{
 													std::vector<std::byte> newdata;

@@ -14,8 +14,12 @@
 #include <imgui_impl_opengl3.h>
 #include <imgui_impl_glfw.h>
 #include <imgui.h>
+#include <imgui_stdlib.h>
 #include <implot.h>
+#include <implot3d.h>
 
+/*STB*/
+#include "stb_image.h"
 
 /* Valve GameNetworkingSockets */
 #define STEAMNETWORKINGSOCKETS_STATIC_LINK
@@ -52,6 +56,12 @@ using Ordered_Json = nlohmann::ordered_json;
 using mat2 = glm::mat2;
 using mat3 = glm::mat3;
 using mat4 = glm::mat4;
+using uvec2 = glm::uvec2;
+using uvec3 = glm::uvec3;
+using uvec4 = glm::uvec4;
+using ivec2 = glm::ivec2;
+using ivec3 = glm::ivec3;
+using ivec4 = glm::ivec4;
 using vec2 = glm::vec2;
 using vec3 = glm::vec3;
 using vec4 = glm::vec4;
