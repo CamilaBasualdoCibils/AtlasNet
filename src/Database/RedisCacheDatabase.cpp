@@ -226,6 +226,28 @@ bool RedisCacheDatabase::HashExists(const std::string &key, const std::string &f
     }
 }
 
+std::vector<std::string> RedisCacheDatabase::GetKeysMatching(const std::string &pattern)
+{
+    std::vector<std::string> keys;
+    if (!_redis)
+        return keys;
+
+    try
+    {
+        // Use Redis KEYS command to find all keys matching the pattern
+        // Note: KEYS is not recommended for production use due to performance,
+        // but it's fine for cleanup operations during startup
+        _redis->keys(pattern, std::back_inserter(keys));
+    }
+    catch (const std::exception &e)
+    {
+        std::cerr << "⚠️ Redis GetKeysMatching error for pattern: " << pattern
+                  << " (" << e.what() << ")\n";
+    }
+    
+    return keys;
+}
+
 void RedisCacheDatabase::PrintEntireDB()
 {
     if (!_redis)

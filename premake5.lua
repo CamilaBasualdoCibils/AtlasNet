@@ -431,6 +431,7 @@ newaction {
     description = "build",
     execute = function()
       os.execute("docker volume create redis_data")
+      os.execute("docker network create AtlasNet 2>/dev/null || true")
           MakeDockerImages()
          RunDockerImage("God","DebugDocker")
     end
