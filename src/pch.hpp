@@ -69,6 +69,15 @@ using quat = glm::quat;
 template <glm::length_t L, typename T>
 using vec = glm::vec<L, T>;
 
+inline vec2 ImGuiToGlm(ImVec2 e) {return vec2(e.x,e.y);}
+inline ImVec2 GlmToImGui(vec2 e) {return ImVec2(e.x,e.y);}
+
+
+inline vec4 ImGuiToGlm(ImVec4 e) {return vec4(e.x,e.y,e.z,e.w);}
+inline ImVec4 GlmToImGui(vec4 e) {return ImVec4(e.x,e.y,e.z,e.w);}
+
+
+
 /* Database */
 #include <sw/redis++/redis++.h>
 #include <netdb.h>  

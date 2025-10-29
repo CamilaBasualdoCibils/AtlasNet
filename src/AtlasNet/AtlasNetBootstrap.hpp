@@ -28,8 +28,8 @@ public:
     FROM ${OS_VERSION} AS builder
 
     WORKDIR ${WORKDIR}
-
-    RUN apt-get update && apt-get install ${DEV_PACKAGES} -y
+        
+    RUN apt-get update && apt-get install ${DEV_PACKAGES} -y 
 
     RUN git clone https://github.com/microsoft/vcpkg.git
     RUN ./vcpkg/bootstrap-vcpkg.sh

@@ -5,6 +5,7 @@
 #include "Debug/Log.hpp"
 #include "Database/RedisCacheDatabase.hpp"
 #include "Heuristic/Shape.hpp"
+#include "Database/GridCellManifest.hpp"
 
 class Cartograph : public Singleton<Cartograph>
 {
@@ -12,11 +13,14 @@ class Cartograph : public Singleton<Cartograph>
     std::shared_ptr<Log> logger = std::make_shared<Log>("Cartograph");
     std::unique_ptr<RedisCacheDatabase> database;
 
+
     struct ActivePartition
     {
-        Shape shape;
+        GridShape shape;
         std::string Name;
+        std::string NodeID;
     };
+    
     std::vector<ActivePartition> partitions;
 
     struct NodeWorker
@@ -24,8 +28,16 @@ class Cartograph : public Singleton<Cartograph>
         std::string id, hostname, addr;
         vec3 Color;
     };
-    std::vector<NodeWorker> workers;
+    std::unordered_map<std::string,NodeWorker> workers;
 
+    enum class ConnectionState
+    {
+        eIdle,
+        eFailed,
+        eConnected
+    };
+    ConnectionState connectionState;
+    std::string connectionLog;
     int32 pollingRate = 500;
     void Startup();
     void DrawBackground();
@@ -42,6 +54,7 @@ class Cartograph : public Singleton<Cartograph>
 
     void Render();
     void ConnectTo(const std::string &ip);
+    void DrawTo(ImDrawList*,const GridShape& sh);
     static std::shared_ptr<Texture> LoadTextureFromCompressed(const void *data, size_t size);
 
     struct Container
@@ -58,7 +71,7 @@ class Cartograph : public Singleton<Cartograph>
     static vec3 HSVtoRGB(vec3 vec);
 
     vec3 GetUniqueColor(int index);
-
+    static const std::string InitialLayout;
 public:
     Cartograph() {}
     void Run();

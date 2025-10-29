@@ -31,6 +31,27 @@ void Cartograph::Startup()
 	io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 	ImGui_ImplGlfw_InitForOpenGL(_glfwwindow, true);
 	ImGui_ImplOpenGL3_Init("#version 330");
+	ImGui::LoadIniSettingsFromMemory(InitialLayout.data());
+
+	int width, height, channels;
+	unsigned char *pixels = stbi_load_from_memory(EmbedResources::map_search_png, EmbedResources::map_search_size, &width, &height, &channels, 4);
+	if (!pixels)
+	{
+		std::cerr << "Failed to load icon image\n";
+	}
+	else
+	{
+		GLFWimage icon;
+		icon.width = width;
+		icon.height = height;
+		icon.pixels = pixels;
+
+		// Set the window icon
+		glfwSetWindowIcon(_glfwwindow, 1, &icon);
+
+		// Free the image memory after setting
+		stbi_image_free(pixels);
+	}
 
 	// Interlink::Get().Init(InterlinkProperties{.ThisID = InterLinkIdentifier::MakeIDCartograph(), .logger = logger, .callbacks = InterlinkCallbacks{}});
 }
@@ -83,23 +104,32 @@ void Cartograph::DrawBackground()
 void Cartograph::DrawConnectTo()
 {
 	ImGui::Begin("ConnectTo", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
-
-	ImGui::InputTextWithHint("##connect", "IP address of Manager", &IP2Manager);
-	ImGui::SameLine();
 	if (ImGui::Button("Connect"))
 	{
 		ConnectTo(IP2Manager);
 	}
+	ImGui::SameLine();
+	ImGui::InputTextWithHint("##connect", "IP address of Manager", &IP2Manager);
+	ImGui::SameLine();
+	vec4 Color = vec4(1.0f);
+	if (connectionState == ConnectionState::eConnected)
+		Color = vec4(0.1f, 1.0f, 0.1f, 1.0f);
+	if (connectionState == ConnectionState::eFailed)
+		Color = vec4(1.0f, 0.1f, 0.1f, 1.0f);
+	ImGui::TextColored(ImVec4(Color.r, Color.g, Color.b, Color.a), connectionLog.c_str());
 	ImGui::End();
 }
 void Cartograph::DrawMap()
 {
 	ImGui::Begin("Map", nullptr);
-	ImPlot::BeginPlot("Map View", ImVec2(-1, -1), ImPlotFlags_CanvasOnly);
+	ImPlot::BeginPlot("Map View", ImVec2(-1, -1), ImPlotFlags_CanvasOnly | ImPlotFlags_Equal);
 
 	ImPlot::PushPlotClipRect();
 	for (const auto &partition : partitions)
 	{
+		DrawTo(ImPlot::GetPlotDrawList(), partition.shape);
+
+		/*
 		for (const auto &tri : partition.shape.triangles)
 		{
 			ImVec2 points[3];
@@ -108,7 +138,7 @@ void Cartograph::DrawMap()
 				points[i] = ImPlot::PlotToPixels(ImVec2{tri[i].x, tri[i].y});
 			}
 			ImPlot::GetPlotDrawList()->AddTriangle(points[0], points[1], points[2], IM_COL32(255, 255, 255, 255));
-		}
+		}*/
 	}
 	ImPlot::PopPlotClipRect();
 	ImPlot::EndPlot();
@@ -116,8 +146,58 @@ void Cartograph::DrawMap()
 }
 void Cartograph::DrawPartitionGrid()
 {
+
+	static int32 ItemCountX = 2;
+	static float ItemSpacing = 5.0f;
 	ImGui::Begin("Partitions");
 
+	if (ImGui::InputInt("Num X", &ItemCountX, 1, 3))
+	{
+		ItemCountX = glm::max(ItemCountX, 1);
+	}
+	if (ImGui::InputFloat("Min spacing", &ItemSpacing, 1, 10, "%.0f"))
+	{
+		ItemSpacing = glm::max(ItemSpacing, 1.0f);
+	}
+
+	ImGui::Separator();
+	ImGui::BeginChild("Partition grid");
+
+	const ImVec2 AvailSpace = ImGui::GetContentRegionAvail();
+	const vec2 gAvailSpace = {AvailSpace.x, AvailSpace.y};
+	// ItemSize + MinItemSpacing because each has half of the spacing to either side
+	const float ItemSizeX = gAvailSpace.x / (float)ItemCountX - ItemSpacing;
+
+	const vec2 OriginalCursorPos = ImGuiToGlm(ImGui::GetCursorPos());
+	vec2 cursor = OriginalCursorPos;
+	const size_t partitionCount = partitions.size();
+	for (int y = 0; y < std::ceil(partitionCount / (float)ItemCountX); y++)
+	{
+		cursor.x = OriginalCursorPos.x;
+		cursor.y += ItemSpacing / 2.0f;
+		for (int x = 0; x < ItemCountX; x++)
+		{
+			const int ID = x + y * ItemCountX;
+			if (ID >= partitionCount)
+				break;
+			const ActivePartition &part = partitions[ID];
+			// const NodeWorker& worker = workers.at(part.NodeID);
+
+			cursor.x += ItemSpacing / 2.0f;
+			ImGui::SetCursorPos(GlmToImGui(cursor));
+			//::PushStyleColor(ImGuiCol_Border,GlmToImGui(vec4(worker.Color,1)));
+			if (ImGui::BeginChild(ID, GlmToImGui(vec2(ItemSizeX)), ImGuiChildFlags_Borders))
+			{
+				DrawTo(ImGui::GetForegroundDrawList(),part.shape);
+			}
+			// ImGui::PopStyleColor();
+			ImGui::EndChild();
+			cursor.x += ItemSizeX + ItemSpacing / 2.0f;
+		}
+		cursor.y += ItemSpacing / 2.0f + ItemSizeX;
+	}
+	ImGui::SetCursorPos(GlmToImGui(OriginalCursorPos));
+	ImGui::EndChild();
 	ImGui::End();
 }
 void Cartograph::DrawLog()
@@ -139,17 +219,28 @@ void Cartograph::Update()
 	if (!database)
 		return;
 
-	const auto shapes = ShapeManifest::FetchAll(database.get());
+	const auto shapes = GridCellManifest::FetchAll(database.get());
 
 	partitions.clear();
 
 	for (const auto &shape : shapes)
 	{
 		ActivePartition partition;
-		partition.shape = Shape::FromString(shape.second);
+		// partition.shape = Shape::FromString(shape.second);
+		partition.shape = GridCellManifest::ParseGridShape(shape.second);
 		partition.Name = shape.first;
 		partitions.push_back(partition);
 	}
+	std::sort(partitions.begin(), partitions.end(), [](const ActivePartition &p1, const ActivePartition &p2)
+			  {bool nc = p1.NodeID < p2.NodeID;
+				if (p1.NodeID != p2.NodeID)
+				{
+					return p1.NodeID < p2.NodeID;
+				}
+				else
+				{
+					return p1.Name < p2.Name;
+				} });
 
 	GetNodes();
 }
@@ -164,18 +255,35 @@ void Cartograph::Render()
 }
 void Cartograph::ConnectTo(const std::string &ip)
 {
-	ForEachContainer([&database = database, IP2Manager = IP2Manager](const Container &c, const Json &detail)
+	std::string DatabaseIP;
+	ForEachContainer([&database = database, IP2Manager = IP2Manager, &DatabaseIP](const Container &c, const Json &detail)
 					 {
 		if (c.image == AtlasNetBootstrap::Get().DatabaseImageName)
 		{
+			DatabaseIP = IP2Manager + ":" + std::to_string(c.Out2InPorts.front().first);
 			database = std::make_unique<RedisCacheDatabase>(false,IP2Manager,c.Out2InPorts.front().first);
 			database->Connect();
+			
 			return;
 		} });
-	
+
 	if (!database)
 	{
 		std::cerr << "Database not found " << std::endl;
+		connectionState = ConnectionState::eFailed;
+		connectionLog = "Failed to find database at " + DatabaseIP;
+	}
+	{
+		connectionState = ConnectionState::eConnected;
+		connectionLog = "Connected";
+	}
+}
+void Cartograph::DrawTo(ImDrawList *drawlist, const GridShape &sh)
+{
+	for (const auto &cell : sh.cells)
+	{
+		drawlist->AddRect(ImPlot::PlotToPixels(GlmToImGui(cell.min)), ImPlot::PlotToPixels(GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
+		// ImPlot::GetPlotDrawList()->AddTriangle(points[0], points[1], points[2], IM_COL32(255, 255, 255, 255));
 	}
 }
 std::shared_ptr<Texture> Cartograph::LoadTextureFromCompressed(const void *data, size_t size)
@@ -204,7 +312,7 @@ void Cartograph::GetNodes()
 		w.hostname = node["Description"]["Hostname"];
 		w.addr = node["Status"]["Addr"];
 		w.Color = HSVtoRGB(GetUniqueColor(i++));
-		workers.push_back(w);
+		workers.insert(std::make_pair(w.id, w));
 	}
 }
 
@@ -360,3 +468,57 @@ void Cartograph::Run()
 		}
 	}
 }
+
+const std::string Cartograph::InitialLayout = R"(
+[Window][MainDockspace]
+Pos=0,0
+Size=1920,1080
+Collapsed=0
+
+[Window][Debug##Default]
+Pos=60,60
+Size=400,400
+Collapsed=0
+
+[Window][ConnectTo]
+Pos=8,8
+Size=1590,67
+Collapsed=0
+DockId=0x00000005,0
+
+[Window][Map]
+Pos=8,77
+Size=1590,995
+Collapsed=0
+DockId=0x00000006,0
+
+[Window][Partitions]
+Pos=1600,77
+Size=312,622
+Collapsed=0
+DockId=0x00000008,0
+
+[Window][Log]
+Pos=1600,701
+Size=312,371
+Collapsed=0
+DockId=0x00000004,0
+
+[Window][Options]
+Pos=1600,8
+Size=312,67
+Collapsed=0
+DockId=0x00000007,0
+
+[Docking][Data]
+DockSpace       ID=0x8D32E0A4 Window=0x1C358F53 Pos=488,389 Size=1904,1064 Split=X Selected=0x55B716CB
+  DockNode      ID=0x00000001 Parent=0x8D32E0A4 SizeRef=1590,1064 Split=Y Selected=0x55B716CB
+    DockNode    ID=0x00000005 Parent=0x00000001 SizeRef=1590,67 Selected=0x2DA51D0C
+    DockNode    ID=0x00000006 Parent=0x00000001 SizeRef=1590,995 CentralNode=1 Selected=0x55B716CB
+  DockNode      ID=0x00000002 Parent=0x8D32E0A4 SizeRef=312,1064 Split=Y Selected=0x3228694B
+    DockNode    ID=0x00000003 Parent=0x00000002 SizeRef=312,691 Split=Y Selected=0x3228694B
+      DockNode  ID=0x00000007 Parent=0x00000003 SizeRef=312,67 Selected=0x10A3DF36
+      DockNode  ID=0x00000008 Parent=0x00000003 SizeRef=312,622 Selected=0x3228694B
+    DockNode    ID=0x00000004 Parent=0x00000002 SizeRef=312,371 Selected=0x139FDA3F
+
+)";
