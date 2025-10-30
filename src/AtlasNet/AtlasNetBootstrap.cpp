@@ -71,6 +71,7 @@ void AtlasNetBootstrap::Run()
     CreateGodImage();
     CreatePartitionImage();
     CreateDatabaseImage();
+    ParallelBuild();
     RunDatabase();
     SetupPartitionService();
     RunGod();
@@ -215,9 +216,10 @@ void AtlasNetBootstrap::CreateGodImage()
                                                          {"BUILD_CONFIG", ToLower(BuildConfig)},
                                                          {"WORKDIR", WorkDir},
                                                          {"DEV_PACKAGES", packages},
+                                                         {"PROJ_TO_BUILD", "God"},
                                                          {"EXECUTABLE", "God"}});
     OutputDockerFile("God/Dockerfile", DockerFileContents);
-    BuildDockerImage("God/Dockerfile", GodImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    QueueDockerImage("God/Dockerfile", GodImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 
 void AtlasNetBootstrap::CreatePartitionImage()
@@ -269,11 +271,12 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"])",
     DockerFileContents = MacroParse(DockerFileContents, {{"OS_VERSION", OS_Version},
                                                          {"BUILD_CONFIG", ToLower(BuildConfig)},
                                                          {"WORKDIR", WorkDir},
+                                                         {"PROJ_TO_BUILD", "Partition"},
                                                          {"DEV_PACKAGES", packages},
                                                          {"EXECUTABLE", "Partition"}});
 
     OutputDockerFile("Partition/Dockerfile", DockerFileContents);
-    BuildDockerImage("Partition/Dockerfile", PartitionImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    QueueDockerImage("Partition/Dockerfile", PartitionImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 
 void AtlasNetBootstrap::CreateDatabaseImage()
@@ -290,10 +293,11 @@ void AtlasNetBootstrap::CreateDatabaseImage()
                                                          {"ENTRYPOINT_CMD", "\"bin/" + BuildConfig + "/Database/Database\""},
                                                          {"BUILD_CONFIG", ToLower(BuildConfig)},
                                                          {"WORKDIR", WorkDir},
+                                                         {"PROJ_TO_BUILD", "Database"},
                                                          {"DEV_PACKAGES", packages},
                                                          {"EXECUTABLE", "Database"}});
     OutputDockerFile("Database/Dockerfile", DockerFileContents);
-    BuildDockerImage("Database/Dockerfile", DatabaseImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    QueueDockerImage("Database/Dockerfile", DatabaseImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 bool AtlasNetBootstrap::BuildDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches)
 {
@@ -356,6 +360,61 @@ bool AtlasNetBootstrap::BuildDockerImage(const std::string &DockerFile, const st
     logger.DebugFormatted("✅ Successfully pushed multi-arch manifest '{}'", manifestTag);
 
     return true;
+}
+
+void AtlasNetBootstrap::QueueDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches)
+{
+    const std::string registry = ManagerPcAdvertiseAddr + ":5000";
+    const std::string bakeFile = "docker/bake.json"; // stored in working directory
+
+    Json bakeJson;
+
+    // Load existing bake.json if it exists
+    if (std::filesystem::exists(bakeFile))
+    {
+        std::ifstream in(bakeFile);
+        in >> bakeJson;
+    }
+    else
+    {
+        bakeJson["group"]["default"]["targets"] = Json::array();
+        bakeJson["target"] = Json::object();
+    }
+
+    // Add one target per arch
+    for (const auto &arch : arches)
+    {
+        std::string cleanArch = arch;
+        cleanArch.erase(std::remove_if(cleanArch.begin(), cleanArch.end(), ::isspace), cleanArch.end());
+        std::string fullTag = std::format("{}/{}:{}", registry, ImageName, cleanArch);
+
+        Json target;
+        target["context"] = ".";
+        target["dockerfile"] = std::format("{}/{}", DockerFilesFolder, DockerFile);
+        target["platforms"] = Json::array({std::format("linux/{}", cleanArch)});
+        target["tags"] = Json::array({fullTag});
+        target["provenance"] = false;
+
+        const auto &cacheDir = AtlasNet::Get().GetSettings().BuildCacheDir;
+        if (!cacheDir.empty())
+        {
+            target["cache-from"] = {std::format("type=local,src={}", cacheDir)};
+            target["cache-to"] = {std::format("type=local,dest={},mode=max", cacheDir)};
+        }
+
+        // Unique name for this target
+        std::string targetName = std::format("{}_{}", ImageName, cleanArch);
+        bakeJson["target"][targetName] = target;
+        bakeJson["group"]["default"]["targets"].push_back(targetName);
+
+        logger.DebugFormatted("📦 Queued bake target '{}'", targetName);
+    }
+
+    // Save updated bake.json
+    std::ofstream out(bakeFile);
+    out << std::setw(4) << bakeJson;
+
+    logger.DebugFormatted("📝 Added '{}' targets to bake.json", ImageName);
 }
 
 void AtlasNetBootstrap::RunGod()
@@ -522,6 +581,30 @@ void AtlasNetBootstrap::SetupNetwork()
     {
         logger.DebugFormatted("✅ AtlasNet Overlay network created");
     }
+}
+
+void AtlasNetBootstrap::ParallelBuild()
+{
+    const std::string bakeFile = "docker/bake.json";
+    if (!std::filesystem::exists(bakeFile))
+    {
+        logger.Error("❌ No bake.json file found. Nothing to build.");
+        throw "Shit";
+    }
+
+    logger.Debug("🔥 Running docker buildx bake for all queued images...");
+
+    std::string cmd = std::format("docker buildx bake --builder {} --push --provenance=false --file {}", BuilderName, bakeFile);
+    if (std::system(cmd.c_str()) != 0)
+    {
+        logger.Error("❌ Bake failed.");
+        throw "Shit";
+    }
+
+    logger.Debug("✅ All docker images built and pushed successfully.");
+
+    // (Optional) Clean up bake.json if you want a fresh slate
+    // std::filesystem::remove(bakeFile);
 }
 
 void AtlasNetBootstrap::JoinWorkerToSwarm()
@@ -729,23 +812,62 @@ void AtlasNetBootstrap::GenerateTSLCertificate()
     const std::string certPath = tlsPath + "/server.crt";
     const std::string keyPath = tlsPath + "/server.key";
     const std::string configPath = tlsPath + "/san.cnf";
+    const std::string ip = ManagerPcAdvertiseAddr;
 
+    // 🔹 Check if existing certificate matches the current IP
+    bool needsRegeneration = false;
     if (std::filesystem::exists(certPath) && std::filesystem::exists(keyPath))
     {
-        logger.DebugFormatted("✅ Existing TLS certificate found at '{}'", tlsPath);
+        // Extract the IPs from the current certificate’s SAN
+        std::string cmd = std::format("openssl x509 -in '{}' -noout -text | grep -A1 'Subject Alternative Name'", certPath);
+        CommandResult res = RunCommand(cmd);
+
+        if (res.exitCode == 0)
+        {
+            if (res.output.find(ip) == std::string::npos)
+            {
+                logger.WarningFormatted("⚠️ TLS certificate IP '{}' does not match current ManagerPcAdvertiseAddr '{}'. Regenerating...",
+                                        res.output, ip);
+                needsRegeneration = true;
+            }
+        }
+        else
+        {
+            logger.Warning("⚠️ Failed to read existing certificate SAN. Regenerating...");
+            needsRegeneration = true;
+        }
+    }
+
+    // 🔹 Delete old certificates if regeneration is required
+    if (needsRegeneration)
+    {
+        try
+        {
+            std::filesystem::remove(certPath);
+            std::filesystem::remove(keyPath);
+            logger.Debug("🗑 Old certificate and key deleted due to IP change");
+        }
+        catch (const std::exception &e)
+        {
+            logger.ErrorFormatted("❌ Failed to delete old certificate: {}", e.what());
+        }
+    }
+
+    // 🔹 If still valid and IP hasn’t changed, return early
+    if (!needsRegeneration && std::filesystem::exists(certPath) && std::filesystem::exists(keyPath))
+    {
+        logger.DebugFormatted("✅ Existing TLS certificate is valid for '{}'", ip);
         return;
     }
 
-    logger.DebugFormatted("🔒 Generating new self-signed TLS certificate with SANs at '{}'", tlsPath);
+    // 🔹 Generate new certificate
+    logger.DebugFormatted("🔒 Generating new self-signed TLS certificate with SANs for IP '{}'", ip);
     std::filesystem::create_directories(tlsPath);
 
-    // 🔹 Detect hostname and use ManagerPcAdvertiseAddr as main IP
     std::string hostname = RunCommand("hostname").output;
     hostname.erase(std::remove(hostname.begin(), hostname.end(), '\n'), hostname.end());
 
-    std::string ip = ManagerPcAdvertiseAddr; // use provided cluster advertise IP
-
-    // 🔹 Generate OpenSSL SAN config
+    // --- Write OpenSSL SAN config ---
     std::ofstream config(configPath);
     config << "[ req ]\n";
     config << "default_bits       = 4096\n";
@@ -762,7 +884,7 @@ void AtlasNetBootstrap::GenerateTSLCertificate()
     config << "IP.1 = " << ip << "\n";
     config.close();
 
-    // 🔹 Generate certificate with SANs
+    // --- Run OpenSSL ---
     std::string command = std::format(
         "openssl req -x509 -nodes -newkey rsa:4096 "
         "-keyout '{}' "
@@ -781,8 +903,7 @@ void AtlasNetBootstrap::GenerateTSLCertificate()
         throw std::runtime_error("TLS certificate generation failed");
     }
 
-    logger.DebugFormatted("✅ TLS certificate and key generated successfully with SANs (CN='{}', IP='{}')",
-                          hostname, ip);
+    logger.DebugFormatted("✅ TLS certificate and key generated successfully with SANs (CN='{}', IP='{}')", hostname, ip);
 }
 
 void AtlasNetBootstrap::GetWorkersSSHCredentials()

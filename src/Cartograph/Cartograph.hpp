@@ -39,6 +39,7 @@ class Cartograph : public Singleton<Cartograph>
     ConnectionState connectionState;
     std::string connectionLog;
     int32 pollingRate = 500;
+    bool DebugMode = false;
     void Startup();
     void DrawBackground();
 
@@ -54,7 +55,7 @@ class Cartograph : public Singleton<Cartograph>
 
     void Render();
     void ConnectTo(const std::string &ip);
-    void DrawTo(ImDrawList*,const GridShape& sh);
+    void DrawTo(ImDrawList*,const GridShape& sh,bool PlotToPixels = false);
     static std::shared_ptr<Texture> LoadTextureFromCompressed(const void *data, size_t size);
 
     struct Container

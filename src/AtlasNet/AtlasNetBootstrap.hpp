@@ -63,7 +63,7 @@ COPY srcRun ${WORKDIR}/srcRun
 RUN  ./premake-core/bin/release/premake5 gmake
 RUN \
  --mount=type=cache,target=${WORKDIR}/obj \
-    make -C ./build config=${BUILD_CONFIG} -j $(nproc)
+    make -C ./build config=${BUILD_CONFIG} ${PROJ_TO_BUILD} -j $(nproc)
 
     FROM ${OS_VERSION}
     WORKDIR ${WORKDIR}
@@ -111,10 +111,12 @@ private:
     void CreatePartitionImage();
     void CreateDatabaseImage();
     bool BuildDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches);
+    void QueueDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches);
     void RunGod();
     void RunDatabase();
     void SetupSwarm();
     void SetupNetwork();
+    void ParallelBuild();
     void JoinWorkerToSwarm();
     void SendImagesToWorkers(const std::vector<std::string> &imageNames);
     void SetupPartitionService();

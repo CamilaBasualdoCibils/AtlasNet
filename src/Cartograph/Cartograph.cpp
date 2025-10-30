@@ -127,7 +127,7 @@ void Cartograph::DrawMap()
 	ImPlot::PushPlotClipRect();
 	for (const auto &partition : partitions)
 	{
-		DrawTo(ImPlot::GetPlotDrawList(), partition.shape);
+		DrawTo(ImPlot::GetPlotDrawList(), partition.shape, true);
 
 		/*
 		for (const auto &tri : partition.shape.triangles)
@@ -161,43 +161,51 @@ void Cartograph::DrawPartitionGrid()
 	}
 
 	ImGui::Separator();
-	ImGui::BeginChild("Partition grid");
-
-	const ImVec2 AvailSpace = ImGui::GetContentRegionAvail();
-	const vec2 gAvailSpace = {AvailSpace.x, AvailSpace.y};
-	// ItemSize + MinItemSpacing because each has half of the spacing to either side
-	const float ItemSizeX = gAvailSpace.x / (float)ItemCountX - ItemSpacing;
-
-	const vec2 OriginalCursorPos = ImGuiToGlm(ImGui::GetCursorPos());
-	vec2 cursor = OriginalCursorPos;
-	const size_t partitionCount = partitions.size();
-	for (int y = 0; y < std::ceil(partitionCount / (float)ItemCountX); y++)
+	if (ImGui::BeginChild("Partition grid"))
 	{
-		cursor.x = OriginalCursorPos.x;
-		cursor.y += ItemSpacing / 2.0f;
-		for (int x = 0; x < ItemCountX; x++)
-		{
-			const int ID = x + y * ItemCountX;
-			if (ID >= partitionCount)
-				break;
-			const ActivePartition &part = partitions[ID];
-			// const NodeWorker& worker = workers.at(part.NodeID);
+		const ImVec2 AvailSpace = ImGui::GetContentRegionAvail();
+		const vec2 gAvailSpace = {AvailSpace.x, AvailSpace.y};
+		// ItemSize + MinItemSpacing because each has half of the spacing to either side
+		const float ItemSizeX = glm::max(gAvailSpace.x / (float)ItemCountX - ItemSpacing, 0.0f);
 
-			cursor.x += ItemSpacing / 2.0f;
-			ImGui::SetCursorPos(GlmToImGui(cursor));
-			//::PushStyleColor(ImGuiCol_Border,GlmToImGui(vec4(worker.Color,1)));
-			if (ImGui::BeginChild(ID, GlmToImGui(vec2(ItemSizeX)), ImGuiChildFlags_Borders))
+		const vec2 OriginalCursorPos = ImGuiToGlm(ImGui::GetCursorPos());
+		vec2 cursor = OriginalCursorPos;
+		const size_t partitionCount = partitions.size();
+		for (int y = 0; y < glm::ceil(partitionCount/(float)ItemCountX); y++)
+		{
+			cursor.x = OriginalCursorPos.x;
+			cursor.y += ItemSpacing / 2.0f;
+			for (int x = 0; x < ItemCountX; x++)
 			{
-				DrawTo(ImGui::GetForegroundDrawList(),part.shape);
+				const int ID = x + y * ItemCountX;
+				if (ID >= partitionCount)
+					break;
+				const ActivePartition &part = partitions[ID];
+				// const NodeWorker& worker = workers.at(part.NodeID);
+
+				cursor.x += ItemSpacing / 2.0f;
+				ImGui::SetCursorPos(GlmToImGui(cursor));
+				//::PushStyleColor(ImGuiCol_Border,GlmToImGui(vec4(worker.Color,1)));
+				// if (ImGui::BeginChild(ID, GlmToImGui(vec2(ItemSizeX)), ImGuiChildFlags_Borders))
+				//{
+				ImGui::PushID(ID);
+			
+					DrawTo(ImGui::GetWindowDrawList(), part.shape, true);
+
+				ImGui::PopID();
+				//}
+				// ImGui::EndChild();
+
+				// ImGui::PopStyleColor();
+				cursor.x += ItemSizeX + ItemSpacing / 2.0f;
 			}
-			// ImGui::PopStyleColor();
-			ImGui::EndChild();
-			cursor.x += ItemSizeX + ItemSpacing / 2.0f;
+			cursor.y += ItemSpacing / 2.0f + ItemSizeX;
 		}
-		cursor.y += ItemSpacing / 2.0f + ItemSizeX;
 	}
-	ImGui::SetCursorPos(GlmToImGui(OriginalCursorPos));
+
 	ImGui::EndChild();
+	// ImGui::SetCursorPos(GlmToImGui(OriginalCursorPos));
+
 	ImGui::End();
 }
 void Cartograph::DrawLog()
@@ -246,6 +254,10 @@ void Cartograph::Update()
 }
 void Cartograph::Render()
 {
+	if (ImGui::IsKeyPressed(ImGuiKey_D) && ImGui::IsKeyDown(ImGuiKey_LeftCtrl))
+	{
+		DebugMode = !DebugMode;
+	}
 	DrawBackground();
 	DrawConnectTo();
 	DrawMap();
@@ -271,18 +283,27 @@ void Cartograph::ConnectTo(const std::string &ip)
 	{
 		std::cerr << "Database not found " << std::endl;
 		connectionState = ConnectionState::eFailed;
-		connectionLog = "Failed to find database at " + DatabaseIP;
+		connectionLog = "Failed to find database at " + IP2Manager;
 	}
+	else
 	{
 		connectionState = ConnectionState::eConnected;
 		connectionLog = "Connected";
 	}
 }
-void Cartograph::DrawTo(ImDrawList *drawlist, const GridShape &sh)
+void Cartograph::DrawTo(ImDrawList *drawlist, const GridShape &sh, bool PlotToPixels)
 {
 	for (const auto &cell : sh.cells)
 	{
-		drawlist->AddRect(ImPlot::PlotToPixels(GlmToImGui(cell.min)), ImPlot::PlotToPixels(GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
+		if (PlotToPixels)
+		{
+			drawlist->AddRect(ImPlot::PlotToPixels(GlmToImGui(cell.min)), ImPlot::PlotToPixels(GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
+		}
+		else
+		{
+
+			drawlist->AddRect((GlmToImGui(cell.min)), (GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
+		}
 		// ImPlot::GetPlotDrawList()->AddTriangle(points[0], points[1], points[2], IM_COL32(255, 255, 255, 255));
 	}
 }
@@ -450,12 +471,16 @@ void Cartograph::Run()
 		Update();
 		Render();
 
-		ImGui::ShowDemoWindow();
-		ImPlot::ShowDemoWindow();
-		ImPlot3D::ShowDemoWindow();
+		if (DebugMode)
+		{
+			ImGui::ShowDemoWindow();
+			ImPlot::ShowDemoWindow();
+			ImPlot3D::ShowDemoWindow();
+		}
 
 		ImGui::EndFrame();
 		ImGui::Render();
+
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 		glfwSwapBuffers(_glfwwindow);
 		glfwPollEvents();
