@@ -28,7 +28,7 @@ void God::Init()
   logger->ErrorFormatted("[{}]", InterLinkProps.ThisID.ToString());
   Interlink::Get().Init(InterLinkProps);
   
-  for (int32 i = 1; i <= 12; i++)
+  for (int32 i = 1; i <= 1; i++)
   {
 
     spawnPartition();

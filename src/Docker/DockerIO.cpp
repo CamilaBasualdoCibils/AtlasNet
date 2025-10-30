@@ -5,6 +5,7 @@ static size_t WriteCallback(void *contents, size_t size, size_t nmemb, void *use
     ((std::string *)userp)->append((char *)contents, size * nmemb);
     return size * nmemb;
 }
+
 std::string DockerIO::request(const std::string &method, const std::string &endpoint, const nlohmann::json *body, const std::vector<std::string> &extraHeaders) const
 {
     CURL *curl = curl_easy_init();
@@ -72,11 +73,10 @@ nlohmann::json DockerIO::InspectSelf() const
 
 std::string DockerIO::GetSelfContainerName() const
 {
-
     nlohmann::json info = InspectSelf();
     std::string name = info.value("Name", "");
     if (!name.empty() && name[0] == '/')
-        name.erase(0, 1); // remove leading slash
+        name.erase(0, 1);
     return name;
 }
 
@@ -94,9 +94,10 @@ std::vector<std::pair<uint32, uint32>> DockerIO::GetSelfExposedPorts() const
     const auto portInfo = ports.items();
     for (const auto &[key, value] : portInfo)
     {
-        const uint32 InternalPort = std::stoi(key.substr(0, key.find('/'))),
-                     ExternalPort = std::stoi(value[0]["HostPort"].get<std::string>());
-        portBindings.push_back({InternalPort, ExternalPort});
+        const uint32 InternalPort = std::stoi(key.substr(0, key.find('/')));
+        const uint32 ExternalPort = value.empty() ? 0 : std::stoi(value[0]["HostPort"].get<std::string>());
+        if (ExternalPort != 0)
+            portBindings.push_back({InternalPort, ExternalPort});
     }
     return portBindings;
 }
@@ -104,11 +105,81 @@ std::vector<std::pair<uint32, uint32>> DockerIO::GetSelfExposedPorts() const
 std::optional<uint32> DockerIO::GetSelfExposedPortForInternalBind(uint32 InternalPort) const
 {
     const auto ports = GetSelfExposedPorts();
-    std::cerr << "Looking for "<< InternalPort<<std::endl;
-    const auto find = std::find_if(ports.begin(), ports.end(), [InternalPort = InternalPort](std::pair<uint32, uint32> p)
-                                   { std::cerr << p.first << std::endl; return InternalPort == p.first; });
+    const auto find = std::find_if(ports.begin(), ports.end(), [InternalPort](std::pair<uint32, uint32> p)
+                                   { return InternalPort == p.first; });
     if (find == ports.end())
         return std::nullopt;
-
     return find->second;
+}
+
+// returns public IP and sets outPort to the mapped port
+std::string DockerIO::GetSelfPublicIP(uint32_t& outPort) const
+{
+    outPort = 0; // default in case no mapping is found
+
+    try
+    {
+        nlohmann::json info = InspectSelf();
+        auto ports = info["NetworkSettings"]["Ports"];
+
+        for (auto& [containerPort, value] : ports.items())
+        {
+            if (!value.empty())
+            {
+                // Docker-provided mapping
+                std::string hostIp   = value[0]["HostIp"].get<std::string>();
+                std::string hostPort = value[0]["HostPort"].get<std::string>();
+
+                // Set output port
+                outPort = std::stoul(hostPort);
+
+                // Normalize IP (Docker often reports "0.0.0.0")
+                if (hostIp == "0.0.0.0" || hostIp == "::")
+                {
+                    // fallback to system or external IP
+                    CURL* curl = curl_easy_init();
+                    if (!curl)
+                        return "0.0.0.0";
+                    std::string response;
+                    curl_easy_setopt(curl, CURLOPT_URL, "https://api.ipify.org");
+                    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+                    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+                    CURLcode res = curl_easy_perform(curl);
+                    curl_easy_cleanup(curl);
+                    if (res == CURLE_OK && !response.empty())
+                        return response;
+                }
+
+                return hostIp;
+            }
+        }
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[DockerIO] GetSelfPublicIP failed: " << e.what() << std::endl;
+    }
+
+    // If we reach here, Docker didn’t have a port mapping
+    // → fallback to external IP discovery only
+    CURL* curl = curl_easy_init();
+    if (curl)
+    {
+        std::string response;
+        curl_easy_setopt(curl, CURLOPT_URL, "https://api.ipify.org");
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response);
+        CURLcode res = curl_easy_perform(curl);
+        curl_easy_cleanup(curl);
+
+        if (res == CURLE_OK && !response.empty())
+            return response;
+    }
+
+    return "0.0.0.0";
+}
+
+
+std::optional<uint32_t> DockerIO::GetSelfPublicPortFor(uint32_t internalPort) const
+{
+    return GetSelfExposedPortForInternalBind(internalPort);
 }

@@ -29,5 +29,6 @@ public:
     /// @return returns a list of port pairs. Internal/External
     std::vector<std::pair<uint32,uint32>> GetSelfExposedPorts() const;
     std::optional<uint32> GetSelfExposedPortForInternalBind(uint32 InternalPort) const;
-    
+    std::string GetSelfPublicIP(uint32_t& outPort) const;
+std::optional<uint32_t> GetSelfPublicPortFor(uint32_t internalPort) const;
 };

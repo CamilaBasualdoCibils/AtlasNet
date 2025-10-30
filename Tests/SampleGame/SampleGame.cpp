@@ -59,6 +59,7 @@ bool ShouldShutdown = false;
  */
 int main(int argc, char **argv)
 {
+    std::cerr << "SampleGame Starting" << std::endl;
     for (int i = 0; i < argc; i++)
     {
         std::cerr << argv[i] << std::endl;
@@ -83,7 +84,8 @@ int main(int argc, char **argv)
         g_client = std::make_unique<AtlasNetClient>();
     AtlasNetClient::InitializeProperties props{
         .ExePath = "./AtlasNetClient.exe",
-        .ClientName = "SampleGame:" + DockerIO::Get().GetSelfContainerName(),
+        //.ClientName = "SampleGame:" + DockerIO::Get().GetSelfContainerName(),
+        .ClientName = "SampleGameClient",
         .ServerName = "GodViewServer"
     };
     g_client->Initialize(props);
