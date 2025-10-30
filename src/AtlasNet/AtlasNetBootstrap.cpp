@@ -395,17 +395,21 @@ void AtlasNetBootstrap::QueueDockerImage(const std::string &DockerFile, const st
         target["tags"] = Json::array({fullTag});
         target["provenance"] = false;
 
-        const auto &cacheDir = AtlasNet::Get().GetSettings().BuildCacheDir;
+        const auto &cacheDir = AtlasNet::Get().GetSettings().BuildCacheDir  +"/" + ImageName + "/" + arch;
         if (!cacheDir.empty())
         {
             target["cache-from"] = {std::format("type=local,src={}", cacheDir)};
-            target["cache-to"] = {std::format("type=local,dest={},mode=max", cacheDir)};
+            target["cache-to"] = {std::format("type=local,dest={},mode=min", cacheDir)};
         }
 
         // Unique name for this target
         std::string targetName = std::format("{}_{}", ImageName, cleanArch);
         bakeJson["target"][targetName] = target;
+        if (!bakeJson["group"]["default"]["targets"].contains(targetName))
+        {
         bakeJson["group"]["default"]["targets"].push_back(targetName);
+
+        }
 
         logger.DebugFormatted("📦 Queued bake target '{}'", targetName);
     }
