@@ -13,22 +13,24 @@ class Cartograph : public Singleton<Cartograph>
     std::shared_ptr<Log> logger = std::make_shared<Log>("Cartograph");
     std::unique_ptr<RedisCacheDatabase> database;
 
-
     struct ActivePartition
     {
         GridShape shape;
         std::string Name;
         std::string NodeID;
+        vec2 ScreenSpaceShapeCenter;
+        vec3 UniquePartitionColor;
     };
     
     std::vector<ActivePartition> partitions;
+    std::optional<uint32> PartitionIndexSelected;
 
     struct NodeWorker
     {
         std::string id, hostname, addr;
         vec3 Color;
     };
-    std::unordered_map<std::string,NodeWorker> workers;
+    std::unordered_map<std::string, NodeWorker> workers;
 
     enum class ConnectionState
     {
@@ -55,7 +57,8 @@ class Cartograph : public Singleton<Cartograph>
 
     void Render();
     void ConnectTo(const std::string &ip);
-    void DrawTo(ImDrawList*,const GridShape& sh,bool PlotToPixels = false);
+    void DrawTo(ImDrawList *, const GridShape &sh, const mat4 &transform = mat4(1.0f),vec4 Color = vec4(1.0f),float rounding = 0.0f,float thickness = 1.0f);
+    void DrawToPlot(ImDrawList *, const GridShape &sh, const mat4 &transform = mat4(1.0f),vec4 Color = vec4(1.0f),float rounding = 0.0f,float thickness = 1.0f);
     static std::shared_ptr<Texture> LoadTextureFromCompressed(const void *data, size_t size);
 
     struct Container
@@ -73,6 +76,11 @@ class Cartograph : public Singleton<Cartograph>
 
     vec3 GetUniqueColor(int index);
     static const std::string InitialLayout;
+    static glm::mat4 FitBoundsToTarget(const glm::vec2 &minBound,
+                                       const glm::vec2 &maxBound,
+                                       const glm::vec2 &targetHalf, // half-extent: maps to [-targetHalf, +targetHalf]
+                                       float padding = 0.0f);
+
 public:
     Cartograph() {}
     void Run();

@@ -34,6 +34,10 @@ AtlasNetSettings AtlasNet::ParseSettingsFile()
     }
     settings.BuildCacheDir = parsedJson.contains("BuildCacheDir") ? parsedJson["BuildCacheDir"] : "";
     settings.NetworkInterface = parsedJson.contains("NetworkInterface") ? parsedJson["NetworkInterface"] : "";
+    if (parsedJson.contains("BuilderMemoryGb"))
+    {
+        settings.BuilderMemoryGb = parsedJson["BuilderMemoryGb"].get<uint32>();
+    }
     return settings;
 }
 

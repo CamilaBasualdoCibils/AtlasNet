@@ -71,7 +71,7 @@ void AtlasNetBootstrap::Run()
     CreateGodImage();
     CreatePartitionImage();
     CreateDatabaseImage();
-    ParallelBuild();
+    // ParallelBuild();
     RunDatabase();
     SetupPartitionService();
     RunGod();
@@ -219,7 +219,7 @@ void AtlasNetBootstrap::CreateGodImage()
                                                          {"PROJ_TO_BUILD", "God"},
                                                          {"EXECUTABLE", "God"}});
     OutputDockerFile("God/Dockerfile", DockerFileContents);
-    QueueDockerImage("God/Dockerfile", GodImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    BuildDockerImage("God/Dockerfile", GodImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 
 void AtlasNetBootstrap::CreatePartitionImage()
@@ -276,7 +276,7 @@ ENTRYPOINT ["/usr/bin/tini", "--", "/entrypoint.sh"])",
                                                          {"EXECUTABLE", "Partition"}});
 
     OutputDockerFile("Partition/Dockerfile", DockerFileContents);
-    QueueDockerImage("Partition/Dockerfile", PartitionImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    BuildDockerImage("Partition/Dockerfile", PartitionImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 
 void AtlasNetBootstrap::CreateDatabaseImage()
@@ -297,7 +297,7 @@ void AtlasNetBootstrap::CreateDatabaseImage()
                                                          {"DEV_PACKAGES", packages},
                                                          {"EXECUTABLE", "Database"}});
     OutputDockerFile("Database/Dockerfile", DockerFileContents);
-    QueueDockerImage("Database/Dockerfile", DatabaseImageName, AtlasNet::Get().GetSettings().RuntimeArches);
+    BuildDockerImage("Database/Dockerfile", DatabaseImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
 bool AtlasNetBootstrap::BuildDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches)
 {
@@ -395,7 +395,7 @@ void AtlasNetBootstrap::QueueDockerImage(const std::string &DockerFile, const st
         target["tags"] = Json::array({fullTag});
         target["provenance"] = false;
 
-        const auto &cacheDir = AtlasNet::Get().GetSettings().BuildCacheDir  +"/" + ImageName + "/" + arch;
+        const auto &cacheDir = AtlasNet::Get().GetSettings().BuildCacheDir + "/" + ImageName + "/" + arch;
         if (!cacheDir.empty())
         {
             target["cache-from"] = {std::format("type=local,src={}", cacheDir)};
@@ -407,8 +407,7 @@ void AtlasNetBootstrap::QueueDockerImage(const std::string &DockerFile, const st
         bakeJson["target"][targetName] = target;
         if (!bakeJson["group"]["default"]["targets"].contains(targetName))
         {
-        bakeJson["group"]["default"]["targets"].push_back(targetName);
-
+            bakeJson["group"]["default"]["targets"].push_back(targetName);
         }
 
         logger.DebugFormatted("📦 Queued bake target '{}'", targetName);
@@ -1272,12 +1271,56 @@ void AtlasNetBootstrap::MakeDockerBuilder()
     const std::string registryHost = ManagerPcAdvertiseAddr + ":5000";
     const std::string certBaseDir = "keys/tls";
     const std::string certPath = certBaseDir + "/server.crt";
-    // buildx names them like mybuilder0
+    const std::string containerName = std::format("buildx_buildkit_{}0", ToLower(BuilderName));
+    const std::string builderListCmd = std::format("docker buildx ls | grep -w {}", BuilderName);
 
-    // 🔹 Remove old builder if exists
-    if (RunCommand(std::format("docker buildx ls | grep -w {}", BuilderName)).exitCode == 0)
+    bool builderExists = (RunCommand(builderListCmd).exitCode == 0);
+    bool certValid = false;
+    bool certSame = false;
+
+    // 🔹 Check if cert exists and is valid
+    if (std::filesystem::exists(certPath))
     {
-        logger.DebugFormatted("🗑 Removing existing builder '{}'", BuilderName);
+        auto validityCheck = RunCommand(std::format("openssl x509 -checkend 86400 -noout -in {}", certPath));
+        certValid = (validityCheck.exitCode == 0);
+
+        // 🔹 Compare fingerprint with what was last used
+        const std::string fingerprintFile = certBaseDir + "/last_cert_fingerprint.txt";
+
+        auto currentFingerprint = RunCommand(std::format("openssl x509 -noout -fingerprint -sha256 -in {}", certPath));
+        if (currentFingerprint.exitCode == 0)
+        {
+            std::string currentFP = currentFingerprint.output;
+            currentFP.erase(std::remove(currentFP.begin(), currentFP.end(), '\n'), currentFP.end());
+
+            if (std::filesystem::exists(fingerprintFile))
+            {
+                std::ifstream in(fingerprintFile);
+                std::string oldFP;
+                std::getline(in, oldFP);
+
+                certSame = (oldFP == currentFP);
+            }
+
+            // Update stored fingerprint (for future runs)
+            std::ofstream out(fingerprintFile, std::ios::trunc);
+            out << currentFP;
+        }
+    }
+
+    // 🔹 If builder exists and certificate is valid and identical, skip
+    if (builderExists && certValid && certSame)
+    {
+        logger.DebugFormatted(
+            "✅ Builder '{}' already exists and certificate '{}' is still valid and unchanged. Skipping recreation.",
+            BuilderName, certPath);
+        return;
+    }
+
+    // 🔹 If builder exists but cert invalid/different, delete it
+    if (builderExists)
+    {
+        logger.DebugFormatted("🧱 Builder '{}' exists but certificate invalid or changed. Recreating builder...", BuilderName);
         RunCommand(std::format("docker buildx rm -f {}", BuilderName));
     }
 
@@ -1289,35 +1332,34 @@ void AtlasNetBootstrap::MakeDockerBuilder()
         "--driver docker-container "
         "--use "
         "--driver-opt network=host "
+        "--driver-opt memory={}g "
         "--buildkitd-flags '--allow-insecure-entitlement network.host'",
-        BuilderName);
+        BuilderName, AtlasNet::Get().GetSettings().BuilderMemoryGb.value_or(UINT32_MAX));
 
-    if (RunCommand(createCmd).exitCode != 0)
+    logger.Debug(createCmd);
+    const auto CreateResult = RunCommand(createCmd);
+    if (CreateResult.exitCode != 0)
     {
-        logger.ErrorFormatted("❌ Failed to create builder '{}'", BuilderName);
+        logger.ErrorFormatted("❌ Failed to create builder '{}'\n {}", BuilderName, CreateResult.output);
         return;
     }
 
     logger.DebugFormatted("✅ Builder '{}' created successfully", BuilderName);
 
+    // 🔹 Bootstrap builder
     logger.DebugFormatted("🚀 Bootstrapping builder '{}'", BuilderName);
     if (RunCommand(std::format("docker buildx inspect {} --bootstrap", BuilderName)).exitCode != 0)
     {
         logger.ErrorFormatted("❌ Failed to bootstrap builder '{}'", BuilderName);
         return;
     }
-    // 🔹 Get container name (should be buildx_buildkit_<buildername>0)
-    std::string containerName = std::format("buildx_buildkit_{}0", ToLower(BuilderName));
 
-    // 🔹 Copy certificate into container's CA directory
+    // 🔹 Copy certificate into container
     logger.DebugFormatted("📦 Copying registry certificate '{}' into builder '{}'", certPath, containerName);
-
-    // Create temp path in container
     RunCommand(std::format(
         "docker exec {} mkdir -p /usr/local/share/ca-certificates/{}",
         containerName, registryHost));
 
-    // Copy certificate into container
     std::string copyCmd = std::format(
         "docker cp {} {}:/usr/local/share/ca-certificates/{}/registry.crt",
         certPath, containerName, registryHost);
@@ -1328,6 +1370,7 @@ void AtlasNetBootstrap::MakeDockerBuilder()
         logger.ErrorFormatted("❌ Failed to copy certificate into builder container '{}'", containerName);
         return;
     }
+
     logger.DebugFormatted("🔑 Installing registry certificate manually (BusyBox environment detected)");
     const auto manualAdd = RunCommand(std::format(
         "docker exec {} sh -c 'mkdir -p /etc/ssl/certs && cat /usr/local/share/ca-certificates/{}/registry.crt >> /etc/ssl/certs/ca-certificates.crt'",

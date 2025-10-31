@@ -122,26 +122,28 @@ void Cartograph::DrawConnectTo()
 void Cartograph::DrawMap()
 {
 	ImGui::Begin("Map", nullptr);
-	ImPlot::BeginPlot("Map View", ImVec2(-1, -1), ImPlotFlags_CanvasOnly | ImPlotFlags_Equal);
-
-	ImPlot::PushPlotClipRect();
-	for (const auto &partition : partitions)
+	static bool ShowNames = true;
+	ImGui::Checkbox("Names", &ShowNames);
+	if (ImPlot::BeginPlot("Map View", ImVec2(-1, -1), ImPlotFlags_CanvasOnly | ImPlotFlags_Equal))
 	{
-		DrawTo(ImPlot::GetPlotDrawList(), partition.shape, true);
-
-		/*
-		for (const auto &tri : partition.shape.triangles)
+		ImPlot::PushPlotClipRect();
+		int i = 0;
+		for (auto &partition : partitions)
 		{
-			ImVec2 points[3];
-			for (int i = 0; i < 3; i++)
-			{
-				points[i] = ImPlot::PlotToPixels(ImVec2{tri[i].x, tri[i].y});
-			}
-			ImPlot::GetPlotDrawList()->AddTriangle(points[0], points[1], points[2], IM_COL32(255, 255, 255, 255));
-		}*/
+			bool selected = !PartitionIndexSelected.has_value() || (i++) == PartitionIndexSelected.value();
+			float PartitionAlpha = 1.0f;
+			vec4 finalColor = vec4(partition.UniquePartitionColor, PartitionAlpha) * (selected ? vec4(1.0f) : vec4(0.6f));
+			DrawToPlot(ImPlot::GetPlotDrawList(), partition.shape, mat4(1.0f), finalColor, 0.0f, 2.0f);
+			const auto bounds = partition.shape.getBounds();
+			const vec2 center = (bounds.first + bounds.second) / 2.0f;
+			partition.ScreenSpaceShapeCenter = ImGuiToGlm(ImPlot::PlotToPixels(GlmToImGui(center)));
+			if (ShowNames && selected)
+				ImPlot::Annotation(center.x, center.y, GlmToImGui(finalColor), ImVec2(0, 0), false, "%s", partition.Name.c_str());
+		}
+		ImPlot::PopPlotClipRect();
+		ImPlot::EndPlot();
 	}
-	ImPlot::PopPlotClipRect();
-	ImPlot::EndPlot();
+
 	ImGui::End();
 }
 void Cartograph::DrawPartitionGrid()
@@ -161,6 +163,7 @@ void Cartograph::DrawPartitionGrid()
 	}
 
 	ImGui::Separator();
+	bool AnywindowHovered = false;
 	if (ImGui::BeginChild("Partition grid"))
 	{
 		const ImVec2 AvailSpace = ImGui::GetContentRegionAvail();
@@ -171,7 +174,9 @@ void Cartograph::DrawPartitionGrid()
 		const vec2 OriginalCursorPos = ImGuiToGlm(ImGui::GetCursorPos());
 		vec2 cursor = OriginalCursorPos;
 		const size_t partitionCount = partitions.size();
-		for (int y = 0; y < glm::ceil(partitionCount/(float)ItemCountX); y++)
+
+		const auto origTest = ImGui::GetWindowPos();
+		for (int y = 0; y < glm::ceil(partitionCount / (float)ItemCountX); y++)
 		{
 			cursor.x = OriginalCursorPos.x;
 			cursor.y += ItemSpacing / 2.0f;
@@ -181,20 +186,38 @@ void Cartograph::DrawPartitionGrid()
 				if (ID >= partitionCount)
 					break;
 				const ActivePartition &part = partitions[ID];
+				const vec4 Color = vec4(part.UniquePartitionColor, 1.0f);
 				// const NodeWorker& worker = workers.at(part.NodeID);
 
 				cursor.x += ItemSpacing / 2.0f;
 				ImGui::SetCursorPos(GlmToImGui(cursor));
 				//::PushStyleColor(ImGuiCol_Border,GlmToImGui(vec4(worker.Color,1)));
-				// if (ImGui::BeginChild(ID, GlmToImGui(vec2(ItemSizeX)), ImGuiChildFlags_Borders))
-				//{
-				ImGui::PushID(ID);
-			
-					DrawTo(ImGui::GetWindowDrawList(), part.shape, true);
 
-				ImGui::PopID();
-				//}
-				// ImGui::EndChild();
+				if (ImGui::BeginChild(ID, GlmToImGui(vec2(ItemSizeX)), ImGuiChildFlags_Borders))
+				{
+					if (ImGui::IsWindowHovered())
+					{
+
+						const vec2 itemCenter = ImGuiToGlm(ImGui::GetWindowPos()) + ImGuiToGlm(ImGui::GetWindowSize()) / 2.0f;
+						const vec2 PartitionShapeMapCenter = part.ScreenSpaceShapeCenter;
+						AnywindowHovered = true;
+						PartitionIndexSelected = ID;
+						ImGui::GetForegroundDrawList()->AddLine(ImGui::GetMousePos(), GlmToImGui(PartitionShapeMapCenter), ImGui::ColorConvertFloat4ToU32(GlmToImGui(Color)), 2.0f);
+					}
+
+					const auto availSpace = ImGuiToGlm(ImGui::GetContentRegionAvail());
+
+					auto bounds = part.shape.getBounds();
+					mat4 transform = FitBoundsToTarget(glm::min(bounds.first, bounds.second),
+													   glm::max(bounds.first, bounds.second),
+													   vec2(availSpace * 0.5f),
+													   0.05f); // small padding, e.g. 5%
+					transform = glm::translate(glm::mat4(1.0f), glm::vec3(ImGuiToGlm(ImGui::GetCursorScreenPos()) + vec2(availSpace / 2.0f), 0.0f)) * transform;
+
+					DrawTo(ImGui::GetWindowDrawList(), part.shape, transform, Color);
+				}
+				// ImGui::PopID();
+				ImGui::EndChild();
 
 				// ImGui::PopStyleColor();
 				cursor.x += ItemSizeX + ItemSpacing / 2.0f;
@@ -202,7 +225,10 @@ void Cartograph::DrawPartitionGrid()
 			cursor.y += ItemSpacing / 2.0f + ItemSizeX;
 		}
 	}
-
+	if (!AnywindowHovered)
+	{
+		PartitionIndexSelected.reset();
+	}
 	ImGui::EndChild();
 	// ImGui::SetCursorPos(GlmToImGui(OriginalCursorPos));
 
@@ -231,12 +257,14 @@ void Cartograph::Update()
 
 	partitions.clear();
 
+	int i = 0;
 	for (const auto &shape : shapes)
 	{
 		ActivePartition partition;
 		// partition.shape = Shape::FromString(shape.second);
 		partition.shape = GridCellManifest::ParseGridShape(shape.second);
 		partition.Name = shape.first;
+		partition.UniquePartitionColor = GetUniqueColor(i++);
 		partitions.push_back(partition);
 	}
 	std::sort(partitions.begin(), partitions.end(), [](const ActivePartition &p1, const ActivePartition &p2)
@@ -291,21 +319,31 @@ void Cartograph::ConnectTo(const std::string &ip)
 		connectionLog = "Connected";
 	}
 }
-void Cartograph::DrawTo(ImDrawList *drawlist, const GridShape &sh, bool PlotToPixels)
+void Cartograph::DrawTo(ImDrawList *drawlist, const GridShape &sh, const mat4 &transform, vec4 Color, float rounding, float thickness)
 {
 	for (const auto &cell : sh.cells)
 	{
-		if (PlotToPixels)
-		{
-			drawlist->AddRect(ImPlot::PlotToPixels(GlmToImGui(cell.min)), ImPlot::PlotToPixels(GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
-		}
-		else
-		{
 
-			drawlist->AddRect((GlmToImGui(cell.min)), (GlmToImGui(cell.max)), IM_COL32(255, 255, 255, 255));
-		}
+		vec2 finalMin = (vec2)(transform * vec4(cell.min, 0, 1.0f));
+		vec2 finalMax = (vec2)(transform * vec4(cell.max, 0, 1.0f));
+		drawlist->AddRect((GlmToImGui(finalMin)), (GlmToImGui(finalMax)), ImGui::ColorConvertFloat4ToU32(GlmToImGui(Color)), rounding, 0, thickness);
+
 		// ImPlot::GetPlotDrawList()->AddTriangle(points[0], points[1], points[2], IM_COL32(255, 255, 255, 255));
 	}
+}
+void Cartograph::DrawToPlot(ImDrawList *drawlist, const GridShape &sh, const mat4 &transform, vec4 Color, float rounding, float thickness)
+{
+	GridShape sh2;
+	for (const auto &c : sh.cells)
+	{
+		GridCell c2;
+		c2.col = c.col;
+		c2.row = c.row;
+		c2.min = ImGuiToGlm(ImPlot::PlotToPixels(GlmToImGui(c.min)));
+		c2.max = ImGuiToGlm(ImPlot::PlotToPixels(GlmToImGui(c.max)));
+		sh2.cells.push_back(c2);
+	}
+	DrawTo(drawlist, sh2, transform, Color, rounding, thickness);
 }
 std::shared_ptr<Texture> Cartograph::LoadTextureFromCompressed(const void *data, size_t size)
 {
@@ -447,6 +485,29 @@ vec3 Cartograph::GetUniqueColor(int index)
 	float saturation = 0.6f;
 	float value = 0.95f;
 	return HSVtoRGB({hue, saturation, value});
+}
+glm::mat4 Cartograph::FitBoundsToTarget(const glm::vec2 &minBound, const glm::vec2 &maxBound, const glm::vec2 &targetHalf, float padding)
+
+{
+	// --- center and size of source bounds ---
+	glm::vec2 center = 0.5f * (minBound + maxBound);
+	glm::vec2 size = glm::max(glm::abs(maxBound - minBound), glm::vec2(1e-12f)); // avoid div-by-zero
+
+	// --- effective half-extent after padding (padding is fraction of half-extent) ---
+	float pad = glm::clamp(padding, 0.0f, 0.49f);
+	glm::vec2 effHalf = targetHalf * (1.0f - pad); // leave 'pad' of half-extent as margin on each side
+
+	// --- uniform scale so that (size/2) -> effHalf, preserving aspect ---
+	float sx = effHalf.x / (size.x * 0.5f);
+	float sy = effHalf.y / (size.y * 0.5f);
+	float s = glm::min(sx, sy);
+
+	// We want: v' = S * (T * v)  where T moves center to origin, then S scales.
+	glm::mat4 T = glm::translate(glm::mat4(1.0f), glm::vec3(-center, 0.0f));
+	glm::mat4 S = glm::scale(glm::mat4(1.0f), glm::vec3(s, s, 1.0f));
+
+	// Final transform maps bounds into [-effHalf, +effHalf] ⊆ [-targetHalf, +targetHalf]
+	return S * T;
 }
 void Cartograph::Run()
 {

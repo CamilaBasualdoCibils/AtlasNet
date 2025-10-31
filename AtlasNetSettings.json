@@ -11,15 +11,12 @@
         {
             "Name": "Camila Thinkpad",
             "Address": "192.168.2.104"
-        },
-        {
-            "Name": "Raspberry pi 5",
-            "Address": "192.168.2.103"
         }
     ],
     "RuntimeArches": [
         "x86_64"
     ],
     "BuildCacheDir" : "docker_cache",
-    "NetworkInterface" : "eno1"
+    "NetworkInterface" : "eno1",
+    "BuilderMemoryGb": 15
 }

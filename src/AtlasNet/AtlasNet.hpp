@@ -15,6 +15,7 @@ struct AtlasNetSettings
     std::unordered_set<std::string> RuntimeArches;
     std::string BuildCacheDir;
     std::string NetworkInterface;
+    std::optional<uint32> BuilderMemoryGb;
 };
 class AtlasNet : public Singleton<AtlasNet>
 {

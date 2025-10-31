@@ -53,6 +53,9 @@ using Json = nlohmann::json;
 using Ordered_Json = nlohmann::ordered_json;
 
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/string_cast.hpp"
 using mat2 = glm::mat2;
 using mat3 = glm::mat3;
 using mat4 = glm::mat4;
