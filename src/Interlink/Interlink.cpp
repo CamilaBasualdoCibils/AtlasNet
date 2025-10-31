@@ -189,6 +189,7 @@ void Interlink::CallbackOnConnected(SteamCBInfo info)
     else
       logger->DebugFormatted(" - {} Connected", v->target.ToString());
 
+    callbacks.OnConnectedCallback(v->target);
     if (!MessagesToSend.empty())
     {
       for (const auto &msg : MessagesToSend)
@@ -418,18 +419,18 @@ bool Interlink::EstablishConnectionAtIP(const InterLinkIdentifier &id, const IPA
   InterLinkIdentifier godID = InterLinkIdentifier::MakeIDGod();
 
   // Step 2: Try to get public IP:port from registry
-  //std::optional<IPAddress> publicAddr = ServerRegistry::Get().GetPublicAddress(godID);
-  //if (!publicAddr.has_value())
+  // std::optional<IPAddress> publicAddr = ServerRegistry::Get().GetPublicAddress(godID);
+  // if (!publicAddr.has_value())
   //{
   //  logger->ErrorFormatted("No public address found for {} in Server Registry", godID.ToString());
   //  return false;
   //}
-  //else
+  // else
   //{
   //  std::cout << "God is reachable at " << publicAddr->ToString() << std::endl;
   //}
 
-  //auto IP = ServerRegistry::Get().GetIPOfID(id);
+  // auto IP = ServerRegistry::Get().GetIPOfID(id);
 
   Connection conn;
   conn.address = address;

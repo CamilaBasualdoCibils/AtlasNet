@@ -8,6 +8,7 @@
 #include "Heuristic/Shape.hpp"
 #include "Interlink/Connection.hpp"
 #include "Interlink/InterlinkEnums.hpp"
+#include "AtlasNet/AtlasNet.hpp"
 
 #if defined(ATLAS_UNITY_PLUGIN)
 // Plugin build — use absolute path for now
@@ -30,4 +31,9 @@ class Partition : public Singleton<Partition>
 	void Init();
 	void Shutdown() {ShouldShutdown = true;}
 	void MessageArrived(const Connection &fromWhom, std::span<const std::byte> data);
+
+private:
+  bool ParseEntityPacket(std::span<const std::byte> data,
+                          AtlasNetMessageHeader &outHeader,
+                          std::vector<AtlasEntity> &outEntities);
 };

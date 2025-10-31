@@ -71,7 +71,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
         }
 
         InterLinkIdentifier partitionID(InterlinkType::ePartition, DockerIO::Get().GetSelfContainerName());
-        Interlink::Get().SendMessageRaw(partitionID, std::span(buffer));
+        Interlink::Get().SendMessageRaw(partitionID, std::span(buffer), InterlinkMessageSendFlag::eImmidiateOrDrop);
 
         logger->DebugFormatted("[Server] Sent EntityUpdate ({} entities) to partition", entities.size());
     }
@@ -82,7 +82,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
     if (!IncomingCache.empty())
     {
         IncomingEntities = std::move(IncomingCache);
-        logger->DebugFormatted("[Server] Sent EntityIncoming ({} entities) to server", IncomingCache.size());
+        logger->DebugFormatted("[Server] Sent EntityIncoming ({} entities) to game", IncomingEntities.size());
         IncomingCache.clear();
     }
 
@@ -92,7 +92,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
     if (!OutgoingCache.empty())
     {
         OutgoingEntities = std::move(OutgoingCache);
-        logger->DebugFormatted("[Server] Sent EntityOutgoing ({} entities) to server", OutgoingCache.size());
+        logger->DebugFormatted("[Server] Sent EntityOutgoing ({} entities) to game", OutgoingEntities.size());
         OutgoingCache.clear();
     }
 }
@@ -104,7 +104,7 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
 {
     if (data.size() < 1)
     {
-        logger->ErrorFormatted("[Server] Received empty message from {}", fromWhom.target.ToString());
+        logger->ErrorFormatted("[Server] Received empty message from {}, ABORT", fromWhom.target.ToString());
         return;
     }
 
@@ -114,7 +114,7 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
 
     if (payloadSize % sizeof(AtlasEntity) != 0)
     {
-        logger->ErrorFormatted("[Server] Invalid payload size {} from {}", payloadSize, fromWhom.target.ToString());
+        logger->ErrorFormatted("[Server] Invalid payload size {} from {}, ABORT", payloadSize, fromWhom.target.ToString());
         return;
     }
 
