@@ -30,6 +30,8 @@ class Partition : public Singleton<Partition>
   std::vector<AtlasEntity> CachedEntities;
 	// Persistent database connection to avoid connection issues
 	std::unique_ptr<IDatabase> database;
+    // Periodic snapshot timer for read-only entity push
+    std::chrono::steady_clock::time_point lastEntitiesSnapshotPush;
   public:
 	Shape partitionShape;
 	GridShape partitionGridShape;  // New grid cell-based shape
@@ -46,6 +48,7 @@ class Partition : public Singleton<Partition>
 	void MessageArrived(const Connection &fromWhom, std::span<const std::byte> data);
 	void checkForOutliersAndNotifyGod();
 	void notifyGodAboutOutliers();
+	void pushManagedEntitiesSnapshot();
 	
 	// Helper method to get current partition identifier
 	InterLinkIdentifier getCurrentPartitionId() const;

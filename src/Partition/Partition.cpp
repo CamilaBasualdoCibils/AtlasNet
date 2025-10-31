@@ -20,6 +20,7 @@ Partition::Partition()
 	
 	// Initialize notification timer
 	lastOutlierNotification = std::chrono::steady_clock::now();
+	lastEntitiesSnapshotPush = std::chrono::steady_clock::now();
 }
 Partition::~Partition()
 {
@@ -58,6 +59,9 @@ void Partition::Init()
 		
 		// Periodically notify God about outliers (every 30 seconds)
 		notifyGodAboutOutliers();
+
+		// Periodically push a read-only snapshot of managed entities to the database
+		pushManagedEntitiesSnapshot();
 		
 		Interlink::Get().Tick();
 		std::this_thread::sleep_for(std::chrono::seconds(5));
@@ -488,7 +492,6 @@ void Partition::checkForOutliersAndNotifyGod()
 			}
 		}
 	}
-	// No need to log when no outliers are found - this is the normal case
 }
 
 void Partition::notifyGodAboutOutliers()
@@ -546,4 +549,41 @@ void Partition::notifyGodAboutOutliers()
 			Interlink::Get().SendMessageRaw(InterLinkIdentifier::MakeIDGod(), std::as_bytes(std::span(notifyMsg)));
 		}
 	}
+}
+
+void Partition::pushManagedEntitiesSnapshot()
+{
+    // Push every 10 seconds if we have entities
+    auto now = std::chrono::steady_clock::now();
+    if (std::chrono::duration_cast<std::chrono::seconds>(now - lastEntitiesSnapshotPush).count() < 10) {
+        return;
+    }
+
+    if (managedEntities.empty()) {
+        lastEntitiesSnapshotPush = now;
+        return;
+    }
+
+    if (!database) {
+        logger->Error("Database connection is null - cannot push entities snapshot");
+        return;
+    }
+
+    // Ensure database is alive
+    if (!database->Exists("connection_test")) {
+        logger->Error("Database connection test failed during entities snapshot - reconnecting");
+        database = std::make_unique<RedisCacheDatabase>();
+        if (!database->Connect()) {
+            logger->Error("Failed to reconnect to database during entities snapshot");
+            return;
+        }
+    }
+
+    std::string partitionKey = getCurrentPartitionId().ToString();
+    if (EntityManifest::StoreEntitiesSnapshot(database.get(), partitionKey, managedEntities)) {
+        logger->DebugFormatted("SNAPSHOT: Pushed {} managed entities to read-only snapshot for {}", managedEntities.size(), partitionKey);
+    } else {
+        logger->ErrorFormatted("SNAPSHOT: Failed to push managed entities snapshot for {}", partitionKey);
+    }
+    lastEntitiesSnapshotPush = now;
 }

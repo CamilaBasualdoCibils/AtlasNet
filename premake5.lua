@@ -91,6 +91,8 @@ workspace "GuacNet"
         language "C++"
         files { "Tests/SampleGame/**.cpp" }
         defines { "_GAMECLIENT", "_GAMESERVER" }
+        links { "ftxui-component", "ftxui-dom", "ftxui-screen" }
+        filter {}
 
 -- Generic cleanup function
 function customClean(dirsToRemove, filesToRemove)
@@ -395,6 +397,23 @@ newaction {
     description = "generate documentation",
     execute = function()
        RunDockerImage()
+    end
+}
+
+-- Run the Sample Game (UnitTests target) locally, similar to AtlasNetStart
+newaction {
+    trigger = "SampleGameStart",
+    description = "Build and run the Sample Game (FTXUI) locally",
+    execute = function()
+        local build_config = _OPTIONS["build-config"] or "DebugLocal"
+        -- Build UnitTests target
+        BuildF(string.lower(build_config), "UnitTests")
+        -- Run the resulting binary
+        local binary = string.format("bin/%s/UnitTests/UnitTests", build_config)
+        local ok, _, code = os.execute(binary)
+        if not ok or code ~= 0 then
+            error("SampleGame failed to run (exit code: " .. tostring(code) .. ")", 2)
+        end
     end
 }
 function BuildF(build_config,target)

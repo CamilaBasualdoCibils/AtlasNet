@@ -93,10 +93,10 @@ public:
         void HeuristicUpdate();
         void RedistributeOutliersToPartitions();
         void handleOutlierMessage(const std::string& message);
+        void handleOutliersDetectedMessage(const std::string& message);
+        void handleEntityRemovedMessage(const std::string& message);
         void processOutliersForPartition(const std::string& partitionId);
         void processExistingOutliers();
-        void testOutlierDetection();
-        void testEntityDistribution();
         
         /**
          * @brief Efficient grid cell-based entity detection
@@ -113,6 +113,10 @@ public:
          * God then finds the correct target partition and moves the entity there.
          */
         void redistributeEntityToCorrectPartition(const AtlasEntity& entity, const std::string& sourcePartition);
+        
+        // Helpers to improve readability and reuse
+        std::vector<InterLinkIdentifier> getPartitionServerIds() const;
+        std::optional<std::string> findPartitionForPoint(const vec2& point) const;
     /**
      * @brief Retrieves a set of all active partition IDs.
      */

@@ -101,7 +101,12 @@ std::optional<InterLinkIdentifier> ServerRegistry::GetIDOfIP(IPAddress IP, bool 
 */
 ServerRegistry::ServerRegistry()
 {
+#ifdef _LOCAL
+    // Start/Connect to a local Redis instance for standalone runs
+    database = new RedisCacheDatabase(true, "127.0.0.1", 6379, "");
+#else
     database = new RedisCacheDatabase();
+#endif
     if (!database->Connect())
     {
         throw std::runtime_error("unale to connect to da database");

@@ -288,9 +288,13 @@ void Interlink::Init(const InterlinkProperties &Properties)
 		logger->ErrorFormatted("Failure to set networking identity: {}", Getidentity.GetGenericString());
 	}*/
 	PollGroup = networkInterface->CreatePollGroup();
-	IPAddress ipAddress;
-	ListenPort = Type2ListenPort.at(MyIdentity.Type);
-	ipAddress.Parse(DockerIO::Get().GetSelfContainerIP() + ":" + std::to_string(ListenPort));
+    IPAddress ipAddress;
+    ListenPort = Type2ListenPort.at(MyIdentity.Type);
+#ifdef _LOCAL
+    ipAddress.Parse(std::string("127.0.0.1:") + std::to_string(ListenPort));
+#else
+    ipAddress.Parse(DockerIO::Get().GetSelfContainerIP() + ":" + std::to_string(ListenPort));
+#endif
 	ServerRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
 	logger->DebugFormatted("Registered in ServerRegistry as {}", MyIdentity.ToString());
 	OpenListenSocket(ListenPort);

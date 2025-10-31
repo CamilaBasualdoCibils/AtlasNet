@@ -26,6 +26,7 @@
     "gamenetworkingsockets",
     "curl",
     "redis-plus-plus",
-    "hiredis"
+    "hiredis",
+    "ftxui"
   ]
 }

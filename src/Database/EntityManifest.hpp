@@ -9,6 +9,7 @@
 class EntityManifest {
 public:
     static inline const std::string OUTLIERS_HASH = "entity_outliers";
+    static inline const std::string ENTITIES_SNAPSHOT_HASH = "entities_snapshot";
 
     /**
      * @brief Remove a specific entity from a partition's outliers
@@ -141,5 +142,26 @@ public:
     static bool ClearAllOutliers(IDatabase* db) {
         if (!db) return false;
         return db->HashRemoveAll(OUTLIERS_HASH);
+    }
+
+    /**
+     * @brief Store a read-only snapshot of all entities for a partition
+     */
+    static bool StoreEntitiesSnapshot(IDatabase* db, const std::string& partitionId,
+                                      const std::vector<AtlasEntity>& entities) {
+        if (!db) return false;
+        // Build compact string id:x,z;id:x,z
+        std::string data;
+        data.reserve(entities.size() * 24);
+        for (size_t i = 0; i < entities.size(); ++i) {
+            const auto& e = entities[i];
+            if (i > 0) data.push_back(';');
+            data += std::to_string(e.ID);
+            data.push_back(':');
+            data += std::to_string(e.Position.x);
+            data.push_back(',');
+            data += std::to_string(e.Position.z);
+        }
+        return db->HashSet(ENTITIES_SNAPSHOT_HASH, partitionId, data);
     }
 };
