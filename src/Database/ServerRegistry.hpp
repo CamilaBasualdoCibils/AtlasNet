@@ -25,5 +25,6 @@ IDatabase* database;
     bool ExistsInRegistry(const InterLinkIdentifier& ID) const;
     void ClearAll();
     //std::optional<InterLinkIdentifier> GetIDOfIP(IPAddress ID,bool IgnorePort);
-    
+    void RegisterPublicAddress(const InterLinkIdentifier& ID, const IPAddress& address);
+    std::optional<IPAddress> GetPublicAddress(const InterLinkIdentifier& ID);
 };

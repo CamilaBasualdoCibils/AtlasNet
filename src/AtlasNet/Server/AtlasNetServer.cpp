@@ -3,6 +3,10 @@
 #include "Debug/Crash/CrashHandler.hpp"
 #include "Database/ServerRegistry.hpp"
 #include "Docker/DockerIO.hpp"
+
+// ============================================================================
+// Initialize server and setup Interlink callbacks
+// ============================================================================
 void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties)
 {
     // --- Core setup ---
@@ -33,85 +37,160 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
                     logger->DebugFormatted("[Server] Client connected: {}", id.ToString());
                 }
                 else
+                {
                     printf("[AtlasNet] Connected to %s\n", id.ToString().c_str());
+                }
             },
             .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data) {
-                //std::string msg(reinterpret_cast<const char*>(data.data()), data.size());
-                //printf("[AtlasNet] Received: %s\n", msg.c_str());
                 HandleMessage(fromWhom, data);
             }
         }
     });
 
-    // --- Connection logging only ---
     logger->Debug("Interlink initialized; waiting for auto-connect to Partition...");
 }
 
-
-void AtlasNetServer::Update(std::span<AtlasEntity> entities, std::vector<AtlasEntity> &IncomingEntities,
-							std::vector<AtlasEntityID> &OutgoingEntities)
+// ============================================================================
+// Update: Called every tick
+// Sends entity updates, incoming, and outgoing data to Partition
+// ============================================================================
+void AtlasNetServer::Update(std::span<AtlasEntity> entities,
+                            std::vector<AtlasEntity> &IncomingEntities,
+                            std::vector<AtlasEntityID> &OutgoingEntities)
 {
-  
-  Interlink::Get().Tick();
-  
-  // If no entities, skip sending
-  if (entities.empty()) return;
-  
-  // Serialize snapshot to bytes
-  std::vector<std::byte> buffer;
-  buffer.reserve(entities.size() * sizeof(AtlasEntity));
-  
-  for (const auto& entity : entities)
-  {
-    const std::byte* ptr = reinterpret_cast<const std::byte*>(&entity);
-    buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
+    Interlink::Get().Tick();
 
-    CachedEntities[entity.ID] = entity;
-  }
-  
-  
-  // Send snapshot to Partition
-  //InterLinkIdentifier partitionID(InterlinkType::ePartition, DockerIO::Get().GetSelfContainerName());
-  //logger->DebugFormatted("try send snapshot with entities {} to {}", entities.size(), partitionID.ToString());
-  //Interlink::Get().SendMessageRaw(partitionID, std::as_bytes(std::span(buffer)), InterlinkMessageSendFlag::eImmidiateOrDrop);
+    // ------------------------------------------------------------
+    // Step 1: Send regular entity updates (EntityUpdate)
+    // ------------------------------------------------------------
+    if (!entities.empty())
+    {
+        std::vector<std::byte> buffer;
+        buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
 
-    if (CachedEntities.empty())
-        return;
+        buffer.push_back(static_cast<std::byte>(AtlasNetMessageHeader::EntityUpdate));
+        for (const auto &entity : entities)
+        {
+            const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
+            buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
+            CachedEntities[entity.ID] = entity;
+        }
 
-    // forward to partition
-    std::vector<AtlasEntity> snapshot;
-    snapshot.reserve(CachedEntities.size());
-    for (auto &[id, e] : CachedEntities)
-        snapshot.push_back(e);
+        InterLinkIdentifier partitionID(InterlinkType::ePartition, DockerIO::Get().GetSelfContainerName());
+        Interlink::Get().SendMessageRaw(partitionID, std::span(buffer), InterlinkMessageSendFlag::eImmidiateOrDrop);
 
-    InterLinkIdentifier partitionID(InterlinkType::ePartition, DockerIO::Get().GetSelfContainerName());
-    Interlink::Get().SendMessageRaw(partitionID, std::as_bytes(std::span(snapshot)));
+        logger->DebugFormatted("[Server] Sent EntityUpdate ({} entities) to partition", entities.size());
+    }
 
-    //logger->DebugFormatted("[Server] Sent snapshot of {} entities to partition", snapshot.size());
+    // ------------------------------------------------------------
+    // Step 2: Send cached incoming entities (EntityIncoming)
+    // ------------------------------------------------------------
+    if (!IncomingCache.empty())
+    {
+        IncomingEntities = std::move(IncomingCache);
+        logger->DebugFormatted("[Server] Sent EntityIncoming ({} entities) to game", IncomingEntities.size());
+        IncomingCache.clear();
+    }
+
+    // ------------------------------------------------------------
+    // Step 3: Send cached outgoing entities (EntityOutgoing)
+    // ------------------------------------------------------------
+    if (!OutgoingCache.empty())
+    {
+        OutgoingEntities = std::move(OutgoingCache);
+        logger->DebugFormatted("[Server] Sent EntityOutgoing ({} entities) to game", OutgoingEntities.size());
+        OutgoingCache.clear();
+    }
 }
 
+// ============================================================================
+// HandleMessage: interpret headers and cache appropriately
+// ============================================================================
 void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const std::byte> data)
 {
+    if (data.size() < 1)
+    {
+        logger->ErrorFormatted("[Server] Received empty message from {}, ABORT", fromWhom.target.ToString());
+        return;
+    }
+
+    const AtlasNetMessageHeader header = static_cast<AtlasNetMessageHeader>(data[0]);
+    const std::byte *payload = data.data() + 1;
+    const size_t payloadSize = data.size() - 1;
+
+    if (payloadSize % sizeof(AtlasEntity) != 0)
+    {
+        logger->ErrorFormatted("[Server] Invalid payload size {} from {}, ABORT", payloadSize, fromWhom.target.ToString());
+        return;
+    }
+
+    const size_t entityCount = payloadSize / sizeof(AtlasEntity);
+    std::vector<AtlasEntity> entities(entityCount);
+    std::memcpy(entities.data(), payload, payloadSize);
+
+    switch (header)
+    {
+        // --------------------------------------------------------
+        // Regular EntityUpdate
+        // --------------------------------------------------------
+        case AtlasNetMessageHeader::EntityUpdate:
+        {
+            for (const auto &entity : entities)
+                CachedEntities[entity.ID] = entity;
+
+            logger->DebugFormatted("[Server] EntityUpdate: {} entities from {}", entities.size(), fromWhom.target.ToString());
+            break;
+        }
+
+        // --------------------------------------------------------
+        // Cache incoming entities for next update
+        // --------------------------------------------------------
+        case AtlasNetMessageHeader::EntityIncoming:
+        {
+            for (const auto &entity : entities)
+            {
+                CachedEntities[entity.ID] = entity;
+                IncomingCache.push_back(entity);
+            }
+            logger->DebugFormatted("[Server] Cached EntityIncoming: {} entities", entities.size());
+            break;
+        }
+
+        // --------------------------------------------------------
+        // Cache outgoing entities for next update
+        // --------------------------------------------------------
+        case AtlasNetMessageHeader::EntityOutgoing:
+        {
+            for (const auto &entity : entities)
+            {
+                CachedEntities.erase(entity.ID);
+                OutgoingCache.push_back(entity.ID);
+            }
+            logger->DebugFormatted("[Server] Cached EntityOutgoing: {} entities", entities.size());
+            break;
+        }
+
+        default:
+            logger->ErrorFormatted("[Server] Unknown AtlasNetMessageHeader {} from {}",
+                                   static_cast<int>(header), fromWhom.target.ToString());
+            return;
+    }
+
+    return;
+    // --------------------------------------------------------
+    // Rebroadcast to clients as before
+    // --------------------------------------------------------
     if (fromWhom.target.Type == InterlinkType::eGameClient)
     {
-        if (data.size() == sizeof(AtlasEntity))
+        for (const auto &id : ConnectedClients)
         {
-            AtlasEntity entity{};
-            std::memcpy(&entity, data.data(), sizeof(AtlasEntity));
-
-            CachedEntities[entity.ID] = entity;
-
-            logger->DebugFormatted("[Server] Received transform from client {} (Entity {}) -> Pos({:.2f}, {:.2f}, {:.2f})",
-                fromWhom.target.ToString(), entity.ID, entity.Position.x, entity.Position.y, entity.Position.z);
-
-            // rebroadcast to other clients
-            for (const auto& id : ConnectedClients)
-            {
-                if (id != fromWhom.target)
-                {
-                    Interlink::Get().SendMessageRaw(id, std::as_bytes(std::span(&entity, 1)));
-                }
-            }
+            if (id != fromWhom.target)
+                Interlink::Get().SendMessageRaw(id, data);
         }
+    }
+    else if (fromWhom.target.Type == InterlinkType::ePartition)
+    {
+        for (const auto &id : ConnectedClients)
+            Interlink::Get().SendMessageRaw(id, data);
     }
 }

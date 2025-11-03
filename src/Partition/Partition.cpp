@@ -42,7 +42,15 @@ void Partition::Init()
 			.logger = logger,
 			.callbacks = {.acceptConnectionCallback = [](const Connection &c)
 						  { return true; },
-						  .OnConnectedCallback = [](const InterLinkIdentifier &Connection) {},
+						  .OnConnectedCallback = [this](const InterLinkIdentifier &Connection) 
+              {
+                logger->Debug("[Partition] connected callback");
+                if (Connection.Type == InterlinkType::eGameServer)
+                {
+                  ConnectedGameServer = std::make_unique<InterLinkIdentifier>(Connection);
+                  logger->DebugFormatted("[Partition] ready to send messages to GameServer: {}", Connection.ToString().c_str());
+                }
+              },
 						  .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data) {Partition::Get().MessageArrived(fromWhom,data);}}});
 
 	// Clear any existing partition entity data to prevent stale data
@@ -73,21 +81,59 @@ void Partition::Init()
 
 void Partition::MessageArrived(const Connection &fromWhom, std::span<const std::byte> data)
 {
-    // Detect snapshot packets
-    if (data.size() % sizeof(AtlasEntity) == 0 && data.size() > 0)
+    AtlasNetMessageHeader header = AtlasNetMessageHeader::Null;
+    std::vector<AtlasEntity> entities;
+
+    // ------------------------------------------------------------------------
+    // Check if this message is a valid entity packet 
+    // NOTE: should cache as unordered_map or set using entity IDs instead
+    // ------------------------------------------------------------------------
+    if (ParseEntityPacket(data, header, entities))
     {
-        size_t entityCount = data.size() / sizeof(AtlasEntity);
-        std::vector<AtlasEntity> snapshot(entityCount);
-
-        std::memcpy(snapshot.data(), data.data(), data.size());
-        // Store or apply to in-memory state
-        this->CachedEntities = std::move(snapshot);
-
-        logger->DebugFormatted("Cached {} entities from {}", entityCount, fromWhom.target.ID);
-
-        for (const auto &entity : this->CachedEntities)
+        logger->DebugFormatted("[Partition] Received {} entities from {} with header {}",
+                               entities.size(), fromWhom.target.ToString(), static_cast<int>(header));
+        // Cache entities
+        switch (header)
         {
-            logger->DebugFormatted("Entity ID: {}, Pos: ({}, {}, {})", entity.ID, entity.Position.x, entity.Position.y, entity.Position.z);
+            case AtlasNetMessageHeader::EntityUpdate:
+            {
+                CachedEntities = entities;
+                return;
+              }
+              case AtlasNetMessageHeader::EntityIncoming:
+              {
+                for (const auto &entity : entities)
+                    CachedEntities.push_back(entity);
+                break;
+              }              
+              case AtlasNetMessageHeader::EntityOutgoing:
+              {
+                for (const auto &entity : entities)
+                {
+                    CachedEntities.erase(
+                        std::remove_if(CachedEntities.begin(), CachedEntities.end(),
+                        [&](const AtlasEntity &e) { return e.ID == entity.ID; }),
+                        CachedEntities.end());
+                }
+                break;
+              }
+              default:
+                logger->WarningFormatted("[Partition] Unknown header {}", static_cast<int>(header));
+              break;
+            }
+            
+        // Forward to GameServer
+        if (ConnectedGameServer != nullptr)
+        {
+            std::vector<std::byte> buffer;
+            buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
+            buffer.push_back(static_cast<std::byte>(header));
+            for (const auto &entity : entities)
+            {
+                const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
+                buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
+            }
+            Interlink::Get().SendMessageRaw(*ConnectedGameServer, std::span(buffer));
         }
 
         return;
@@ -586,4 +632,31 @@ void Partition::pushManagedEntitiesSnapshot()
         logger->ErrorFormatted("SNAPSHOT: Failed to push managed entities snapshot for {}", partitionKey);
     }
     lastEntitiesSnapshotPush = now;
+}
+
+// ============================================================================
+// Helper: ParseEntityPacket
+// Validates and extracts AtlasEntities and header type
+// ============================================================================
+bool Partition::ParseEntityPacket(std::span<const std::byte> data,
+                                  AtlasNetMessageHeader &outHeader,
+                                  std::vector<AtlasEntity> &outEntities)
+{
+    if (data.size() < 1)
+        return false;
+
+    // Read header
+    outHeader = static_cast<AtlasNetMessageHeader>(data[0]);
+    const std::byte *payload = data.data() + 1;
+    const size_t payloadSize = data.size() - 1;
+
+    // Check alignment
+    if (payloadSize == 0 || payloadSize % sizeof(AtlasEntity) != 0)
+        return false;
+
+    const size_t entityCount = payloadSize / sizeof(AtlasEntity);
+    outEntities.resize(entityCount);
+    std::memcpy(outEntities.data(), payload, payloadSize);
+
+    return true;
 }

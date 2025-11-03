@@ -3,25 +3,12 @@
 
 #include "pch.hpp"
 #include "AtlasNet/AtlasNet.hpp"
-#include "Debug/Log.hpp"
-
-#include <atomic>
-#include <chrono>
-#include <cmath>
-#include <thread>
-#include <sstream>
-#include <iomanip>
-#include <unordered_map>
-
-#include <ftxui/component/component.hpp>
-#include <ftxui/component/event.hpp>
-#include <ftxui/component/screen_interactive.hpp>
-#include <ftxui/dom/canvas.hpp>
-#include <ftxui/dom/elements.hpp>
-
-using namespace ftxui;
-
-struct MovingEntity
+#include "AtlasNet/Client/AtlasNetClient.hpp"
+#include "AtlasNet/Server/AtlasNetServer.hpp"
+/**
+ * @brief A simple entity that moves in a circular path.
+ */
+struct Entity
 {
     float angle = 0.0f; // radians
     float speed = 0.8f; // radians per second
@@ -82,137 +69,77 @@ int main(int argc, char **argv)
         // Draw all known local entities from their world positions.
         for (const auto &kv : local_entities)
         {
-            const AtlasEntity &e = kv.second;
-            c.DrawPoint((int)std::round(e.Position.x), (int)std::round(e.Position.z), true);
+            const auto &e = entities[i];
+            std::cout << "Entity[" << i << "] pos = ("
+                      << e.position.x << ", " << e.position.y << ")\n";
         }
-
-        Element canvas_el = canvas(std::move(c));
-        Element legend = hbox({
-            text(" Single Partition ") | bold,
-            separator(),
-            text(" Dot = Entity "),
-            separator(),
-            text(" Ctrl+C to quit ")
-        });
-
-        // Build a small info box showing the current demo entity position, if present.
-        std::ostringstream x_ss;
-        std::ostringstream z_ss;
-        x_ss.setf(std::ios::fixed); z_ss.setf(std::ios::fixed);
-        auto it_demo = local_entities.find(kDemoEntityId);
-        if (it_demo != local_entities.end())
-        {
-            x_ss << std::setprecision(2) << "x: " << it_demo->second.Position.x;
-            z_ss << std::setprecision(2) << "z: " << it_demo->second.Position.z;
-        }
-        else
-        {
-            x_ss << "x: -";
-            z_ss << "z: -";
-        }
-        Element pos_box = vbox({
-            text(" Entity Info ") | bold,
-            separator(),
-            vbox({
-                text("Entity Position"),
-                text(x_ss.str()),
-                text(z_ss.str())
-            })
-        }) | border | size(WIDTH, EQUAL, 30);
-
-        return vbox({
-            legend | center,
-            hbox({
-                canvas_el | border | size(WIDTH, EQUAL, map_width + 2) | size(HEIGHT, EQUAL, map_height + 2),
-                separator(),
-                pos_box
-            })
-        });
-    });
-
-    // We avoid CatchEvent (may be unavailable). Advance state in ticker thread
-    // and just use renderer as the root component.
-    auto app = renderer;
-
-    // Seed local map with our demo entity so it's visible immediately.
-    {
-        AtlasEntity seed{};
-        seed.ID = kDemoEntityId;
-        seed.IsSpawned = true;
-        seed.Position = { (float)((map_width - 1) / 2.0f), 0.0f, (float)((map_height - 1) / 2.0f) };
-        local_entities[seed.ID] = seed;
     }
-
-    // Background ticker posting animation events.
-    std::thread ticker([&]
+};
+static std::unique_ptr<AtlasNetClient> g_client;
+bool ShouldShutdown = false;
+/**
+ * @brief Main function to run the sample game.
+ */
+int main(int argc, char **argv)
+{
+    std::cerr << "SampleGame Starting" << std::endl;
+    for (int i = 0; i < argc; i++)
     {
-        using namespace std::chrono_literals;
-        std::vector<AtlasEntity> incoming;
-        std::vector<AtlasEntityID> outgoing_ids;
-        while (running)
-        {
-            // Advance local simulation only if we own the demo entity.
-            if (owns_demo_entity)
-            {
-                entity.angle += entity.speed * dt;
-                const float two_pi = 2.0f * 3.14159265358979323846f;
-                if (entity.angle > two_pi)
-                    entity.angle -= two_pi;
+        std::cerr << argv[i] << std::endl;
+    }
+    AtlasNetServer::InitializeProperties InitProperties;
+    AtlasNetServer::Get().Initialize(InitProperties);
+    InitProperties.ExePath = argv[0];
+    InitProperties.OnShutdownRequest = [&](SignalType signal)
+    { ShouldShutdown = true; };
 
-                // Update our demo entity's world position (x,z mapped to canvas space).
-                const float cx = (map_width - 1) / 2.0f;
-                const float cy = (map_height - 1) / 2.0f;
-                const float rx = (map_width - 4) / 2.0f;
-                const float ry = (map_height - 4) / 2.0f;
-                const float x = cx + rx * std::cos(entity.angle);
-                const float z = cy + ry * std::sin(entity.angle);
+    Scene scene;
+    // create an entity
+    scene.entities.emplace_back(10.0f, 0.5f); // radius =10, slower
 
-                AtlasEntity &e = local_entities[kDemoEntityId];
-                e.ID = kDemoEntityId;
-                e.IsSpawned = true;
-                e.Position.x = x;
-                e.Position.y = 0.0f;
-                e.Position.z = z;
-            }
+    // Time / loop variables
+    using clock = std::chrono::high_resolution_clock;
+    auto previous = clock::now();
 
-            // Publish snapshot of owned entities only (here only the demo entity when owned).
-            std::vector<AtlasEntity> snapshot;
-            if (owns_demo_entity)
-            {
-                snapshot.push_back(local_entities[kDemoEntityId]);
-            }
-            std::span<AtlasEntity> snapshot_span(snapshot);
-            AtlasNetServer::Get().Update(snapshot_span, incoming, outgoing_ids);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
-            // Apply authoritative changes from the network.
-            for (const AtlasEntity &e : incoming)
-            {
-                local_entities[e.ID] = e;
-                if (e.ID == kDemoEntityId)
-                {
-                    owns_demo_entity = true; // we just adopted it
-                }
-            }
-            for (AtlasEntityID id : outgoing_ids)
-            {
-                local_entities.erase(id);
-                if (id == kDemoEntityId)
-                {
-                    owns_demo_entity = false; // we handed it off
-                }
-            }
 
-            // Request redraw after state update
-            screen.PostEvent(Event::Custom);
-            std::this_thread::sleep_for(16ms); // ~60 FPS
-        }
-    });
+        g_client = std::make_unique<AtlasNetClient>();
+    AtlasNetClient::InitializeProperties props{
+        .ExePath = "./AtlasNetClient.exe",
+        //.ClientName = "SampleGame:" + DockerIO::Get().GetSelfContainerName(),
+        .ClientName = "SampleGameClient",
+        .ServerName = "GodViewServer"
+    };
+    //g_client->Initialize(props);
 
-    screen.Loop(app);
+    std::this_thread::sleep_for(std::chrono::milliseconds(500));
+    while (!ShouldShutdown)
+    {
+      std::vector<AtlasEntity> Incoming;
+      AtlasEntity entity;
+      entity.ID = 0;
+      entity.IsSpawned = true;
+      Incoming.push_back(entity);
+      std::span<AtlasEntity> myspan(Incoming);
+      std::vector<AtlasEntityID> Outgoing;
+      AtlasNetServer::Get().Update(myspan, Incoming, Outgoing);
+      //g_client->SendEntityUpdate(entity);
+        auto now = clock::now();
+        std::chrono::duration<float> delta = now - previous;
+        previous = now;
+        float dt = delta.count(); // seconds
 
-    running = false;
-    if (ticker.joinable())
-        ticker.join();
+        scene.update(dt);
+
+        // Print positions every second
+        // scene.printPositions();
+
+        // Sleep a bit to avoid burning CPU (simulate frame time)
+        //std::this_thread::sleep_for(std::chrono::milliseconds(16));
+        // ~60 updates per second
+        std::this_thread::sleep_for(std::chrono::milliseconds(1000));
+    }
 
     return 0;
 }

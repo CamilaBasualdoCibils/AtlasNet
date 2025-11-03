@@ -11,6 +11,7 @@
 #include "Heuristic/GridCell.hpp"
 #include "Interlink/Connection.hpp"
 #include "Interlink/InterlinkEnums.hpp"
+#include "AtlasNet/AtlasNet.hpp"
 #include "AtlasNet/AtlasEntity.hpp"
 #include "Database/IDatabase.hpp"
 #include "Database/RedisCacheDatabase.hpp"
@@ -28,6 +29,7 @@ class Partition : public Singleton<Partition>
 	std::shared_ptr<Log> logger = std::make_shared<Log>("Partition");
 	std::atomic_bool ShouldShutdown = false;
   std::vector<AtlasEntity> CachedEntities;
+  std::unique_ptr<InterLinkIdentifier> ConnectedGameServer;
 	// Persistent database connection to avoid connection issues
 	std::unique_ptr<IDatabase> database;
     // Periodic snapshot timer for read-only entity push
@@ -46,6 +48,11 @@ class Partition : public Singleton<Partition>
 	void Init();
 	void Shutdown() {ShouldShutdown = true;}
 	void MessageArrived(const Connection &fromWhom, std::span<const std::byte> data);
+
+private:
+  bool ParseEntityPacket(std::span<const std::byte> data,
+                          AtlasNetMessageHeader &outHeader,
+                          std::vector<AtlasEntity> &outEntities);
 	void checkForOutliersAndNotifyGod();
 	void notifyGodAboutOutliers();
 	void pushManagedEntitiesSnapshot();

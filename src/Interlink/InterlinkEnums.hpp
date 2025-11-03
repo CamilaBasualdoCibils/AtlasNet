@@ -1,5 +1,10 @@
 #pragma once
 #include <pch.hpp>
+enum class ConnectionKind : uint8_t {
+    eInternal,  // Cluster connections (God, Partition, GameServer, etc.)
+    eExternal   // External clients (Unity, remote dashboards, etc.)
+};
+
 enum class InterlinkType
 {
 	eInvalid = 0,

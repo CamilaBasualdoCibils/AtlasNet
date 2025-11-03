@@ -35,6 +35,9 @@ struct Connection
 	// InterlinkType TargetType = InterlinkType::eInvalid;
 	InterLinkIdentifier target;
 	HSteamNetConnection SteamConnection;
+  
+  ConnectionKind kind = ConnectionKind::eInternal;
+  bool IsExternal() const noexcept { return kind == ConnectionKind::eExternal; }
 
 	uint64 MessagesSent;
 	std::vector<std::pair<InterlinkMessageSendFlag, std::vector<std::byte>>> MessagesToSendOnConnect;
