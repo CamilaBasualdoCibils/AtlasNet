@@ -38,12 +38,12 @@ public:
     // returns the length of the list;
     long long ListInsert(const std::string_view key, const bool before, const std::string_view pivot, const std::string_view val) override;
     std::future<long long> ListInsertAsync(const std::string_view key, const bool before, const std::string_view pivot, const std::string_view val) override;
-    long long ListLength(const std::string_vew key) const override;
-    std::future<long long> ListLengthAsync(const std::string_vew key) const override;
+    long long ListLength(const std::string_view key) const override;
+    std::future<long long> ListLengthAsync(const std::string_view key) const override;
     std::optional<std::string> ListPop(const std::string_view key, const bool front) override;
     std::future<std::optional<std::string>> ListPopAsync(const std::string_view key, const bool front) override;
-    long long ListPush(const std::string_view key, const string_view val, const bool front) override;
-    std::future<long long> ListPushAsync(const std::string_view key, const string_view val, const bool front) override;
+    long long ListPush(const std::string_view key, const std::string_view val, const bool front) override;
+    std::future<long long> ListPushAsync(const std::string_view key, const std::string_view val, const bool front) override;
     // only pushes if the list exists;
     long long ListPushx(const std::string_view key, const std::string_view val, const bool front) override;
     std::future<long long> ListPushxAsync(const std::string_view key, const std::string_view val, const bool front) override;
@@ -58,6 +58,34 @@ public:
     std::optional<std::string> ListPopPush(const std::string_view source, const std::string_view destination) override;
     std::future<std::optional<std::string>> ListPopPushAsync(const std::string_view source, const std::string_view destination) override;
     // --- End List Operations ---
+
+    // --- Set operations ---
+    long long SetAdd(const std::string_view key, const std::string_view member) override;
+    std::future<long long> SetAddAsync(const std::string_view key, const std::string_view member) override;
+    long long SetRemove(const std::string_view key, const std::string_view member) override;
+    std::future<long long> SetRemoveAsync(const std::string_view key, const std::string_view member) override;
+    bool SetIsMember(const std::string_view key, const std::string_view member) const override;
+    std::future<bool> SetIsMemberAsync(const std::string_view key, const std::string_view member) const override;
+    std::vector<std::string> SetMembers(const std::string_view key) const override;
+    std::future<std::vector<std::string>> SetMembersAsync(const std::string_view key) const override;
+
+    // --- Sorted set (zset) operations ---
+    long long ZAdd(const std::string_view key, const std::string_view member, double score) override;
+    std::future<long long> ZAddAsync(const std::string_view key, const std::string_view member, double score) override;
+    long long ZRemove(const std::string_view key, const std::string_view member) override;
+    std::future<long long> ZRemoveAsync(const std::string_view key, const std::string_view member) override;
+    std::vector<std::string> ZRangeByScore(const std::string_view key, double minScore, double maxScore, long long limit = -1) const override;
+    std::future<std::vector<std::string>> ZRangeByScoreAsync(const std::string_view key, double minScore, double maxScore, long long limit = -1) const override;
+
+    // --- Stream operations ---
+    std::string StreamAdd(const std::string_view key, const std::unordered_map<std::string, std::string> &fields) override;
+    std::future<std::string> StreamAddAsync(const std::string_view key, const std::unordered_map<std::string, std::string> &fields) override;
+
+    // --- Geo operations ---
+    long long GeoAdd(const std::string_view key, double longitude, double latitude, const std::string_view member) override;
+    std::future<long long> GeoAddAsync(const std::string_view key, double longitude, double latitude, const std::string_view member) override;
+    std::vector<std::string> GeoRadius(const std::string_view key, double longitude, double latitude, double radiusMeters, long long count = -1) const override;
+    std::future<std::vector<std::string>> GeoRadiusAsync(const std::string_view key, double longitude, double latitude, double radiusMeters, long long count = -1) const override;
 
 
     void PrintEntireDB() override;
