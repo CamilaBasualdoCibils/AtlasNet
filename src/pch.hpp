@@ -79,8 +79,8 @@ inline ImVec2 GlmToImGui(vec2 e) {return ImVec2(e.x,e.y);}
 inline vec4 ImGuiToGlm(ImVec4 e) {return vec4(e.x,e.y,e.z,e.w);}
 inline ImVec4 GlmToImGui(vec4 e) {return ImVec4(e.x,e.y,e.z,e.w);}
 
-
-
+//OpenSSL
+#include <openssl/sha.h>
 /* Database */
 #include <sw/redis++/redis++.h>
 #include <netdb.h>  
