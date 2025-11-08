@@ -97,7 +97,7 @@ private:
 		std::string msg = "Interlink> " + std::string(fmt);
 		logger->Debug(msg, std::forward<Args>(args)...);
 	}
-
+	static inline std::string SecretDatabaseKey = "SECRET";
 	using SteamCBInfo = SteamNetConnectionStatusChangedCallback_t *;
 	void CallbackOnConnecting(SteamCBInfo info);
 	void CallbackOnClosedByPear(SteamCBInfo info);

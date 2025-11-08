@@ -56,10 +56,10 @@ void AtlasNetBootstrap::Run()
     RunningLocally = AtlasNet::Get().GetSettings().workers.empty();
     SetupSwarm();
     SetupNetwork();
+    GenerateTSLCertificate();
 
     if (!RunningLocally)
     {
-        GenerateTSLCertificate();
         SetupRegistry();
         GetWorkersSSHCredentials();
         SendTLSCertificateToWorkers();
@@ -570,14 +570,16 @@ void AtlasNetBootstrap::RunDemigod()
 
 void AtlasNetBootstrap::SetupSwarm()
 {
-    auto isPortInUse = [](int port) -> bool {
+    auto isPortInUse = [](int port) -> bool
+    {
         int sock = socket(AF_INET, SOCK_STREAM, 0);
-        if (sock < 0) return true;
+        if (sock < 0)
+            return true;
         sockaddr_in addr{};
         addr.sin_family = AF_INET;
         addr.sin_addr.s_addr = inet_addr("0.0.0.0");
         addr.sin_port = htons(port);
-        bool inUse = bind(sock, (sockaddr*)&addr, sizeof(addr)) < 0;
+        bool inUse = bind(sock, (sockaddr *)&addr, sizeof(addr)) < 0;
         close(sock);
         return inUse;
     };
@@ -607,7 +609,8 @@ void AtlasNetBootstrap::SetupSwarm()
 
     // Resolve configured network interface
     std::string preferredInterface = AtlasNet::Get().GetSettings().NetworkInterface;
-    if (RunningLocally) preferredInterface = "lo"; //if running locally then use the loop back interface 127.0.0.1
+    if (RunningLocally)
+        preferredInterface = "lo"; // if running locally then use the loop back interface 127.0.0.1
     std::string interfaceIP;
 
     // Collect available interfaces
@@ -618,7 +621,8 @@ void AtlasNetBootstrap::SetupSwarm()
         return;
     }
 
-    struct InterfaceInfo {
+    struct InterfaceInfo
+    {
         std::string name;
         std::string ip;
     };
@@ -641,7 +645,8 @@ void AtlasNetBootstrap::SetupSwarm()
     if (!preferredInterface.empty())
     {
         auto it = std::find_if(available.begin(), available.end(),
-            [&](const InterfaceInfo &inf){ return inf.name == preferredInterface; });
+                               [&](const InterfaceInfo &inf)
+                               { return inf.name == preferredInterface; });
 
         if (it != available.end())
         {
@@ -686,15 +691,17 @@ void AtlasNetBootstrap::SetupSwarm()
     // Construct swarm init payload
     Json swarmInit = Json{
         {"ListenAddr", std::format("0.0.0.0:{}", swarmPort)},
-        {"AdvertiseAddr", std::format("{}:{}", interfaceIP, swarmPort)}
-    };
+        {"AdvertiseAddr", std::format("{}:{}", interfaceIP, swarmPort)}};
 
     // Attempt swarm init
     std::string initResult = DockerIO::Get().request("POST", "/swarm/init", &swarmInit);
     Json parsed;
-    try {
+    try
+    {
         parsed = Json::parse(initResult);
-    } catch (...) {
+    }
+    catch (...)
+    {
         logger.ErrorFormatted("Invalid swarm init response: {}", initResult);
         return;
     }
@@ -713,7 +720,6 @@ void AtlasNetBootstrap::SetupSwarm()
     ManagerPcAdvertiseAddr = infoJson["Swarm"]["NodeAddr"];
     logger.DebugFormatted("📡 Manager address set to {}", ManagerPcAdvertiseAddr);
 }
-
 
 void AtlasNetBootstrap::SetupNetwork()
 {
