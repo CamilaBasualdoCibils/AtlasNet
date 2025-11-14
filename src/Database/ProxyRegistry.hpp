@@ -19,6 +19,7 @@ public:
     {
         InterLinkIdentifier identifier;
         IPAddress address;
+        uint32_t load = 0; // Number of connected clients
     };
 
     static ProxyRegistry& Get()
@@ -27,22 +28,40 @@ public:
         return instance;
     }
 
+    // Registration
     void RegisterSelf(const InterLinkIdentifier& id, const IPAddress& address);
     void RegisterPublicAddress(const InterLinkIdentifier& id, const IPAddress& address);
     void DeRegisterSelf(const InterLinkIdentifier& id);
 
     std::optional<IPAddress> GetIPOfID(const InterLinkIdentifier& id);
     std::optional<IPAddress> GetPublicAddress(const InterLinkIdentifier& id);
+    // Utility
     bool ExistsInRegistry(const InterLinkIdentifier& id) const;
-
-    const std::unordered_map<InterLinkIdentifier, ProxyRegistryEntry>& GetProxies();
     void ClearAll();
+
+    // Load tracking
+    void IncrementClient(const InterLinkIdentifier& id);
+    void DecrementClient(const InterLinkIdentifier& id);
+    uint32_t GetLoad(const InterLinkIdentifier& id);
+
+    // Client to Proxy ownership
+    void AssignClientToProxy(const std::string& clientID, const InterLinkIdentifier& proxyID);
+    std::optional<InterLinkIdentifier> GetProxyOfClient(const std::string& clientID);
+
+    // Proxy enumeration
+    const std::unordered_map<InterLinkIdentifier, ProxyRegistryEntry>& GetProxies();
+    std::optional<InterLinkIdentifier> GetLeastLoadedProxy();
+
 
 private:
     ProxyRegistry();
 
 private:
     std::unique_ptr<RedisCacheDatabase> database;
+    // Cached proxy entries
     std::unordered_map<InterLinkIdentifier, ProxyRegistryEntry> proxies;
+    // Redis table names
     const std::string HashTableNameID_IP = "ProxyRegistry_ID_IP";
+    const std::string HashTableNameID_Load = "ProxyRegistry_ID_Load";
+    const std::string HashTableNameClientOwner = "ProxyRegistry_ClientOwner";
 };

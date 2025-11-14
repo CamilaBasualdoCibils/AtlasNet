@@ -24,16 +24,39 @@ public:
     void Init();
     void Run();
     void Shutdown();
+
+    static Demigod& Get()
+    {
+        static Demigod instance;
+        return instance;
+    }
+
 private:
-    void OnMessageReceived(const Connection& from, std::span<const std::byte> data);
-    void OnConnected(const InterLinkIdentifier& id);
+    // --- Interlink callbacks ------------------------------------------------
+
     bool OnAcceptConnection(const Connection& c);
+    void OnConnected(const InterLinkIdentifier& id);
+    void OnMessageReceived(const Connection& from, std::span<const std::byte> data);
 
-    void ForwardClientToServer(const Connection& from, std::span<const std::byte> data);
-    void ForwardServerToClient(const Connection& from, std::span<const std::byte> data);
+    // --- Routing helpers ----------------------------------------------------
 
+    void ForwardClientToPartition(const Connection& from, std::span<const std::byte> data);
+    void ForwardPartitionToClient(const Connection& from, std::span<const std::byte> data);
+
+    // Handle text-based control messages like "AuthorityChange:..."
+    void HandleControlMessage(const Connection& from, const std::string& msg);
+private:
     std::shared_ptr<Log> logger = std::make_shared<Log>("Demigod");
-    std::unordered_map<std::string, InterLinkIdentifier> clientToServerMap;
-    std::unordered_set<InterLinkIdentifier> servers;
     bool ShouldShutdown = false;
+
+        InterLinkIdentifier  SelfID;
+
+    // Known partitions this proxy is connected to
+    std::unordered_set<InterLinkIdentifier> partitions;
+
+    // String-ified client IDs connected to this proxy
+    std::unordered_set<std::string> connectedClients;
+
+    // Routing: client identifier string -> authoritative partition ID
+    std::unordered_map<std::string, InterLinkIdentifier> clientToPartitionMap;
 };

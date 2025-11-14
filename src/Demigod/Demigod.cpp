@@ -9,7 +9,10 @@ Demigod::~Demigod() { Shutdown(); }
 void Demigod::Init()
 {
     // 1. Build our identifier based on Docker container name
-    InterLinkIdentifier demigodIdentifier(InterlinkType::eDemigod, DockerIO::Get().GetSelfContainerName());
+    InterLinkIdentifier demigodIdentifier(
+        InterlinkType::eDemigod,
+        DockerIO::Get().GetSelfContainerName());
+
     logger = std::make_shared<Log>(demigodIdentifier.ToString());
 
     logger->DebugFormatted("[Demigod] Initializing as {}", demigodIdentifier.ToString());
@@ -35,18 +38,29 @@ void Demigod::Init()
             }
         });
 
-    std::unordered_map<InterLinkIdentifier, ServerRegistryEntry> InterlinkToServer = ServerRegistry::Get().GetServers();
-    // for now, connect to all servers to test sockets
-    for (auto& server : InterlinkToServer)
-    {
-      if (server.first.Type == InterlinkType::ePartition)
-      {
-        servers.emplace(server.first);
-      }
-    }
+    // 3. Register in ProxyRegistry with internal IP + port
+    //uint16_t listenPort = Type2ListenPort.at(InterlinkType::eDemigod);
+    //IPAddress ip;
+    //ip.Parse(DockerIO::Get().GetSelfContainerIP() + ":" + std::to_string(listenPort));
+    //ProxyRegistry::Get().RegisterSelf(demigodIdentifier, ip);
 
-    logger->Debug("[Demigod] Interlink initialized successfully.");
+    SelfID = demigodIdentifier;
+
+    logger->Debug("[Demigod] Interlink initialized and registered in ProxyRegistry.");
+
+    // Optionally: pre-discover partitions from ServerRegistry
+    std::unordered_map<InterLinkIdentifier, ServerRegistryEntry> serverMap =
+        ServerRegistry::Get().GetServers();
+
+    for (auto& [id, entry] : serverMap)
+    {
+        if (id.Type == InterlinkType::ePartition)
+        {
+            partitions.emplace(id);
+        }
+    }
 }
+
 
 void Demigod::Run()
 {
@@ -76,75 +90,148 @@ bool Demigod::OnAcceptConnection(const Connection& c)
 
 void Demigod::OnConnected(const InterLinkIdentifier& id)
 {
-    logger->DebugFormatted("[Demigod] Connection established with {}", id.ToString());
+    logger->DebugFormatted("[Demigod] Connection established with {}",
+                           id.ToString());
 
-    // You could later dynamically assign clients to specific servers here
-    if (id.Type == InterlinkType::eGameClient)
+    if (id.Type == InterlinkType::ePartition)
     {
-        // Assign to a default GameServer (for now)
-        clientToServerMap[id.ToString()] = *servers.begin();
-        logger->DebugFormatted("[Demigod] Assigned {} to server {}", id.ToString(), (*servers.begin()).ToString());
+        partitions.emplace(id);
+        logger->DebugFormatted("[Demigod] Registered partition {}", id.ToString());
+    }
+    else if (id.Type == InterlinkType::eGameClient)
+    {
+        const std::string clientKey = id.ToString();
+        connectedClients.insert(clientKey);
+
+        // Note: load increment is already done in ProxyRegistry::AssignClientToProxy
+        // called by GameCoordinator. If you want per-connection tracking here, you can:
+        // ProxyRegistry::Get().IncrementClient(SelfID);
+
+        logger->DebugFormatted("[Demigod] Client {} connected", clientKey);
     }
 }
 
-void Demigod::OnMessageReceived(const Connection& from, std::span<const std::byte> data)
+void Demigod::OnMessageReceived(const Connection& from,
+                                std::span<const std::byte> data)
 {
-    // Convert message to string for logging
+    // For now, treat as text for control / debug messages.
     std::string msg(reinterpret_cast<const char*>(data.data()), data.size());
-    logger->DebugFormatted("[Demigod] Message from {} ({}): {}",
+    logger->DebugFormatted("[Demigod] Message from {} (type={}): {}",
                            from.target.ToString(),
-                           boost::describe::enum_to_string(from.target.Type, "Unknown"),
+                           static_cast<int>(from.target.Type),
                            msg);
 
+    // Control messages (e.g., from GOD)
+    if (msg.rfind("AuthorityChange:", 0) == 0)
+    {
+        HandleControlMessage(from, msg);
+        return;
+    }
+
+    // Route data either from clients to partitions or from partitions → clients.
     if (from.target.Type == InterlinkType::eGameClient)
     {
-        ForwardClientToServer(from, data);
+        ForwardClientToPartition(from, data);
     }
-    else if (from.target.Type == InterlinkType::eGameServer)
+    else if (from.target.Type == InterlinkType::ePartition)
     {
-        ForwardServerToClient(from, data);
+        ForwardPartitionToClient(from, data);
     }
     else
     {
-        logger->WarningFormatted("[Demigod] Unknown message origin type {}", (int)from.target.Type);
+        logger->WarningFormatted("[Demigod] Unknown message origin type {}",
+                                 static_cast<int>(from.target.Type));
     }
 }
 
-void Demigod::ForwardClientToServer(const Connection& from, std::span<const std::byte> data)
+void Demigod::HandleControlMessage(const Connection& /*from*/,
+                                   const std::string& msg)
 {
-  logger->ErrorFormatted("[Demigod] ForwardClientToServer {}", from.target.ToString());
+    // Expected format: "AuthorityChange:ClientID PartitionID"
+    const std::string prefix = "AuthorityChange:";
+    if (!msg.starts_with(prefix))
+        return;
 
-    //auto it = clientToServerMap.find(from.target.ToString());
-    //if (it == clientToServerMap.end())
-    //{
-    //    logger->ErrorFormatted("[Demigod] No assigned server for client {}", from.target.ToString());
-    //    return;
-    //}
-//
-    //const InterLinkIdentifier& serverId = it->second;
-    //Interlink::Get().SendMessageRaw(serverId, data, InterlinkMessageSendFlag::eReliableNow);
-    //logger->DebugFormatted("[Demigod] Forwarded {} bytes from client {} to server {}",
-    //                       data.size(), from.target.ToString(), serverId.ToString());
+    std::string rest = msg.substr(prefix.size());
+    // rest = "ClientID PartitionString"
+    auto spacePos = rest.find(' ');
+    if (spacePos == std::string::npos)
+    {
+        logger->ErrorFormatted("[Demigod] Invalid AuthorityChange message: {}", msg);
+        return;
+    }
+
+    std::string clientID   = rest.substr(0, spacePos);
+    std::string partitionS = rest.substr(spacePos + 1);
+
+    auto maybePartition = InterLinkIdentifier::FromString(partitionS);
+    if (!maybePartition.has_value())
+    {
+        logger->ErrorFormatted("[Demigod] Unable to parse partition ID '{}' in AuthorityChange",
+                               partitionS);
+        return;
+    }
+
+    clientToPartitionMap[clientID] = maybePartition.value();
+    logger->DebugFormatted("[Demigod] Updated authority: {} → {}",
+                           clientID, partitionS);
 }
 
-void Demigod::ForwardServerToClient(const Connection& from, std::span<const std::byte> data)
+void Demigod::ForwardClientToPartition(const Connection& from,
+                                       std::span<const std::byte> data)
 {
-  logger->ErrorFormatted("[Demigod] ForwardServerToClient {}", from.target.ToString());
+    const std::string clientKey = from.target.ToString();
 
-    //for (auto& [clientStr, serverId] : clientToServerMap)
-    //{
-    //    if (serverId == from.target)
-    //    {
-    //        auto maybeClient = InterLinkIdentifier::FromString(clientStr);
-    //        if (!maybeClient.has_value())
-    //        {
-    //            logger->ErrorFormatted("[Demigod] Failed to parse client identifier '{}'", clientStr);
-    //            continue;
-    //        }
-//
-    //        Interlink::Get().SendMessageRaw(maybeClient.value(), data, InterlinkMessageSendFlag::eReliableNow);
-    //        logger->DebugFormatted("[Demigod] Forwarded {} bytes from server {} to client {}",
-    //                               data.size(), from.target.ToString(), clientStr);
-    //    }
-    //}
+    auto it = clientToPartitionMap.find(clientKey);
+    if (it == clientToPartitionMap.end())
+    {
+        // No known partition; fallback to a simple heuristic (first partition).
+        if (partitions.empty())
+        {
+            logger->ErrorFormatted("[Demigod] No partitions available to route client {}",
+                                   clientKey);
+            return;
+        }
+
+        const auto& fallbackPartition = *partitions.begin();
+        clientToPartitionMap[clientKey] = fallbackPartition;
+
+        logger->WarningFormatted("[Demigod] No authority mapping for client {}; "
+                                 "assigning fallback partition {}",
+                                 clientKey, fallbackPartition.ToString());
+        Interlink::Get().SendMessageRaw(fallbackPartition, data,
+                                        InterlinkMessageSendFlag::eReliableNow);
+        return;
+    }
+
+    const InterLinkIdentifier& partitionID = it->second;
+    Interlink::Get().SendMessageRaw(partitionID, data,
+                                    InterlinkMessageSendFlag::eReliableNow);
+    logger->DebugFormatted("[Demigod] Forwarded {} bytes from client {} to partition {}",
+                           data.size(), clientKey, partitionID.ToString());
+}
+
+void Demigod::ForwardPartitionToClient(const Connection& from,
+                                       std::span<const std::byte> data)
+{
+    const InterLinkIdentifier& partitionID = from.target;
+
+    for (auto& [clientKey, mappedPartition] : clientToPartitionMap)
+    {
+        if (mappedPartition == partitionID)
+        {
+            auto maybeClient = InterLinkIdentifier::FromString(clientKey);
+            if (!maybeClient.has_value())
+            {
+                logger->ErrorFormatted("[Demigod] Failed to parse client identifier '{}'",
+                                       clientKey);
+                continue;
+            }
+
+            Interlink::Get().SendMessageRaw(maybeClient.value(), data,
+                                            InterlinkMessageSendFlag::eReliableNow);
+            logger->DebugFormatted("[Demigod] Forwarded {} bytes from partition {} to client {}",
+                                   data.size(), partitionID.ToString(), clientKey);
+        }
+    }
 }

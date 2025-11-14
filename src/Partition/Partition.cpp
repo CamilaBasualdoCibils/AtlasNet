@@ -226,6 +226,22 @@ void Partition::MessageArrived(const Connection &fromWhom, std::span<const std::
 			reportedOutliers.erase(entityId);
 			
 			logger->DebugFormatted("REDISTRIBUTION COMPLETE: Successfully fetched entity {} from {}'s outliers", entityId, sourcePartition);
+
+      // Only notify proxies if entity is a player
+      if (it->IsPlayer)
+      {
+          std::string partitionStr = getCurrentPartitionId().ToString();
+          std::string authorityMsg =
+              "AuthorityChange:" + std::to_string(it->ID) + " " + partitionStr;
+
+          for (const auto& proxy : ConnectedProxies)
+          {
+              Interlink::Get().SendMessageRaw(proxy, std::as_bytes(std::span(authorityMsg)));
+              logger->DebugFormatted("PROXY NOTIFY: Player {} moved to {}, sent to proxy {}",
+                                    it->ID, partitionStr, proxy.ToString());
+          }
+      }
+
 		} else {
 			logger->ErrorFormatted("Could not find entity {} in {}'s outliers", entityId, sourcePartition);
 		}

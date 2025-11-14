@@ -11,6 +11,7 @@ struct AtlasEntity
     vec3 Rotation;
     vec3 Scale;
     bool IsSpawned;
+    bool IsPlayer = true;
     //add a to string and from string 
     std::string ToString() const
     {

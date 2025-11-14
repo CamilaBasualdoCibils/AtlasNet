@@ -8,7 +8,7 @@ GameCoordinator::~GameCoordinator() { Shutdown(); }
 
 void GameCoordinator::Init()
 {
-    // 1. Identify as the GameCoordinator container
+    // Identify as the GameCoordinator container
     InterLinkIdentifier coordinatorIdentifier(InterlinkType::eGameCoordinator, DockerIO::Get().GetSelfContainerName());
     logger = std::make_shared<Log>(coordinatorIdentifier.ToString());
 
@@ -68,7 +68,7 @@ void GameCoordinator::OnConnected(const InterLinkIdentifier& id)
 
     if (id.Type == InterlinkType::eGameClient)
     {
-        AssignClientToDemigod(Connection{ .target = id });
+        AssignClientToDemigod(id);
     }
 }
 
@@ -81,38 +81,51 @@ void GameCoordinator::OnMessageReceived(const Connection& from, std::span<const 
         HandleClientMessage(from, msg);
 }
 
-void GameCoordinator::HandleClientMessage(const Connection& from, const std::string& msg)
+void GameCoordinator::HandleClientMessage(const Connection& from,
+                                          const std::string& msg)
 {
-    // Simple forward to assigned Demigod
     auto it = clientToDemigodMap.find(from.target.ToString());
     if (it == clientToDemigodMap.end())
     {
-        logger->WarningFormatted("[Coordinator] No Demigod assigned for client {}, assigning now...", from.target.ToString());
-        AssignClientToDemigod(from);
+        logger->WarningFormatted("[Coordinator] No Demigod assigned for client {}, assigning now...",
+                                 from.target.ToString());
+        AssignClientToDemigod(from.target);
+        it = clientToDemigodMap.find(from.target.ToString());
+        if (it == clientToDemigodMap.end())
+        {
+            logger->ErrorFormatted("[Coordinator] Failed to assign Demigod for client {}",
+                                   from.target.ToString());
+            return;
+        }
     }
 
-    const auto& demigod = clientToDemigodMap[from.target.ToString()];
-    Interlink::Get().SendMessageRaw(demigod, std::as_bytes(std::span(msg)));
-    logger->DebugFormatted("[Coordinator] Forwarded client message '{}' to Demigod {}", msg, demigod.ToString());
+    const auto& demigod = it->second;
+    Interlink::Get().SendMessageRaw(demigod,
+                                    std::as_bytes(std::span(msg)));
+    logger->DebugFormatted("[Coordinator] Forwarded client message '{}' to Demigod {}",
+                           msg, demigod.ToString());
 }
 
-void GameCoordinator::AssignClientToDemigod(const Connection& from)
+void GameCoordinator::AssignClientToDemigod(const InterLinkIdentifier& clientID)
 {
-    const auto& allProxies = ProxyRegistry::Get().GetProxies();
-    if (allProxies.empty())
+    // Ask ProxyRegistry for the least-loaded proxy
+    auto proxyOpt = ProxyRegistry::Get().GetLeastLoadedProxy();
+    if (!proxyOpt.has_value())
     {
         logger->Error("[Coordinator] No proxies registered in ProxyRegistry.");
         return;
     }
 
-    // Simple first-available or round-robin pick
-    const auto& selected = allProxies.begin()->second;
-    clientToDemigodMap[from.target.ToString()] = selected.identifier;
-    logger->DebugFormatted("[Coordinator] Assigned client {} to proxy {} ({})",
-                          from.target.ToString(), selected.identifier.ToString(), selected.address.ToString());
+    const InterLinkIdentifier& proxyID = proxyOpt.value();
 
+    // Record client → proxy relationship globally and locally
+    ProxyRegistry::Get().AssignClientToProxy(clientID.ToString(), proxyID);
+    clientToDemigodMap[clientID.ToString()] = proxyID;
 
-    // Optionally notify the Demigod
-    std::string connectMsg = "NewClient:" + from.target.ToString();
-    Interlink::Get().SendMessageRaw(selected.identifier, std::as_bytes(std::span(connectMsg)));
+    logger->DebugFormatted("[Coordinator] Assigned client {} to proxy {}",
+                           clientID.ToString(), proxyID.ToString());
+
+    // Notify the Demigod about the new client
+    std::string connectMsg = "NewClient:" + clientID.ToString();
+    Interlink::Get().SendMessageRaw(proxyID, std::as_bytes(std::span(connectMsg)));
 }

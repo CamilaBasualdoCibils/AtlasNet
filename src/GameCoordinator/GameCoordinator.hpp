@@ -23,7 +23,7 @@ private:
     void OnMessageReceived(const Connection& from, std::span<const std::byte> data);
 
     void HandleClientMessage(const Connection& from, const std::string& msg);
-    void AssignClientToDemigod(const Connection& from);
+    void AssignClientToDemigod(const InterLinkIdentifier& clientID);
 
 private:
     std::shared_ptr<Log> logger = std::make_shared<Log>("GameCoordinator");
