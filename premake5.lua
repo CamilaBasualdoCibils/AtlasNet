@@ -91,12 +91,18 @@ workspace "GuacNet"
         language "C++"
         files { "srcRun/DatabaseRun.cpp" }
         defines "_PARTITION"
-    project "UnitTests"
+    project "UnitTestsServer"
         dependson "AtlasNetLib"
         links "AtlasNetLib"
         kind "ConsoleApp"
         language "C++"
-        files { "Tests/SampleGame/**.cpp" }
+        files { "Tests/SampleGame/Server/**.cpp" }
+    project "UnitTestsClient"
+        dependson "AtlasNetLib"
+        links "AtlasNetLib"
+        kind "ConsoleApp"
+        language "C++"
+        files { "Tests/SampleGame/Client/**.cpp" }
     project "AtlasUnityBridge"
         kind "SharedLib"
         staticruntime "off"
