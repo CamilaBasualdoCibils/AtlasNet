@@ -34,5 +34,6 @@ private:
 
     std::shared_ptr<Log> logger = std::make_shared<Log>("Demigod");
     std::unordered_map<std::string, InterLinkIdentifier> clientToServerMap;
+    std::unordered_set<InterLinkIdentifier> servers;
     bool ShouldShutdown = false;
 };

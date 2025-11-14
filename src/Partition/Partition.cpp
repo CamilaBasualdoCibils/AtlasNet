@@ -49,6 +49,10 @@ void Partition::Init()
                   ConnectedGameServer = std::make_unique<InterLinkIdentifier>(Connection);
                   logger->DebugFormatted("[Partition] ready to send messages to GameServer: {}", Connection.ToString().c_str());
                 }
+                else if (Connection.Type == InterlinkType::eDemigod)
+                {
+                  ConnectedProxies.emplace(Connection);
+                }
               },
 						  .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data) {Partition::Get().MessageArrived(fromWhom,data);}}});
 
@@ -130,6 +134,23 @@ void Partition::MessageArrived(const Connection &fromWhom, std::span<const std::
                 buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
             }
             Interlink::Get().SendMessageRaw(*ConnectedGameServer, std::span(buffer));
+        }
+
+        // Forward to proxies
+        if (ConnectedProxies.size() > 0)
+        {
+          for (const auto &proxy : ConnectedProxies)
+          {
+            std::vector<std::byte> buffer;
+            buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
+            buffer.push_back(static_cast<std::byte>(header));
+            for (const auto &entity : entities)
+            {
+                const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
+                buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
+            }
+            Interlink::Get().SendMessageRaw(proxy, std::span(buffer));
+          }
         }
 
         return;

@@ -24,6 +24,7 @@ class Partition : public Singleton<Partition>
 	std::atomic_bool ShouldShutdown = false;
   std::vector<AtlasEntity> CachedEntities;
   std::unique_ptr<InterLinkIdentifier> ConnectedGameServer;
+  std::unordered_set<InterLinkIdentifier> ConnectedProxies;
 	// Persistent database connection to avoid connection issues
 	std::unique_ptr<IDatabase> database;
   public:

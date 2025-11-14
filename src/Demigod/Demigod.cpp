@@ -35,6 +35,16 @@ void Demigod::Init()
             }
         });
 
+    std::unordered_map<InterLinkIdentifier, ServerRegistryEntry> InterlinkToServer = ServerRegistry::Get().GetServers();
+    // for now, connect to all servers to test sockets
+    for (auto& server : InterlinkToServer)
+    {
+      if (server.first.Type == InterlinkType::ePartition)
+      {
+        servers.emplace(server.first);
+      }
+    }
+
     logger->Debug("[Demigod] Interlink initialized successfully.");
 }
 
@@ -72,9 +82,8 @@ void Demigod::OnConnected(const InterLinkIdentifier& id)
     if (id.Type == InterlinkType::eGameClient)
     {
         // Assign to a default GameServer (for now)
-        auto target = InterLinkIdentifier::MakeIDGameServer("main");
-        clientToServerMap[id.ToString()] = target;
-        logger->DebugFormatted("[Demigod] Assigned {} to server {}", id.ToString(), target.ToString());
+        clientToServerMap[id.ToString()] = *servers.begin();
+        logger->DebugFormatted("[Demigod] Assigned {} to server {}", id.ToString(), (*servers.begin()).ToString());
     }
 }
 
@@ -103,35 +112,39 @@ void Demigod::OnMessageReceived(const Connection& from, std::span<const std::byt
 
 void Demigod::ForwardClientToServer(const Connection& from, std::span<const std::byte> data)
 {
-    auto it = clientToServerMap.find(from.target.ToString());
-    if (it == clientToServerMap.end())
-    {
-        logger->ErrorFormatted("[Demigod] No assigned server for client {}", from.target.ToString());
-        return;
-    }
+  logger->ErrorFormatted("[Demigod] ForwardClientToServer {}", from.target.ToString());
 
-    const InterLinkIdentifier& serverId = it->second;
-    Interlink::Get().SendMessageRaw(serverId, data, InterlinkMessageSendFlag::eReliableNow);
-    logger->DebugFormatted("[Demigod] Forwarded {} bytes from client {} to server {}",
-                           data.size(), from.target.ToString(), serverId.ToString());
+    //auto it = clientToServerMap.find(from.target.ToString());
+    //if (it == clientToServerMap.end())
+    //{
+    //    logger->ErrorFormatted("[Demigod] No assigned server for client {}", from.target.ToString());
+    //    return;
+    //}
+//
+    //const InterLinkIdentifier& serverId = it->second;
+    //Interlink::Get().SendMessageRaw(serverId, data, InterlinkMessageSendFlag::eReliableNow);
+    //logger->DebugFormatted("[Demigod] Forwarded {} bytes from client {} to server {}",
+    //                       data.size(), from.target.ToString(), serverId.ToString());
 }
 
 void Demigod::ForwardServerToClient(const Connection& from, std::span<const std::byte> data)
 {
-    for (auto& [clientStr, serverId] : clientToServerMap)
-    {
-        if (serverId == from.target)
-        {
-            auto maybeClient = InterLinkIdentifier::FromString(clientStr);
-            if (!maybeClient.has_value())
-            {
-                logger->ErrorFormatted("[Demigod] Failed to parse client identifier '{}'", clientStr);
-                continue;
-            }
+  logger->ErrorFormatted("[Demigod] ForwardServerToClient {}", from.target.ToString());
 
-            Interlink::Get().SendMessageRaw(maybeClient.value(), data, InterlinkMessageSendFlag::eReliableNow);
-            logger->DebugFormatted("[Demigod] Forwarded {} bytes from server {} to client {}",
-                                   data.size(), from.target.ToString(), clientStr);
-        }
-    }
+    //for (auto& [clientStr, serverId] : clientToServerMap)
+    //{
+    //    if (serverId == from.target)
+    //    {
+    //        auto maybeClient = InterLinkIdentifier::FromString(clientStr);
+    //        if (!maybeClient.has_value())
+    //        {
+    //            logger->ErrorFormatted("[Demigod] Failed to parse client identifier '{}'", clientStr);
+    //            continue;
+    //        }
+//
+    //        Interlink::Get().SendMessageRaw(maybeClient.value(), data, InterlinkMessageSendFlag::eReliableNow);
+    //        logger->DebugFormatted("[Demigod] Forwarded {} bytes from server {} to client {}",
+    //                               data.size(), from.target.ToString(), clientStr);
+    //    }
+    //}
 }
