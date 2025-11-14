@@ -12,7 +12,7 @@
   ], // Bind your workspace into the container 
   "mounts": [
     "source=${localWorkspaceFolder},target=/workspace,type=bind",
-    "source=${localEnv:XAUTHORITY},target=/root/.Xauthority,type=bind",
+    "source=${localEnv:XAUTHORITY},target=/root/.Xauthority,type=bind"
     //"source=/var/run/docker.sock,target=/var/run/docker.sock,type=bind"
   ],
   "runArgs": [
