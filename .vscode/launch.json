@@ -13,14 +13,13 @@
       
     },
     {
-      "name": "Debug God Docker",
+      "name": "Debug Sample Game Client",
       "type": "cppdbg",
       "request": "launch",
-      "program": "${workspaceFolder}/bin/DebugDocker/God/God",
+      "program": "${workspaceFolder}/bin/DebugDocker/UnitTestsServer/UnitTestsServer",
       "cwd": "${workspaceFolder}",
       "MIMode": "gdb",
-      "preLaunchTask": "Run God Docker",
-      "miDebuggerServerAddress": "localhost:1234",
+      "preLaunchTask": "make",
       "stopAtEntry": false,
       
       

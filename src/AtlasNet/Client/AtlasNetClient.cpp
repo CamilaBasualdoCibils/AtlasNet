@@ -10,7 +10,7 @@ void AtlasNetClient::Initialize(AtlasNetClient::InitializeProperties& props)
   serverID = God;
   logger->Debug("[AtlasNetClient] Made my & GodID");
   IPAddress GodIP;
-  GodIP.SetIPv4(127,0,0,1,64041);
+  GodIP.SetIPv4(127,0,0,1,32770);
   logger->Debug("[AtlasNetClient] Set God IPv4");
   
   Interlink::Get().Init(
@@ -28,10 +28,12 @@ void AtlasNetClient::Initialize(AtlasNetClient::InitializeProperties& props)
 
 void AtlasNetClient::SendEntityUpdate(const AtlasEntity &entity)
 {
-    Interlink::Get().Tick();
     Interlink::Get().SendMessageRaw(serverID, std::as_bytes(std::span(&entity, 1)));
 }
-
+void AtlasNetClient::Tick()
+{
+    Interlink::Get().Tick();
+}
 int AtlasNetClient::GetRemoteEntities(AtlasEntity *buffer, int maxCount)
 {
     std::lock_guard lock(Mutex);

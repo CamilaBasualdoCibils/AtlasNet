@@ -103,6 +103,8 @@ void Interlink::OnDebugOutput(ESteamNetworkingSocketsDebugOutputType eType, cons
 
 void Interlink::CallbackOnConnecting(SteamCBInfo info)
 {
+    logger->DebugFormatted("On Connecting");
+
   auto &IndiciesBySteamConnection = Connections.get<IndexByHSteamNetConnection>();
   auto ExistingConnection = IndiciesBySteamConnection.find(info->m_hConn);
 
@@ -312,6 +314,7 @@ void Interlink::Init(const InterlinkProperties &Properties)
 
     break;
     case InterlinkType::eGameClient:
+
     break;
     default:
     // Register internal (container) address
@@ -457,6 +460,7 @@ bool Interlink::EstablishConnectionAtIP(const InterLinkIdentifier &id, const IPA
 
 bool Interlink::EstablishConnectionTo(const InterLinkIdentifier &id)
 {
+  ASSERT(MyIdentity.Type != InterlinkType::eGameClient, "Game client must use the ip one");
   // Prevent duplicate attempts
   if (Connections.get<IndexByTarget>().contains(id))
   {

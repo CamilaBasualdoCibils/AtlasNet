@@ -1,8 +1,9 @@
 {
     "TickRatePerSecond": 20,
     "HeuristicMode": "Automatic",
-    "GameServerBinary": "bin/DebugDocker/UnitTests/UnitTests",
+    "GameServerBinary": "bin/DebugDocker/UnitTestsServer/UnitTestsServer",
     "GameCoordinatorBinary": "UnitGameCoordinator",
+    "GameCoordinatorPort" : 44474,
     "Workers--": [
         {
             "Name": "Dumpster",

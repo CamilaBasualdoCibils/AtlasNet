@@ -22,6 +22,7 @@ public:
 public:
     AtlasNetClient() = default;
     void Initialize(InitializeProperties& props);
+    void Tick();
     void SendEntityUpdate(const AtlasEntity &entity);
     int GetRemoteEntities(AtlasEntity *buffer, int maxCount);
     void Shutdown();

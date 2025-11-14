@@ -73,16 +73,16 @@ class Interlink : public Singleton<Interlink>
 
 	InterlinkCallbacks callbacks;
 	PortType ListenPort;
-  
-  
-	const static inline std::unordered_map<InterlinkType, uint32> Type2ListenPort = {{InterlinkType::eGod, _PORT_GOD},
-  {InterlinkType::ePartition, _PORT_PARTITION},
-  {InterlinkType::eGameServer, _PORT_GAMESERVER},
-  {InterlinkType::eGameClient, 25567 } // temp client port
-};
+
+	const static inline std::unordered_map<InterlinkType, uint32> Type2ListenPort = {
+		{InterlinkType::eGod, _PORT_GOD},
+		{InterlinkType::ePartition, _PORT_PARTITION},
+		{InterlinkType::eGameServer, _PORT_GAMESERVER},
+		{InterlinkType::eGameClient, 25567} // temp client port
+	};
 
 public:
-bool EstablishConnectionAtIP(const InterLinkIdentifier &who, const IPAddress &ip);
+	bool EstablishConnectionAtIP(const InterLinkIdentifier &who, const IPAddress &ip);
 
 private:
 	void GenerateNewConnections();
@@ -105,13 +105,14 @@ private:
 
 	bool EstablishConnectionTo(const InterLinkIdentifier &who);
 	void DebugPrint();
-	public:
+
+public:
 	void Init(const InterlinkProperties &properties);
 	void Shutdown();
-	
+
 	void Tick();
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
 
-	void SendMessageRaw(const InterLinkIdentifier& who, std::span<const std::byte> data,InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
+	void SendMessageRaw(const InterLinkIdentifier &who, std::span<const std::byte> data, InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
 	void SendMessage(const InterlinkMessage &message);
 };

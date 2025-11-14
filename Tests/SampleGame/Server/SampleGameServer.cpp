@@ -2,6 +2,7 @@
 #include "AtlasNet/AtlasNet.hpp"
 #include "AtlasNet/Client/AtlasNetClient.hpp"
 #include "AtlasNet/Server/AtlasNetServer.hpp"
+#include "SampleGameServer.hpp"
 /**
  * @brief A simple entity that moves in a circular path.
  */
@@ -58,16 +59,21 @@ bool ShouldShutdown = false;
 /**
  * @brief Main function to run the sample game.
  */
+std::string exePath;
 int main(int argc, char **argv)
 {
+    exePath = argv[0];
+    SampleGameServer s;
+    s.Run();
+    return 0;
+}
+
+void SampleGameServer::Run()
+{
     std::cerr << "SampleGame Starting" << std::endl;
-    for (int i = 0; i < argc; i++)
-    {
-        std::cerr << argv[i] << std::endl;
-    }
     AtlasNetServer::InitializeProperties InitProperties;
     AtlasNetServer::Get().Initialize(InitProperties);
-    InitProperties.ExePath = argv[0];
+    InitProperties.ExePath = exePath;
     InitProperties.OnShutdownRequest = [&](SignalType signal)
     { ShouldShutdown = true; };
 
@@ -78,18 +84,6 @@ int main(int argc, char **argv)
     // Time / loop variables
     using clock = std::chrono::high_resolution_clock;
     auto previous = clock::now();
-
-    std::this_thread::sleep_for(std::chrono::milliseconds(1000));
-
-
-        g_client = std::make_unique<AtlasNetClient>();
-    AtlasNetClient::InitializeProperties props{
-        .ExePath = "./AtlasNetClient.exe",
-        //.ClientName = "SampleGame:" + DockerIO::Get().GetSelfContainerName(),
-        .ClientName = "SampleGameClient",
-        .ServerName = "GodViewServer"
-    };
-    //g_client->Initialize(props);
 
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     while (!ShouldShutdown)
@@ -119,5 +113,4 @@ int main(int argc, char **argv)
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
     }
 
-    return 0;
 }
