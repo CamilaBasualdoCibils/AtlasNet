@@ -16,7 +16,7 @@ enum class InterlinkType
   eDemigod = 6,
   eGameCoordinator = 7
 };
-BOOST_DESCRIBE_ENUM(InterlinkType, eInvalid, ePartition, eGod, eCartograph, eGameClient, eGameServer)
+BOOST_DESCRIBE_ENUM(InterlinkType, eInvalid, ePartition, eGod, eCartograph, eGameClient, eGameServer, eDemigod, eGameCoordinator)
 
 enum class ConnectionState
 {

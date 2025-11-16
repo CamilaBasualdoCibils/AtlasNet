@@ -78,7 +78,9 @@ class Interlink : public Singleton<Interlink>
 		{InterlinkType::eGod, _PORT_GOD},
 		{InterlinkType::ePartition, _PORT_PARTITION},
 		{InterlinkType::eGameServer, _PORT_GAMESERVER},
-		{InterlinkType::eGameClient, 25567} // temp client port
+    {InterlinkType::eGameCoordinator, _PORT_GAMECOORDINATOR},
+    {InterlinkType::eDemigod, _PORT_DEMIGOD},
+		{InterlinkType::eGameClient, 25569} // temp client port
 	};
 
 public:

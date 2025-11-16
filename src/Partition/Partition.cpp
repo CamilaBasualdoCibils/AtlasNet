@@ -51,7 +51,9 @@ void Partition::Init()
                 }
                 else if (Connection.Type == InterlinkType::eDemigod)
                 {
-                  ConnectedProxies.emplace(Connection);
+                  ConnectedProxies.insert(Connection);
+                  logger->DebugFormatted("[Partition] ready to send messages to Proxy: {}", Connection.ToString().c_str());
+                  logger->DebugFormatted("[Partition] Proxy count: {}", ConnectedProxies.size());
                 }
               },
 						  .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data) {Partition::Get().MessageArrived(fromWhom,data);}}});
@@ -81,80 +83,77 @@ void Partition::Init()
 
 void Partition::MessageArrived(const Connection &fromWhom, std::span<const std::byte> data)
 {
-    AtlasNetMessageHeader header = AtlasNetMessageHeader::Null;
-    std::vector<AtlasEntity> entities;
-
-    // ------------------------------------------------------------------------
-    // Check if this message is a valid entity packet 
-    // NOTE: should cache as unordered_map or set using entity IDs instead
-    // ------------------------------------------------------------------------
-    if (ParseEntityPacket(data, header, entities))
+  AtlasNetMessageHeader header = AtlasNetMessageHeader::Null;
+  std::vector<AtlasEntity> entities;
+  // ------------------------------------------------------------------------
+  // Check if this message is a valid entity packet 
+  // NOTE: should cache as unordered_map or set using entity IDs instead
+  // ------------------------------------------------------------------------
+  if (ParseEntityPacket(data, header, entities))
+  {
+    logger->DebugFormatted("[Partition] Received {} entities from {} with header {}",
+                            entities.size(), fromWhom.target.ToString(), static_cast<int>(header));
+    
+      // if we need to each entity separately
+      //std::vector<std::byte> buffer;
+      //buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
+      //buffer.push_back(static_cast<std::byte>(header));
+      //for (const auto &entity : entities)
+      //{
+      //    const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
+      //    buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
+      //}
+    
+    // Cache entities
+    switch (header)
     {
-        logger->DebugFormatted("[Partition] Received {} entities from {} with header {}",
-                               entities.size(), fromWhom.target.ToString(), static_cast<int>(header));
-        // Cache entities
-        switch (header)
-        {
-            case AtlasNetMessageHeader::EntityUpdate:
-            {
-                CachedEntities = entities;
-                return;
-              }
-              case AtlasNetMessageHeader::EntityIncoming:
-              {
-                for (const auto &entity : entities)
-                    CachedEntities.push_back(entity);
-                break;
-              }              
-              case AtlasNetMessageHeader::EntityOutgoing:
-              {
-                for (const auto &entity : entities)
-                {
-                    CachedEntities.erase(
-                        std::remove_if(CachedEntities.begin(), CachedEntities.end(),
-                        [&](const AtlasEntity &e) { return e.ID == entity.ID; }),
-                        CachedEntities.end());
-                }
-                break;
-              }
-              default:
-                logger->WarningFormatted("[Partition] Unknown header {}", static_cast<int>(header));
-              break;
-            }
-            
-        // Forward to GameServer
-        if (ConnectedGameServer != nullptr)
-        {
-            std::vector<std::byte> buffer;
-            buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
-            buffer.push_back(static_cast<std::byte>(header));
-            for (const auto &entity : entities)
-            {
-                const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
-                buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
-            }
-            Interlink::Get().SendMessageRaw(*ConnectedGameServer, std::span(buffer));
-        }
-
+      case AtlasNetMessageHeader::EntityUpdate:
+      {
+        CachedEntities = entities;
         // Forward to proxies
-        if (ConnectedProxies.size() > 0)
+        logger->Debug("[Partition] Proxy");
+        for (const auto &proxy : ConnectedProxies)
         {
-          for (const auto &proxy : ConnectedProxies)
-          {
-            std::vector<std::byte> buffer;
-            buffer.reserve(1 + entities.size() * sizeof(AtlasEntity));
-            buffer.push_back(static_cast<std::byte>(header));
-            for (const auto &entity : entities)
-            {
-                const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
-                buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
-            }
-            Interlink::Get().SendMessageRaw(proxy, std::span(buffer));
-          }
+          Interlink::Get().SendMessageRaw(proxy, data);
         }
-
         return;
+      }
+      case AtlasNetMessageHeader::EntityIncoming:
+      {
+        for (const auto &entity : entities)
+          CachedEntities.push_back(entity);
+        break;
+      }              
+      case AtlasNetMessageHeader::EntityOutgoing:
+      {
+        for (const auto &entity : entities)
+        {
+          CachedEntities.erase(
+              std::remove_if(CachedEntities.begin(), CachedEntities.end(),
+              [&](const AtlasEntity &e) { return e.ID == entity.ID; }),
+              CachedEntities.end());
+        }
+        break;
+      }
+      default:
+        logger->WarningFormatted("[Partition] Unknown header {}", static_cast<int>(header));
+      break;
     }
+      
+    // Forward to proxies
+    for (const auto &proxy : ConnectedProxies)
+    {
+      Interlink::Get().SendMessageRaw(proxy, data);
+    }
+
+    // Forward to GameServer
+    if (ConnectedGameServer != nullptr)
+    {
+      Interlink::Get().SendMessageRaw(*ConnectedGameServer, data);
+    }
+
+    return;
+  }
 
 	std::string msg(reinterpret_cast<const char*>(std::data(data)), std::size(data));
 	

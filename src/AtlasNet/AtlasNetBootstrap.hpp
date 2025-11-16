@@ -16,6 +16,8 @@ public:
     const std::string PartitionImageName = "partition-image";
     const std::string PartitionServiceName = "partition-service";
     const std::string DatabaseImageName = "database-image";
+    const std::string GameCoordinatorImageName = "gamecoordinator-image";
+    const std::string DemigodImageName = "demigod-image";
     const std::string NetworkName = "AtlasNet";
     const std::string BuildConfig = "DebugDocker";
     const std::vector<std::string> RequiredPackages = {"git", "tini", "gdbserver", "redis-server",
@@ -111,10 +113,14 @@ private:
     void CreateGodImage();
     void CreatePartitionImage();
     void CreateDatabaseImage();
+    void CreateGameCoordinatorImage();
+    void CreateDemigodImage();
     bool BuildDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches);
     void QueueDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches);
     void RunGod();
     void RunDatabase();
+    void RunGameCoordinator();
+    void RunDemigod();
     void SetupSwarm();
     void SetupNetwork();
     void ParallelBuild();

@@ -3,12 +3,8 @@
 
 int main()
 {
-    if (!GameCoordinator::Get().Init())
-    {
-        std::cerr << "[Main] Failed to initialize GameCoordinator!" << std::endl;
-        return -1;
-    }
-
+    std::this_thread::sleep_for(std::chrono::seconds(11));
+    GameCoordinator::Get().Init();
     GameCoordinator::Get().Run();
     return 0;
 }

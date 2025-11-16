@@ -292,15 +292,15 @@ void Interlink::Init(const InterlinkProperties &Properties)
 
   // Identity setup (unchanged)
   const auto IdentityByteStream = MyIdentity.ToEncodedByteStream();
-  logger->DebugFormatted("Settings Networking Identity");
+  logger->Debug("Settings Networking Identity");
   SteamNetworkingIdentity identity;
   const bool SetIdentity = identity.SetGenericBytes(IdentityByteStream.data(), IdentityByteStream.size());
   ASSERT(SetIdentity, "Failed Identity set");
   networkInterface->ResetIdentity(&identity);
-
   // Create poll group
   PollGroup = networkInterface->CreatePollGroup();
 
+  
   IPAddress ipAddress;
   switch (MyIdentity.Type)
   {
@@ -327,6 +327,8 @@ void Interlink::Init(const InterlinkProperties &Properties)
     OpenListenSocket(ListenPort);
     break;
   }
+
+  logger->Debug("Registered local");
 
   // Register public address (host ip:published port), if available
   if (DockerIO::Get().GetSelfExposedPorts().empty() == false)
@@ -374,6 +376,8 @@ void Interlink::Init(const InterlinkProperties &Properties)
                            ListenPort, MyIdentity.ToString());
   }
 
+  logger->Debug("Registered public");
+
   // Existing post-init behavior (unchanged)
   switch (MyIdentity.Type)
   {
@@ -396,6 +400,32 @@ void Interlink::Init(const InterlinkProperties &Properties)
   case InterlinkType::ePartition:
   {
     EstablishConnectionTo(InterLinkIdentifier::MakeIDGod());
+  }
+  break;
+
+  case InterlinkType::eDemigod:
+  {
+    // connect with everything for now to test
+    std::unordered_map<InterLinkIdentifier, ServerRegistryEntry> serverMap =
+        ServerRegistry::Get().GetServers();
+
+    for (auto& server : serverMap)
+    {
+      if (server.first.Type != InterlinkType::eGameServer)
+        EstablishConnectionTo(server.first);
+    }
+  }
+  break;
+
+  case InterlinkType::eGameCoordinator:
+  {
+    std::unordered_map<InterLinkIdentifier, ProxyRegistry::ProxyRegistryEntry> proxyMap =
+        ProxyRegistry::Get().GetProxies();
+
+    for (auto& proxy : proxyMap)
+    {
+        EstablishConnectionTo(proxy.first);
+    }
   }
   break;
 
@@ -508,9 +538,39 @@ bool Interlink::EstablishConnectionTo(const InterLinkIdentifier &id)
     logger->DebugFormatted("Establishing internal connection to {}", id.ToString());
     return true;
   }
+  // ---------------------------------------------------------------
+  // INTERNAL: must exist in ProxyRegistry
+  // ---------------------------------------------------------------
+  if (id.Type == InterlinkType::eDemigod)
+  {
+    auto IP = ProxyRegistry::Get().GetIPOfID(id);
+
+    for (int i = 0; i < 5 && !IP.has_value(); i++)
+    {
+      logger->ErrorFormatted("IP not found for {} in ProxyRegistry Registry. Trying again in 1 second", id.ToString());
+      std::this_thread::sleep_for(std::chrono::seconds(1));
+      IP = ProxyRegistry::Get().GetIPOfID(id);
+    }
+
+    if (!IP.has_value())
+    {
+      logger->ErrorFormatted("Failed to establish connection after 5 tries. IP not found in ProxyRegistry Registry {}", id.ToString());
+      return false; // no assert crash, just graceful fail
+    }
+
+    Connection conn;
+    conn.address = IP.value();
+    conn.target = id;
+    conn.kind = ConnectionKind::eInternal;
+    conn.SetNewState(ConnectionState::ePreConnecting);
+    Connections.insert(conn);
+
+    logger->DebugFormatted("Establishing internal connection to {}", id.ToString());
+    return true;
+  }
 
   // ---------------------------------------------------------------
-  // EXTERNAL: skip registry (client connecting to God, etc.)
+  // EXTERNAL: skip registry (for now, nothing directly connects to clients)
   // ---------------------------------------------------------------
   if (id.Type == InterlinkType::eGameClient)
   {

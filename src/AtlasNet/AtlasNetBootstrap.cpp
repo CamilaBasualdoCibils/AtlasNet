@@ -70,9 +70,13 @@ void AtlasNetBootstrap::Run()
     CreateGodImage();
     CreatePartitionImage();
     CreateDatabaseImage();
+    CreateGameCoordinatorImage();
+    CreateDemigodImage();
     RunDatabase();
     SetupPartitionService();
     RunGod();
+    RunGameCoordinator();
+    RunDemigod();
 }
 
 std::string AtlasNetBootstrap::MacroParse(std::string input, std::unordered_map<std::string, std::string> macros)
@@ -296,6 +300,62 @@ void AtlasNetBootstrap::CreateDatabaseImage()
     OutputDockerFile("Database/Dockerfile", DockerFileContents);
     BuildDockerImage("Database/Dockerfile", DatabaseImageName, AtlasNet::Get().GetSettings().RuntimeArches);
 }
+
+void AtlasNetBootstrap::CreateGameCoordinatorImage()
+{
+    CreateLaunchJson("GameCoordinator/launch.json", { "GameCoordinator" });
+
+    std::string dockerfile =
+        DockerImageBase + BuildBinariesInstructions + EntryPointString;
+
+    std::string packages;
+    for (const auto& pkg : RequiredPackages)
+        packages += pkg + " ";
+
+    dockerfile = MacroParse(dockerfile, {
+        { "OS_VERSION", OS_Version },
+        { "ENTRYPOINT_CMD", "\"bin/" + BuildConfig + "/GameCoordinator/GameCoordinator\"" },
+        { "BUILD_CONFIG", ToLower(BuildConfig) },
+        { "WORKDIR", WorkDir },
+        { "DEV_PACKAGES", packages },
+        { "PROJ_TO_BUILD", "GameCoordinator" },
+        { "EXECUTABLE", "GameCoordinator" }
+    });
+
+    OutputDockerFile("GameCoordinator/Dockerfile", dockerfile);
+    BuildDockerImage("GameCoordinator/Dockerfile",
+                     GameCoordinatorImageName,
+                     AtlasNet::Get().GetSettings().RuntimeArches);
+}
+
+void AtlasNetBootstrap::CreateDemigodImage()
+{
+    CreateLaunchJson("Demigod/launch.json", { "Demigod" });
+
+    std::string dockerfile =
+        DockerImageBase + BuildBinariesInstructions + EntryPointString;
+
+    std::string packages;
+    for (const auto& pkg : RequiredPackages)
+        packages += pkg + " ";
+
+    dockerfile = MacroParse(dockerfile, {
+        { "OS_VERSION", OS_Version },
+        { "ENTRYPOINT_CMD", "\"bin/" + BuildConfig + "/Demigod/Demigod\"" },
+        { "BUILD_CONFIG", ToLower(BuildConfig) },
+        { "WORKDIR", WorkDir },
+        { "DEV_PACKAGES", packages },
+        { "PROJ_TO_BUILD", "Demigod" },
+        { "EXECUTABLE", "Demigod" }
+    });
+
+    OutputDockerFile("Demigod/Dockerfile", dockerfile);
+    BuildDockerImage("Demigod/Dockerfile",
+                     DemigodImageName,
+                     AtlasNet::Get().GetSettings().RuntimeArches);
+}
+
+
 bool AtlasNetBootstrap::BuildDockerImage(const std::string &DockerFile, const std::string &ImageName, const std::unordered_set<std::string> &arches)
 {
     const std::string registry = ManagerPcAdvertiseAddr + ":5000";
@@ -467,6 +527,39 @@ void AtlasNetBootstrap::RunDatabase()
     // Start it
     system("docker start Database");
 }
+
+void AtlasNetBootstrap::RunGameCoordinator()
+{
+    system("docker rm -f GameCoordinator");
+
+    std::string image =
+        RunningLocally ? GameCoordinatorImageName :
+        ManagerPcAdvertiseAddr + ":5000/" + GameCoordinatorImageName;
+
+    std::string cmd =
+        "docker run --init --network " + NetworkName +
+        " -v /var/run/docker.sock:/var/run/docker.sock --name GameCoordinator -d " +
+        image;
+
+    system(cmd.c_str());
+}
+
+void AtlasNetBootstrap::RunDemigod()
+{
+    system("docker rm -f Demigod");
+
+    std::string image =
+        RunningLocally ? DemigodImageName :
+        ManagerPcAdvertiseAddr + ":5000/" + DemigodImageName;
+
+    std::string cmd =
+        "docker run --init --network " + NetworkName +
+        " -v /var/run/docker.sock:/var/run/docker.sock --name Demigod -d " +
+        image;
+
+    system(cmd.c_str());
+}
+
 
 #include <ifaddrs.h>
 #include <arpa/inet.h>

@@ -122,7 +122,9 @@
     "C_Cpp.default.defines": [
         "_PORT_GOD",
         "_PORT_GAMESERVER",
-        "_PORT_PARTITION"
+        "_PORT_PARTITION",
+        "_PORT_GAMECOORDINATOR",
+        "_PORT_DEMIGOD"
     ],
     "transparent-win.transparency": 0.9,
     "workbench.colorTheme": "Default Dark Modern",

@@ -56,6 +56,7 @@ void Demigod::Init()
     {
         if (id.Type == InterlinkType::ePartition)
         {
+            logger->DebugFormatted("[Demigod] {}", id.ID);
             partitions.emplace(id);
         }
     }
