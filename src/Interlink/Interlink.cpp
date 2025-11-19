@@ -103,7 +103,7 @@ void Interlink::OnDebugOutput(ESteamNetworkingSocketsDebugOutputType eType, cons
 
 void Interlink::CallbackOnConnecting(SteamCBInfo info)
 {
-    logger->DebugFormatted("On Connecting");
+  logger->DebugFormatted("On Connecting");
 
   auto &IndiciesBySteamConnection = Connections.get<IndexByHSteamNetConnection>();
   auto ExistingConnection = IndiciesBySteamConnection.find(info->m_hConn);
@@ -113,9 +113,13 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
     IndiciesBySteamConnection.modify(
         ExistingConnection, [](Connection &c)
         { c.SetNewState(ConnectionState::eConnecting); });
-    logger->DebugFormatted("Existing connection started by me transitioning to CONNECTING state");
+    logger->DebugFormatted("Existing connection to ({}) started by me transitioning to CONNECTING state",ExistingConnection->target.ToString());
     return;
   }
+
+
+  /* ADD CHECK TO CHECK IF THE GIVEN NETWORKING IDENTITY ALREADY EXISTS IN THE CONNECTIONS MAP.
+  IMPLYING THAT THE SAME TARGET TRIED TO CONNECT MULTIPLE TIMES IN A ROW. CAUSES A CRASH*/
 
   // ----- New incoming connection path (could be internal or external) -----
   IPAddress address(info->m_info.m_addrRemote);
@@ -204,6 +208,15 @@ void Interlink::CallbackOnConnected(SteamCBInfo info)
   }
   else
   {
+    IPAddress address(info->m_info.m_addrRemote);
+    logger->ErrorFormatted("FUcking idiot. connection not stored internally. {}", address.ToString(true));
+    int identityByteStreamSize = 0;
+    const std::byte *identityByteStream =
+        (const std::byte *)info->m_info.m_identityRemote.GetGenericBytes(identityByteStreamSize);
+    if (identityByteStream)
+    {
+      logger->ErrorFormatted("fucking idoit #2. Identity of remote {}", InterLinkIdentifier::FromEncodedByteStream(identityByteStream, identityByteStreamSize)->ToString());
+    }
     ASSERT(false, "Connected? to non existent connection?, HSteamNetConnection was not found");
   }
 }
@@ -300,23 +313,23 @@ void Interlink::Init(const InterlinkProperties &Properties)
   // Create poll group
   PollGroup = networkInterface->CreatePollGroup();
 
-  
   IPAddress ipAddress;
   switch (MyIdentity.Type)
   {
-    case InterlinkType::eDemigod:
-        // Register Demigod in ProxyRegistry
+  case InterlinkType::eDemigod:
+    // Register Demigod in ProxyRegistry
     ListenPort = Type2ListenPort.at(MyIdentity.Type);
     ipAddress.Parse(DockerIO::Get().GetSelfContainerIP() + ":" + std::to_string(ListenPort));
     ProxyRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
+    ServerRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
     OpenListenSocket(ListenPort);
     logger->DebugFormatted("[Interlink]Registered in ProxyRegistry as {}:{}", MyIdentity.ToString(), ipAddress.ToString());
 
     break;
-    case InterlinkType::eGameClient:
+  case InterlinkType::eGameClient:
 
     break;
-    default:
+  default:
     // Register internal (container) address
     IPAddress ipAddress;
     ListenPort = Type2ListenPort.at(MyIdentity.Type);
@@ -409,23 +422,27 @@ void Interlink::Init(const InterlinkProperties &Properties)
     std::unordered_map<InterLinkIdentifier, ServerRegistryEntry> serverMap =
         ServerRegistry::Get().GetServers();
 
-    for (auto& server : serverMap)
+    for (auto &server : serverMap)
     {
-      if (server.first.Type != InterlinkType::eGameServer)
-        EstablishConnectionTo(server.first);
+      if (server.first.Type == InterlinkType::ePartition || 
+        server.first.Type == InterlinkType::eGod || 
+        server.first.Type == InterlinkType::eGameCoordinator)
+        {
+          EstablishConnectionTo(server.first);
+        }
     }
   }
   break;
 
   case InterlinkType::eGameCoordinator:
   {
-    std::unordered_map<InterLinkIdentifier, ProxyRegistry::ProxyRegistryEntry> proxyMap =
-        ProxyRegistry::Get().GetProxies();
-
-    for (auto& proxy : proxyMap)
-    {
-        EstablishConnectionTo(proxy.first);
-    }
+    //std::unordered_map<InterLinkIdentifier, ProxyRegistry::ProxyRegistryEntry> proxyMap =
+    //    ProxyRegistry::Get().GetProxies();
+//
+    //for (auto &proxy : proxyMap)
+    //{
+    //  EstablishConnectionTo(proxy.first);
+    //}
   }
   break;
 
@@ -511,7 +528,8 @@ bool Interlink::EstablishConnectionTo(const InterLinkIdentifier &id)
   // ---------------------------------------------------------------
   if (id.Type == InterlinkType::eGod ||
       id.Type == InterlinkType::ePartition ||
-      id.Type == InterlinkType::eGameServer)
+      id.Type == InterlinkType::eGameServer ||
+      id.Type == InterlinkType::eGameCoordinator)
   {
     auto IP = ServerRegistry::Get().GetIPOfID(id);
 

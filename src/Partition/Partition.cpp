@@ -114,6 +114,7 @@ void Partition::MessageArrived(const Connection &fromWhom, std::span<const std::
 			logger->Debug("[Partition] Proxy");
         for (const auto &proxy : ConnectedProxies)
         {
+          logger->Debug("[Partition] forwarded to proxy");
           Interlink::Get().SendMessageRaw(proxy, data);
         }
 			return;
