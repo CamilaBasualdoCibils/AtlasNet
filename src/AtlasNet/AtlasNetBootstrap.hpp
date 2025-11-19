@@ -15,6 +15,7 @@ public:
     const std::string GodImageName = "god-image";
     const std::string PartitionImageName = "partition-image";
     const std::string PartitionServiceName = "partition-service";
+    const std::string DemigodServiceName = "demigod-service";
     const std::string DatabaseImageName = "database-image";
     const std::string GameCoordinatorImageName = "gamecoordinator-image";
     const std::string DemigodImageName = "demigod-image";
@@ -121,6 +122,7 @@ private:
     void RunDatabase();
     void RunGameCoordinator();
     void RunDemigod();
+    void SetupDemigodService();
     void SetupSwarm();
     void SetupNetwork();
     void ParallelBuild();

@@ -76,7 +76,8 @@ void AtlasNetBootstrap::Run()
     SetupPartitionService();
     RunGod();
     RunGameCoordinator();
-    RunDemigod();
+    SetupDemigodService();
+    //RunDemigod();
 }
 
 std::string AtlasNetBootstrap::MacroParse(std::string input, std::unordered_map<std::string, std::string> macros)
@@ -955,6 +956,49 @@ void AtlasNetBootstrap::SetupPartitionService()
     else
         logger.DebugFormatted("Docker Swarm started with service 'partition' (0 replicas).");
 }
+
+void AtlasNetBootstrap::SetupDemigodService()
+{
+    const std::string registry = ManagerPcAdvertiseAddr + ":5000";
+
+    logger.Debug("Cleaning up existing demigod services");
+
+    std::string RemoveCmd =
+        std::string("docker service rm ") + DemigodServiceName + " > /dev/null 2>&1";
+    system(RemoveCmd.c_str());
+
+    // Determine correct image reference
+    std::string imageTag = RunningLocally ?
+        DemigodImageName :
+        std::format("{}/{}:latest", registry, DemigodImageName);
+
+    logger.DebugFormatted("Creating demigod service from image '{}'", imageTag);
+
+    // Publish a random port, same logic as God uses
+    //      -p :<port> publishes on a RANDOM ephemeral host port
+    //        Docker Swarm will pick the host port
+    std::string ServiceCmd =
+        "docker service create "
+        "--name " + DemigodServiceName + " "
+        "--network " + NetworkName + " "
+        "--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock "
+        "--replicas 2 "
+        "--publish published=0,target=" + std::to_string(_PORT_DEMIGOD) + ",mode=ingress "
+        "--detach=true "
+        + imageTag;
+
+    int result = system(ServiceCmd.c_str());
+    if (result != 0)
+    {
+        logger.ErrorFormatted("Failed to create demigod service. Error code {}", result);
+    }
+    else
+    {
+        logger.DebugFormatted("Docker Swarm started demigod service '{}' (0 replicas).",
+                              DemigodServiceName);
+    }
+}
+
 
 void AtlasNetBootstrap::GenerateTSLCertificate()
 {
