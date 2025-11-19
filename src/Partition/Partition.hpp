@@ -28,7 +28,6 @@ class Partition : public Singleton<Partition>
 {
 	std::shared_ptr<Log> logger = std::make_shared<Log>("Partition");
 	std::atomic_bool ShouldShutdown = false;
-  std::vector<AtlasEntity> CachedEntities;
   std::unique_ptr<InterLinkIdentifier> ConnectedGameServer;
 	// Persistent database connection to avoid connection issues
 	std::unique_ptr<IDatabase> database;

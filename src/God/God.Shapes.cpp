@@ -8,6 +8,20 @@
 #include "Utils/GeometryUtils.hpp"
 #include "Interlink/InterlinkEnums.hpp"
 #include "Interlink/Connection.hpp"
+#include "AtlasNet/AtlasNet.hpp"
+void God::sendHeaderBasedMessage(const std::string& message, AtlasNetMessageHeader header, const std::string& partitionId, InterlinkMessageSendFlag sendFlag)
+{
+  std::vector<std::byte> buffer;
+  buffer.reserve(1 + message.size());
+
+  buffer.push_back(static_cast<std::byte>(header));
+  const std::byte *ptr = reinterpret_cast<const std::byte *>(message.data());
+  buffer.insert(buffer.end(), ptr, ptr + message.size());
+
+  InterLinkIdentifier targetId = InterLinkIdentifier::MakeIDPartition(
+    partitionId.substr(partitionId.find(' ') + 1));
+  Interlink::Get().SendMessageRaw(targetId, std::span(buffer), sendFlag);
+}
 
 std::vector<InterLinkIdentifier> God::getPartitionServerIds() const
 {
@@ -108,19 +122,13 @@ void God::RedistributeOutliersToPartitions()
           logger->ErrorFormatted("DATABASE: Failed to store entity {} in {} outliers in database", 
             entity.ID, targetPartition);
         }
-
-        // Tell target partition to fetch the entity
-        std::string fetchMsg = "FetchOutlierEntity:" + sourcePartition + ":" + std::to_string(entity.ID);
-        InterLinkIdentifier targetId = InterLinkIdentifier::MakeIDPartition(
-          targetPartition.substr(targetPartition.find(' ') + 1));
-        Interlink::Get().SendMessageRaw(targetId, std::as_bytes(std::span(fetchMsg)));
-        
+        // Send entity fetch message to target partition using header-based messaging
+        std::string fetchMsg = sourcePartition + ":" + std::to_string(entityToStore.ID);
+        sendHeaderBasedMessage(fetchMsg, AtlasNetMessageHeader::EntityIncoming, targetPartition);
         // Tell source partition to remove the entity from its managed entities
-        std::string removeMsg = "RemoveEntity:" + std::to_string(entity.ID);
-        InterLinkIdentifier sourceId = InterLinkIdentifier::MakeIDPartition(
-          sourcePartition.substr(sourcePartition.find(' ') + 1));
-        Interlink::Get().SendMessageRaw(sourceId, std::as_bytes(std::span(removeMsg)));
-        
+        std::string removeMsg = std::to_string(entity.ID);
+        sendHeaderBasedMessage(removeMsg, AtlasNetMessageHeader::EntityOutgoing, sourcePartition);
+
         logger->DebugFormatted("NOTIFICATION: Sent fetch message for entity {} to target partition {}", 
           entity.ID, targetPartition);
         logger->DebugFormatted("NOTIFICATION: Sent remove message for entity {} to source partition {}", 
@@ -287,11 +295,9 @@ void God::notifyPartitionsToFetchShapes()
     std::string partitionKey = id.ToString();
     PartitionEntityManifest::ClearPartition(cache.get(), partitionKey);
     
-    // Send grid cell shape fetch message (more efficient than triangle-based shapes)
-    std::string Fetch = "Fetch Grid Shape";
-    InterLinkIdentifier targetId = InterLinkIdentifier::MakeIDPartition(containerName);
-    logger->DebugFormatted("Sending grid shape notify to partition {} which was assigned a shape", targetId.ToString());
-    Interlink::Get().SendMessageRaw(targetId, std::as_bytes(std::span(Fetch)));
+    // Send grid cell shape fetch message using header-based messaging
+    logger->DebugFormatted("Sending grid shape notify to partition {} which was assigned a shape", partitionKey);
+    sendHeaderBasedMessage("", AtlasNetMessageHeader::FetchGridShape, partitionKey);
   }
 }
 
@@ -476,15 +482,10 @@ void God::processOutliersWithGridCells()
         }
         
         // Notify partitions
-        std::string fetchMsg = "FetchOutlierEntity:" + partitionKey + ":" + std::to_string(entity.ID);
-        InterLinkIdentifier targetId = InterLinkIdentifier::MakeIDPartition(
-          targetPartition.substr(targetPartition.find(' ') + 1));
-        Interlink::Get().SendMessageRaw(targetId, std::as_bytes(std::span(fetchMsg)));
-        
-        std::string removeMsg = "RemoveEntity:" + std::to_string(entity.ID);
-        InterLinkIdentifier sourceId = InterLinkIdentifier::MakeIDPartition(
-          partitionKey.substr(partitionKey.find(' ') + 1));
-        Interlink::Get().SendMessageRaw(sourceId, std::as_bytes(std::span(removeMsg)));
+        std::string fetchMsg = partitionKey + ":" + std::to_string(entity.ID);
+        sendHeaderBasedMessage(fetchMsg, AtlasNetMessageHeader::EntityIncoming, targetPartition);
+        std::string removeMsg = std::to_string(entity.ID);
+        sendHeaderBasedMessage(removeMsg, AtlasNetMessageHeader::EntityOutgoing, partitionKey);
         
         logger->DebugFormatted("GRID CELL NOTIFICATION: Sent messages for entity {} redistribution", entity.ID);
         
@@ -564,10 +565,9 @@ void God::redistributeEntityToCorrectPartition(const AtlasEntity& entity, const 
       }
       
       // Tell target partition to fetch the entity
-      std::string fetchMsg = "FetchOutlierEntity:" + sourcePartition + ":" + std::to_string(entity.ID);
-      InterLinkIdentifier targetId = InterLinkIdentifier::MakeIDPartition(
-        targetPartition.substr(targetPartition.find(' ') + 1));
-      Interlink::Get().SendMessageRaw(targetId, std::as_bytes(std::span(fetchMsg)));
+      //switch this over using header based messaging
+      std::string fetchMsg = sourcePartition + ":" + std::to_string(entity.ID);
+      sendHeaderBasedMessage(fetchMsg, AtlasNetMessageHeader::EntityIncoming, targetPartition);
       
       logger->DebugFormatted("REDISTRIBUTION NOTIFICATION: Sent fetch message for entity {} to target partition {}", 
         entity.ID, targetPartition);

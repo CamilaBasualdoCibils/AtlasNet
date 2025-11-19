@@ -7,6 +7,7 @@
 #include "Heuristic/Heuristic.hpp"
 #include "Database/RedisCacheDatabase.hpp"
 #include "AtlasNet/AtlasEntity.hpp"
+#include "AtlasNet/AtlasNet.hpp"
 class God : public Singleton<God>
 {
 public:
@@ -117,6 +118,7 @@ public:
         // Helpers to improve readability and reuse
         std::vector<InterLinkIdentifier> getPartitionServerIds() const;
         std::optional<std::string> findPartitionForPoint(const vec2& point) const;
+        void sendHeaderBasedMessage(const std::string& message, AtlasNetMessageHeader header, const std::string& partitionId, InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableNow);
     /**
      * @brief Retrieves a set of all active partition IDs.
      */
