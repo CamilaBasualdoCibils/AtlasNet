@@ -76,33 +76,6 @@ namespace GeometryUtils
         return p.x >= minBound && p.x <= maxBound && p.y >= minBound && p.y <= maxBound;
     }
 
-    /**
-     * @brief Calculate bounding box for a set of triangles
-     * @param triangles Vector of triangles
-     * @return Pair of (min, max) bounds
-     */
-    inline std::pair<vec2, vec2> CalculateBoundingBox(const std::vector<Triangle>& triangles)
-    {
-        if (triangles.empty()) {
-            return {vec2{0, 0}, vec2{0, 0}};
-        }
-
-        float minX = std::numeric_limits<float>::infinity();
-        float minY = std::numeric_limits<float>::infinity();
-        float maxX = -std::numeric_limits<float>::infinity();
-        float maxY = -std::numeric_limits<float>::infinity();
-
-        for (const auto& triangle : triangles) {
-            for (const auto& vertex : triangle) {
-                minX = std::min(minX, vertex.x);
-                minY = std::min(minY, vertex.y);
-                maxX = std::max(maxX, vertex.x);
-                maxY = std::max(maxY, vertex.y);
-            }
-        }
-
-        return {vec2{minX, minY}, vec2{maxX, maxY}};
-    }
 }
 
 #endif // GEOMETRY_UTILS_HPP

@@ -22,11 +22,12 @@ class Partition : public Singleton<Partition>
 {
 	std::shared_ptr<Log> logger = std::make_shared<Log>("Partition");
 	std::atomic_bool ShouldShutdown = false;
-  std::vector<AtlasEntity> CachedEntities;
   std::unique_ptr<InterLinkIdentifier> ConnectedGameServer;
   std::unordered_set<InterLinkIdentifier> ConnectedProxies;
 	// Persistent database connection to avoid connection issues
 	std::unique_ptr<IDatabase> database;
+    // Periodic snapshot timer for read-only entity push
+    std::chrono::steady_clock::time_point lastEntitiesSnapshotPush;
   public:
 	Shape partitionShape;
 	GridShape partitionGridShape;  // New grid cell-based shape
@@ -48,6 +49,7 @@ private:
                           std::vector<AtlasEntity> &outEntities);
 	void checkForOutliersAndNotifyGod();
 	void notifyGodAboutOutliers();
+	void pushManagedEntitiesSnapshot();
 	
 	// Helper method to get current partition identifier
 	InterLinkIdentifier getCurrentPartitionId() const;

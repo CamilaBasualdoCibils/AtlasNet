@@ -3,6 +3,9 @@
 Log::Log(const std::string &Who) : WhoIsTalking(Who)
 {
 	IdentifierColor = GetRandomTerminalColor();
+    // Initialize log level from environment once; cheap if called multiple times.
+    static std::once_flag once;
+    std::call_once(once, [](){ Log::InitFromEnv(); });
 }
 
 std::string Log::GetTerminalColorCode(TerminalColor color, bool foreground) 

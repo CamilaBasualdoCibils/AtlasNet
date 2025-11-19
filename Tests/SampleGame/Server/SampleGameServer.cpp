@@ -78,8 +78,9 @@ void SampleGameServer::Run()
     { ShouldShutdown = true; };
 
     Scene scene;
-    // create an entity
-    scene.entities.emplace_back(10.0f, 0.5f); // radius =10, slower
+    // create an entity with radius that will cross partition boundaries
+    // Using normalized coordinates [0,1], so radius of 0.3 centered at 0.5 will cross boundaries
+    scene.entities.emplace_back(0.3f, 0.5f); // radius = 0.3 (in normalized space), speed = 0.5 radians/sec
 
     // Time / loop variables
     using clock = std::chrono::high_resolution_clock;
@@ -88,21 +89,36 @@ void SampleGameServer::Run()
     std::this_thread::sleep_for(std::chrono::milliseconds(500));
     while (!ShouldShutdown)
     {
-      std::vector<AtlasEntity> Incoming;
-      AtlasEntity entity;
-      entity.ID = 0;
-      entity.IsSpawned = true;
-      Incoming.push_back(entity);
-      std::span<AtlasEntity> myspan(Incoming);
-      std::vector<AtlasEntityID> Outgoing;
-      AtlasNetServer::Get().Update(myspan, Incoming, Outgoing);
-      //g_client->SendEntityUpdate(entity);
         auto now = clock::now();
         std::chrono::duration<float> delta = now - previous;
         previous = now;
         float dt = delta.count(); // seconds
 
         scene.update(dt);
+
+        // Update AtlasEntity with position from the moving circle entity
+        std::vector<AtlasEntity> entities;
+        if (!scene.entities.empty())
+        {
+            const auto& circleEntity = scene.entities[0];
+            AtlasEntity entity;
+            entity.ID = 0;
+            entity.IsSpawned = true;
+            // Map circle position to AtlasEntity Position
+            // Circle is centered at origin, but we want it centered at 0.5, 0.5 in normalized space
+            // Partition checks Position.x and Position.z (not y)
+            entity.Position.x = 0.5f + circleEntity.position.x; // Center at 0.5 and add circle offset
+            entity.Position.y = 0.0f; // Height (not used for boundary checking)
+            entity.Position.z = 0.5f + circleEntity.position.y; // Center at 0.5 and add circle offset
+            entity.Position.x = std::max(0.0f, std::min(1.0f, entity.Position.x)); // Clamp to [0,1]
+            entity.Position.z = std::max(0.0f, std::min(1.0f, entity.Position.z)); // Clamp to [0,1]
+            entities.push_back(entity);
+        }
+        
+        std::span<AtlasEntity> myspan(entities);
+        std::vector<AtlasEntity> Incoming;
+        std::vector<AtlasEntityID> Outgoing;
+        AtlasNetServer::Get().Update(myspan, Incoming, Outgoing);
 
         // Print positions every second
         // scene.printPositions();
