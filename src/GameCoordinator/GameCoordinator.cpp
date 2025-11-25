@@ -126,12 +126,8 @@ void GameCoordinator::OnMessageReceived(const Connection& from, std::span<const 
             // Remove from pending
             pendingClientAssignments.erase(it);
 
-            // STUB: cutting GameCoordinator↔client connection
-            // TODO: Once we have a proper disconnect/cleanup protocol,
-            //       we should close this connection instead of leaving it open.
-            logger->DebugFormatted(
-                "[Coordinator] (STUB) Would now close connection to client {} after proxy handoff",
-                clientKey);
+            // cutting GameCoordinator↔client connection
+            Interlink::Get().CloseConnectionTo(proxyID, 0, "Handoff to proxy complete.");
 
             return;
         }
