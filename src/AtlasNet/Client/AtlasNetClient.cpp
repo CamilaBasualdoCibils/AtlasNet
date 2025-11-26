@@ -6,11 +6,13 @@ void AtlasNetClient::Initialize(AtlasNetClient::InitializeProperties& props)
 {
   logger->Debug("[AtlasNetClient] Initialize");
   InterLinkIdentifier myID(InterlinkType::eGameClient, UUIDGen::encode_base20(UUIDGen::Gen()));
-  InterLinkIdentifier God =  InterLinkIdentifier::MakeIDGod();
+  //InterLinkIdentifier God =  InterLinkIdentifier::MakeIDGod();
+  InterLinkIdentifier God = InterLinkIdentifier::MakeIDGameCoordinator();
   serverID = God;
   logger->Debug("[AtlasNetClient] Made my & GodID");
   IPAddress GodIP;
-  GodIP.SetIPv4(127,0,0,1,_PORT_GOD);
+  //GodIP.SetIPv4(127,0,0,1,_PORT_GOD);
+  GodIP.SetIPv4(127,0,0,1,_PORT_GAMECOORDINATOR);
   logger->Debug("[AtlasNetClient] Set God IPv4");
   
   Interlink::Get().Init(
