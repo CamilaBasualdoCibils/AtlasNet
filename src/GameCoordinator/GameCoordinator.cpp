@@ -139,8 +139,12 @@ void GameCoordinator::OnMessageReceived(const Connection& from, std::span<const 
             // Remove from pending
             pendingClientAssignments.erase(it);
 
+            // cutting GameCoordinator↔proxy connection
+            //Interlink::Get().CloseConnectionTo(proxyID, 0, "Handoff to proxy complete.");
+
             // cutting GameCoordinator↔client connection
-            Interlink::Get().CloseConnectionTo(proxyID, 0, "Handoff to proxy complete.");
+            //Interlink::Get().CloseConnectionTo(from.target, 0, "Handoff to proxy complete.");
+
 
             return;
         }

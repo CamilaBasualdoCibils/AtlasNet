@@ -34,6 +34,14 @@ InterLinkIdentifier InterLinkIdentifier::MakeIDGameClient(const std::string &_ID
     return id;
 }
 
+InterLinkIdentifier InterLinkIdentifier::MakeIDGameCoordinator()
+{
+    InterLinkIdentifier id;
+    id.Type = InterlinkType::eGameCoordinator;
+    id.ID.clear();
+    return id;
+}
+
 InterLinkIdentifier InterLinkIdentifier::MakeIDCartograph()
 {
     InterLinkIdentifier id;

@@ -565,15 +565,21 @@ void AtlasNetBootstrap::RunDatabase()
 
 void AtlasNetBootstrap::RunGameCoordinator()
 {
-    system("docker rm -f GameCoordinator");
+    system("docker service rm GameCoordinator > /dev/null 2>&1");
 
     std::string image =
-        RunningLocally ? GameCoordinatorImageName : ManagerPcAdvertiseAddr + ":5000/" + GameCoordinatorImageName;
+        RunningLocally ? GameCoordinatorImageName
+                       : ManagerPcAdvertiseAddr + ":5000/" + GameCoordinatorImageName;
 
     std::string cmd =
-        "docker run --init --network " + NetworkName +
-        " -v /var/run/docker.sock:/var/run/docker.sock --name GameCoordinator -d " +
-        image;
+        "docker service create "
+        "--name GameCoordinator "
+        "--network " + NetworkName + " "
+        "--mount type=bind,source=/var/run/docker.sock,target=/var/run/docker.sock "
+        "--publish published=" + std::to_string(_PORT_GAMECOORDINATOR) + ",target=" + std::to_string(_PORT_GAMECOORDINATOR) + ",protocol=tcp "
+        "--publish published=" + std::to_string(_PORT_GAMECOORDINATOR) + ",target=" + std::to_string(_PORT_GAMECOORDINATOR) + ",protocol=udp "
+        "--detach=true "
+        + image;
 
     system(cmd.c_str());
 }
