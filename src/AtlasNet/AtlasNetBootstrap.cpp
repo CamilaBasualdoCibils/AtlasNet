@@ -229,17 +229,17 @@ void AtlasNetBootstrap::CreatePartitionImage()
     CreateLaunchJson("Partition/launch.json", {"Partition", "UnitTests"});
 
     std::string DockerFileContents = DockerImageBase + BuildBinariesInstructions;
-        DockerFileContents += MacroParse("RUN mv ./bin/${BUILD_CONFIG}/Partition/Partition ./Partition \n",{{"BUILD_CONFIG",BuildConfig}});
+    DockerFileContents += MacroParse("RUN mv ./bin/${BUILD_CONFIG}/Partition/Partition ./Partition \n", {{"BUILD_CONFIG", BuildConfig}});
     std::string packages;
     for (const auto &p : RequiredPackages)
     {
         packages += p + " ";
     }
 
-    #ifdef _NDEBUG
+#ifdef _NDEBUG
     for (const auto srcDir : AtlasNet::Get().GetSettings().SourceDirectories)
     {
-        DockerFileContents += "COPY " + srcDir + " " + WorkDir +"/"+srcDir+ "\n";
+        DockerFileContents += "COPY " + srcDir + " " + WorkDir + "/" + srcDir + "\n";
     }
 
     std::string BuildServerExe;
@@ -247,12 +247,12 @@ void AtlasNetBootstrap::CreatePartitionImage()
     {
         BuildServerExe += "RUN " + buildCmd + "\n";
     }
-    ProjToBuild+=BuildServerExe;
+    ProjToBuild += BuildServerExe;
     std::string ProjToBuild = "Partition";
 
-   #else
+#else
     std::string ProjToBuild = "Partition UnitTestsServer";
-   #endif
+#endif
 
     const std::string EntryPointCmd = MacroParse(R"(
         RUN cat <<'EOF' > ./entrypoint.sh
