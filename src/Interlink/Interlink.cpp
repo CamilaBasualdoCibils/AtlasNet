@@ -47,6 +47,7 @@ void Interlink::OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChange
     logger->Debug("k_ESteamNetworkingConnectionState_ClosedByPeer");
     break;
   case k_ESteamNetworkingConnectionState_ProblemDetectedLocally:
+    CallbackOnProblemDetectedLocally(pInfo);
     logger->Debug("k_ESteamNetworkingConnectionState_ProblemDetectedLocally");
     logger->ErrorFormatted(
         "[GNS] ProblemDetectedLocally. desc='{}' reason={} debug='{}'",
@@ -190,6 +191,28 @@ void Interlink::CallbackOnClosedByPear(SteamCBInfo info)
     logger->DebugFormatted("Connection closed by peer: {}", closedID.ToString());
 
     networkInterface->CloseConnection(info->m_hConn,0,"Connection closed by peer. aka you",true);
+
+    // Remove from internal table BEFORE notifying callbacks.
+    bySteam.erase(it);
+
+    // Notify game systems (GameCoordinator, Demigod, etc.)
+    DispatchDisconnected(closedID);
+}
+
+void Interlink::CallbackOnProblemDetectedLocally(SteamCBInfo info)
+{
+    auto& bySteam = Connections.get<IndexByHSteamNetConnection>();
+    auto it = bySteam.find(info->m_hConn);
+
+    if (it == bySteam.end())
+    {
+        logger->Warning("problem detected locally received for unknown connection.");
+        return;
+    }
+
+    InterLinkIdentifier closedID = it->target;
+
+    logger->DebugFormatted("Connection closed by peer: {}", closedID.ToString());
 
     // Remove from internal table BEFORE notifying callbacks.
     bySteam.erase(it);
@@ -745,7 +768,7 @@ void Interlink::SendMessageRaw(const InterLinkIdentifier &who, std::span<const s
     if (SendResult != k_EResultOK)
     {
       logger->ErrorFormatted("Unable to send message. SteamNetworkingSockets returned result code {}", (int)SendResult);
-      ASSERT(false, "Unable to send message");
+      DispatchDisconnected(who);
     }
     else
     {
