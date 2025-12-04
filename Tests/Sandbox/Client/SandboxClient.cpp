@@ -79,7 +79,6 @@ void SandboxClient::RenderView()
         plot_size = ImPlot::GetPlotSize();
         const float s_v = ((ImGui::IsKeyDown(ImGuiKey_Q)?1.0f:0.0f) + (ImGui::IsKeyDown(ImGuiKey_E)?-1.0f:0.0f) - ImGui::GetIO().MouseWheel);
         CameraSizeX = glm::max(1.0f, CameraSizeX +s_v);
-        std::cerr << s_v << " " << CameraSizeX << " " << std::endl;
         const bool wPressed = ImGui::IsKeyDown(ImGuiKey_W), sPressed = ImGui::IsKeyDown(ImGuiKey_S), aPressed = ImGui::IsKeyDown(ImGuiKey_A), dPressed = ImGui::IsKeyDown(ImGuiKey_D);
         const float x_v = dPressed + (aPressed?-1.0f:0.0f);
         const float y_v = wPressed + (sPressed?-1.0f:0.0f);
@@ -90,7 +89,14 @@ void SandboxClient::RenderView()
     ImGui::EndChild();
     ImGui::End();
 }
-
+constexpr uint32_t fnv1a_32(std::string_view s) {
+    uint32_t h = 2166136261u;               // offset basis
+    for (unsigned char c : s) {
+        h ^= static_cast<uint32_t>(c);
+        h *= 16777619u;                     // FNV prime
+    }
+    return h;
+}
 void SandboxClient::Run(const RunArgs &args)
 {
     _run_args = args;
@@ -117,8 +123,12 @@ void SandboxClient::Run(const RunArgs &args)
         // Sleep a bit to avoid burning CPU (simulate frame time)
         // std::this_thread::sleep_for(std::chrono::milliseconds(16));
         // ~60 updates per second
-        std::this_thread::sleep_for(std::chrono::milliseconds(10));
-
+        
+        me_entity.ID = fnv1a_32(AtlasNetClient::Get().GetClientID());
+        me_entity.Position = vec3(CameraPos,0.0f);
+        me_entity.IsPlayer = true;
+        me_entity.IsSpawned = true;
+        //AtlasNetClient::Get().SendEntityUpdate(me_entity);
         if (GUIEnabled)
         {
             glClear(GL_COLOR_BUFFER_BIT);
@@ -133,6 +143,10 @@ void SandboxClient::Run(const RunArgs &args)
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
             glfwSwapBuffers(*window);
             glfwPollEvents();
+        }
+        else{
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+
         }
     }
 }

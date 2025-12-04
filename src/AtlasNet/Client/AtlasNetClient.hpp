@@ -25,6 +25,7 @@ public:
     void SendEntityUpdate(const AtlasEntity &entity);
     int GetRemoteEntities(AtlasEntity *buffer, int maxCount);
     void Shutdown();
+    auto GetClientID() const {return myID.ID;}
 private:
     void OnConnected(const InterLinkIdentifier &identifier);
     void OnMessageReceived(const Connection& from, std::span<const std::byte> data);

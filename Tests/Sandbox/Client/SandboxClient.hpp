@@ -8,6 +8,7 @@ class SandboxClient
     std::optional<AtlasEntityID> MyID;
 
     std::optional<GLFWwindow *> window;
+    AtlasEntity me_entity;
     vec2 CameraPos = {0,0};
     float CameraSizeX = 10;
     bool ShouldDisconnect = false;
