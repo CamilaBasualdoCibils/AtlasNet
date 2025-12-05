@@ -322,7 +322,7 @@ void Interlink::ReceiveMessages()
       //                InterlinkMessageSendFlag::eReliableNow);
     }
     // Normal internal dispatch
-    callbacks.OnMessageArrival(sender, std::span<const std::byte>((const std::byte *)data, size));
+    callbacks.OnMessageArrival(sender, std::span<const std::byte>((const std::byte *)data, size), msg->m_nMessageNumber);
 
     std::string text(reinterpret_cast<const char *>(data), size);
     logger->DebugFormatted("Message from ({}{}) \"{}\"",

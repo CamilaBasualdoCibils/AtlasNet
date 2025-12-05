@@ -11,7 +11,7 @@ struct InterlinkCallbacks
 {
 	std::function<bool(const Connection &)> acceptConnectionCallback;
 	std::function<void(const InterLinkIdentifier &)> OnConnectedCallback;
-	std::function<void(const Connection &, std::span<const std::byte>)> OnMessageArrival;
+	std::function<void(const Connection &, std::span<const std::byte>, int64_t sequenceNumber)> OnMessageArrival;
   std::function<void(const InterLinkIdentifier&)> OnDisconnectedCallback;
 
 };

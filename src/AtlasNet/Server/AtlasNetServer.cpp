@@ -41,7 +41,7 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
                     printf("[AtlasNet] Connected to %s\n", id.ToString().c_str());
                 }
             },
-            .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data) {
+            .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data, int64_t sequenceNumber) {
                 HandleMessage(fromWhom, data);
             }
         }

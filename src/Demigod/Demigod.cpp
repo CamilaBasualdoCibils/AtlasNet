@@ -31,7 +31,7 @@ void Demigod::Init()
                 {
                     OnConnected(id);
                 },
-                .OnMessageArrival = [this](const Connection& from, std::span<const std::byte> data)
+                .OnMessageArrival = [this](const Connection& from, std::span<const std::byte> data, int64_t sequenceNumber)
                 {
                     OnMessageReceived(from, data);
                 },

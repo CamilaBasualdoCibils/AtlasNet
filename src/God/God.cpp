@@ -51,7 +51,7 @@ void God::Init()
       .acceptConnectionCallback = [](const Connection &c)
       { return true; },
       .OnConnectedCallback = [](const InterLinkIdentifier &Connection) {},
-      .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data) {
+      .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data, int64_t sequenceNumber) {
         std::string msg(reinterpret_cast<const char*>(std::data(data)), std::size(data));
         God::Get().handleOutlierMessage(msg);
       },

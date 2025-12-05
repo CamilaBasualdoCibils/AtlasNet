@@ -95,4 +95,5 @@ static int send_entity_to_server(const std::string& json, const std::string& url
 
     return (ok && status>=200 && status<300) ? KDNET_OK : KDNET_ERR_HTTP_FAIL;
 #endif
+    return KDNET_OK; // Non-Windows: not implemented
 }

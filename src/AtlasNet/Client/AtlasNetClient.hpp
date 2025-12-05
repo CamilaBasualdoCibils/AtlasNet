@@ -27,11 +27,12 @@ public:
     void Shutdown();
 private:
     void OnConnected(const InterLinkIdentifier &identifier);
-    void OnMessageReceived(const Connection& from, std::span<const std::byte> data);
-    void HandleEntityMessage(const std::span<const std::byte>& data);
+    void OnMessageReceived(const Connection& from, std::span<const std::byte> data, int64_t sequenceNumber);
+    void HandleEntityMessage(const std::span<const std::byte>& data, int64_t sequenceNumber);
 private:
     std::shared_ptr<Log> logger = std::make_shared<Log>("AtlasNetClient");
     std::unordered_map<AtlasEntityID, AtlasEntity> RemoteEntities;
+    std::unordered_map<AtlasEntityID, int64_t> EntityLastSequence;
     std::mutex Mutex;
     InterLinkIdentifier myID;
     InterLinkIdentifier proxyID;

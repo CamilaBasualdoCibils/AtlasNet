@@ -21,9 +21,9 @@ void AtlasNetClient::Initialize(AtlasNetClient::InitializeProperties& props)
             {
               OnConnected(Connection);
             },
-            .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data) 
+            .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data, int64_t sequenceNumber) 
             {
-              OnMessageReceived(fromWhom, data); 
+              OnMessageReceived(fromWhom, data, sequenceNumber); 
             }
           }});
   
@@ -85,7 +85,7 @@ void AtlasNetClient::OnConnected(const InterLinkIdentifier &identifier)
     }
 }
 
-void AtlasNetClient::OnMessageReceived(const Connection& from, std::span<const std::byte> data)
+void AtlasNetClient::OnMessageReceived(const Connection& from, std::span<const std::byte> data, int64_t sequenceNumber)
 {
     std::string msg(reinterpret_cast<const char*>(data.data()), data.size());
     logger->DebugFormatted("[AtlasNetClient] Message from {}: {}",
@@ -131,11 +131,11 @@ void AtlasNetClient::OnMessageReceived(const Connection& from, std::span<const s
     }
     else if (from.target.Type == InterlinkType::eDemigod)
     {
-        HandleEntityMessage(data);
+        HandleEntityMessage(data, sequenceNumber);
     }
 }
 
-void AtlasNetClient::HandleEntityMessage(const std::span<const std::byte>& data)
+void AtlasNetClient::HandleEntityMessage(const std::span<const std::byte>& data, int64_t sequenceNumber)
 {
     if (data.size() < 1)
     {
@@ -164,7 +164,11 @@ void AtlasNetClient::HandleEntityMessage(const std::span<const std::byte>& data)
             case AtlasNetMessageHeader::EntityUpdate:
             {
                 for (const auto &entity : entities)
-                    RemoteEntities[entity.ID] = entity;
+                    if (sequenceNumber > EntityLastSequence[entity.ID])
+                    {
+                        RemoteEntities[entity.ID] = entity;       // Apply Update
+                        EntityLastSequence[entity.ID] = sequenceNumber; // Update Record
+                    }
     
                 logger->DebugFormatted("[AtlasNetClient] EntityUpdate: {} entities", entities.size());
                 break;

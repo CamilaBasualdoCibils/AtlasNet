@@ -58,7 +58,7 @@ void Partition::Init()
                   logger->DebugFormatted("[Partition] Proxy count: {}", ConnectedProxies.size());
                 }
               },
-						  .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data) {Partition::Get().MessageArrived(fromWhom,data);},
+						  .OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data, int64_t sequenceNumber) {Partition::Get().MessageArrived(fromWhom,data);},
               .OnDisconnectedCallback = [this](const InterLinkIdentifier &Connection)
               {
                 logger->Debug("[Partition] disconnected callback");
