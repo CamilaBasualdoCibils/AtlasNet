@@ -27,13 +27,9 @@ AtlasNetSettings AtlasNet::ParseSettingsFile()
             settings.workers.push_back(worker);
         }
     }
-    if (IsEntryValid(parsedJson, "GameServerDockerFile"))
+    if (IsEntryValid(parsedJson, "GameServerTaskFile"))
     {
-        settings.GameServerDockerFile = parsedJson["GameServerDockerFile"].get<std::string>();
-    }
-    if (IsEntryValid(parsedJson, "GameServerRunCommand"))
-    {
-        settings.GameServerRunCommand = parsedJson["GameServerRunCommand"].get<std::string>();
+        settings.GameServerTaskFile = parsedJson["GameServerTaskFile"].get<std::string>();
     }
 
     // --- GameServerRunCmd ---

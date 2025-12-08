@@ -182,27 +182,40 @@ DOCKER_FILE_DEF PartitionDockerFile = MacroParse(
 DOCKER_FILE_DEF PartitionSuperVisordConf = R"(
 [supervisord]
 nodaemon=true
+user=root
+
+[group:atlasnet]
+programs=partition,game_server
+priority=10
 
 [program:partition]
-command=/atlasnet/bin/Partition
-autorestart=true
+command=/bin/sh -lc 'set -e; /atlasnet/bin/Partition; rc=$?; [ $rc -eq 0 ] || kill -TERM 1; exit $rc'
+autostart=true
+autorestart=false
+startretries=0
+stopasgroup=true
+killasgroup=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
 
 [program:game_server]
-command=${GAMESERVER_RUN_COMMAND}
-autorestart=true
+command=/bin/sh -lc 'set -e; exec ${GAMESERVER_RUN_COMMAND}; rc=$?; [ $rc -eq 0 ] || kill -TERM 1; exit $rc'
+autostart=true
+autorestart=false
+startretries=0
+stopasgroup=true
+killasgroup=true
 stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-  )";
+)";
 
 DOCKER_FILE_DEF PartitionEntryPoint = R"(
   # Create supervisord config file
 
-  CMD ["/usr/bin/supervisord", "-c", "${WORKDIR}/supervisord.conf"]
+  ENTRYPOINT ["/usr/bin/supervisord", "-c", "${WORKDIR}/supervisord.conf"]
   
   )";

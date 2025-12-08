@@ -10,8 +10,8 @@ file(GLOB_RECURSE _lib_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-add_library(AtlasNetGeneral STATIC ${_lib_sources})
-
+dev/Minecraft-fabric-neoforge/src/fabric/run/saves/New World/DIM1/data/chunks.datadd_library(AtlasNetGeneral STATIC ${_lib_sources})
+set_target_properties(AtlasNetGeneral PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(AtlasNetGeneral
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"

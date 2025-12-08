@@ -1,0 +1,25 @@
+{
+    "TickRatePerSecond": 20,
+    "HeuristicMode": "Automatic",
+    "TLSDirectory" : "temp/keys",
+    "ManagerIsWorker" : true,
+
+
+    "GameServerTaskFile": "fabric-server.json",
+
+
+    "GameCoordinatorBinary": "UnitGameCoordinator",
+    "GameCoordinatorPort" : 44474,
+    "Workers--": [
+        {
+            "Name": "Dumpster",
+            "Address": "192.168.2.100"
+        }
+    ],
+    "RuntimeArches": [
+        "x86_64"
+    ],
+    "BuildCacheDir" : "temp/docker/cache",
+    "NetworkInterface" : null,
+    "BuilderMemoryGb": 15
+}

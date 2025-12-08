@@ -89,12 +89,20 @@ add_subdirectory(apps/Cartograph)
 add_subdirectory(apps/Partition)
 add_subdirectory(apps/ClusterDB)
 add_subdirectory(apps/Launcher)
+add_subdirectory(apps/Bootstrap)
 
 
-add_subdirectory(dev/Sandbox/lib)
-add_subdirectory(dev/Sandbox/client)
-add_subdirectory(dev/Sandbox/server)
-
-add_subdirectory(dev/GameCoordinator_Sample)
-add_subdirectory(dev/GameServer_Unity_Sample)
-add_subdirectory(dev/Minecraft-fabric-neoforge)
+foreach(_dir IN ITEMS
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/Sandbox/lib"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/Sandbox/client"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/Sandbox/server"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/GameCoordinator_Sample"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/GameServer_Unity_Sample"
+  "${CMAKE_CURRENT_SOURCE_DIR}/dev/Minecraft-fabric-neoforge"
+)
+  if(IS_DIRECTORY "${_dir}")
+    # add_subdirectory expects a path relative to *this* CMakeLists, so pass both:
+    file(RELATIVE_PATH _rel "${CMAKE_CURRENT_SOURCE_DIR}" "${_dir}")
+    add_subdirectory("${_rel}")
+  endif()
+endforeach()

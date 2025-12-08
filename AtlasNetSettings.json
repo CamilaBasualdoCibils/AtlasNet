@@ -4,13 +4,13 @@
     "TLSDirectory" : "temp/keys",
     "ManagerIsWorker" : true,
 
-    "GameServerDockerFile" :"./apps/Sandbox/Server/SandboxServer.dockerfile",
-    "GameServerRunCommand" :"/atlasnet/bin/SandboxServer", 
+
+    "GameServerTaskFile": "dev/Minecraft-fabric-neoforge/fabric-server.json",
 
 
     "GameCoordinatorBinary": "UnitGameCoordinator",
     "GameCoordinatorPort" : 44474,
-    "Workers": [
+    "Workers--": [
         {
             "Name": "Dumpster",
             "Address": "192.168.2.100"

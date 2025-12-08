@@ -26,8 +26,9 @@ struct AtlasNetSettings
     std::optional<uint32> BuilderMemoryGb;
     std::optional<std::string> TlsDir;
 
-    std::string GameServerDockerFile;
+    std::string GameServerTaskFile;
     std::string GameServerRunCommand;
+    std::string GameServerBuildDir;
 };
 class AtlasNet : public Singleton<AtlasNet>
 {

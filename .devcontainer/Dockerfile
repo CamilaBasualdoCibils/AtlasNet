@@ -27,6 +27,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
     # Hotspot
     hotspot linux-tools-generic linux-cloud-tools-generic \
+
+    # Java
+    openjdk-21-jdk\
     && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -aG docker vscode

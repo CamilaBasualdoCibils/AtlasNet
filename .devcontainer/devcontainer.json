@@ -68,7 +68,8 @@
         "ms-vscode.cpptools-extension-pack",
         "cweijan.dbclient-jdbc",
         "cweijan.vscode-redis-client",
-        "mutantdino.resourcemonitor"
+        "mutantdino.resourcemonitor",
+        "vscjava.vscode-java-pack"
       ]
     }
   }

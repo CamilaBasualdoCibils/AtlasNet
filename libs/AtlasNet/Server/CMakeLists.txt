@@ -9,10 +9,16 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
 
-add_library(AtlasNetServer ${_sources})
-target_link_libraries(AtlasNetServer PUBLIC AtlasNetGeneral)
+add_library(AtlasNetServer_Static STATIC ${_sources})
+add_library(AtlasNetServer_Shared SHARED ${_sources})
+target_link_libraries(AtlasNetServer_Static PUBLIC AtlasNetGeneral)
+target_link_libraries(AtlasNetServer_Shared PUBLIC AtlasNetGeneral)
 # Optional, but common: local includes
-target_include_directories(AtlasNetServer
+target_include_directories(AtlasNetServer_Static
+  PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
+)
+target_include_directories(AtlasNetServer_Shared
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
