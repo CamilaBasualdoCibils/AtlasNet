@@ -5,6 +5,8 @@ RUN apt update && apt install tree openjdk-21-jdk -y
 #COPY src minecraft/src
 #WORKDIR minecraft/src
 #RUN tree  && ./gradlew --info build
+
+
 FROM itzg/minecraft-server:stable AS mc
 COPY src/fabric/build/libs/atlasnet-fabric-1.0.0.jar /mods
 
@@ -16,4 +18,4 @@ ENV EULA=TRUE \
     INIT_MEMORY=12M
 
 
-${GAME_SERVER_ENTRYPOINT}s
+${GAME_SERVER_ENTRYPOINT}

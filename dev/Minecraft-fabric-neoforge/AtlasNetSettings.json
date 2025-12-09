@@ -1,8 +1,5 @@
 {
-    "TickRatePerSecond": 20,
-    "HeuristicMode": "Automatic",
     "TLSDirectory" : "temp/keys",
-    "ManagerIsWorker" : true,
     "GameServerTaskFile": "fabric-server.json",
     "Workers--": [
         {
@@ -13,7 +10,5 @@
     "RuntimeArches": [
         "x86_64"
     ],
-    "BuildCacheDir" : "temp/docker/cache",
-    "NetworkInterface" : null,
-    "BuilderMemoryGb": 15
+
 }
