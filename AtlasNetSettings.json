@@ -13,10 +13,19 @@
     "BuiltInDB": {
         "Enable": true,
         "Transient": {
-            "Enable" : true,
+            "Enable": true,
             "MasterReplicas": 1,
-            "SlaveReplicas":1
+            "SlaveReplicas": 1
         },
         "Persistent": {}
+    },
+    "PositionPrecision": "FLOAT",
+    "Heuristic": {
+        "Grid": {
+            "Size": {
+                "x": 10,
+                "y": 10
+            }
+        }
     }
 }

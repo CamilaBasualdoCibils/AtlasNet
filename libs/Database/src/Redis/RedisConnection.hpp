@@ -5,13 +5,14 @@
 #include <chrono>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
 class RedisConnection
 {
    public:
-	using StringView = sw::redis::StringView;
+	using StringView = std::string_view;
 
 	template <class T>
 	using Future = sw::redis::Future<T>;
@@ -38,7 +39,7 @@ class RedisConnection
 	std::unique_ptr<sw::redis::AsyncRedisCluster> HandleAsyncCluster;
 
 	template <class F>
-	decltype(auto) WithSyncForKey(StringView key, F&& f) const
+	decltype(auto) WithSync(F&& f) const
 	{
 		if (IsCluster)
 			return std::forward<F>(f)(*HandleCluster);
@@ -46,7 +47,7 @@ class RedisConnection
 	}
 
 	template <class F>
-	decltype(auto) WithAsyncForKey(StringView key, F&& f) const
+	decltype(auto) WithAsync(F&& f) const
 	{
 		if (IsCluster)
 			return std::forward<F>(f)(*HandleAsyncCluster);
@@ -171,7 +172,6 @@ class RedisConnection
 	/** @brief Async TTL (callback). */
 	void TTLAsyncCb(StringView key, ResultCb<long long> ok, ErrorCb err = {}) const;
 
-
 	// -------------------------
 	// Example: GET / SET
 	// -------------------------
@@ -204,12 +204,24 @@ class RedisConnection
 	 * @brief Delete the entire hash key (and all its fields) by deleting the key.
 	 * @return Number of keys removed: 0 if key didn't exist, 1 if deleted.
 	 */
-	[[nodiscard]] long long DelKey(const std::string& key) const;
+	[[nodiscard]] long long DelKey(const StringView& key) const;
 	/**
 	 * @brief Async delete of the entire hash key.
 	 * @return Future resolving to 0 or 1.
 	 */
-	[[nodiscard]] sw::redis::Future<long long> DelKeyAsync(const std::string& key) const;
+	[[nodiscard]] sw::redis::Future<long long> DelKeyAsync(const StringView& key) const;
+	// -------------------------
+	// Callback-style async (optional)
+	// -------------------------
+	template <typename ReplyT, typename Fn>
+	void GetAsyncCb(const StringView& key, Fn&& cb) const
+	{
+		WithAsyncRedisForKey(StringView{key},
+							 [&](auto& r)
+							 {
+								 r.get(key, std::forward<Fn>(cb));	// cb: void(Future<ReplyT>&&)
+							 });
+	}
 
 	// =========================================================================
 	// Hashes (HSET / HGET / HEXISTS / HDEL / HLEN / HINCRBY / HMGET)
@@ -226,49 +238,49 @@ class RedisConnection
 	 * @return Number of fields that were newly added (0 if field existed and was overwritten, 1 if
 	 * new).
 	 */
-	[[nodiscard]] long long HSet(const std::string& key, const std::string& field,
-								 const std::string& value) const;
+	[[nodiscard]] long long HSet(const StringView& key, const StringView& field,
+								 const StringView& value) const;
 
 	/**
 	 * @brief Async HSET (future-based).
 	 *
 	 * @return Future resolving to number of newly added fields (0 or 1).
 	 */
-	[[nodiscard]] sw::redis::Future<long long> HSetAsync(const std::string& key,
-														 const std::string& field,
-														 const std::string& value) const;
+	[[nodiscard]] sw::redis::Future<long long> HSetAsync(const StringView& key,
+														 const StringView& field,
+														 const StringView& value) const;
 
 	/**
 	 * @brief Get a single field from a hash (HGET).
 	 *
 	 * @return Optional string: empty if the field does not exist.
 	 */
-	[[nodiscard]] OptionalString HGet(const std::string& key, const std::string& field) const;
+	[[nodiscard]] OptionalString HGet(const StringView& key, const StringView& field) const;
 
 	/**
 	 * @brief Async HGET (future-based).
 	 *
 	 * @return Future resolving to OptionalString (empty if field missing).
 	 */
-	[[nodiscard]] sw::redis::Future<OptionalString> HGetAsync(const std::string& key,
-															  const std::string& field) const;
+	[[nodiscard]] sw::redis::Future<OptionalString> HGetAsync(const StringView& key,
+															  const StringView& field) const;
 	// Returns all fields + values.
 	// NOTE: can be big; consider HSCAN for huge hashes.
 	[[nodiscard]] std::unordered_map<std::string, std::string> HGetAll(
-		const std::string& key) const;
+		const StringView& key) const;
 
 	[[nodiscard]] sw::redis::Future<std::unordered_map<std::string, std::string>> HGetAllAsync(
-		const std::string& key) const;
+		const StringView& key) const;
 	/**
 	 * @brief Check if a field exists in a hash (HEXISTS).
 	 */
-	[[nodiscard]] bool HExists(const std::string& key, const std::string& field) const;
+	[[nodiscard]] bool HExists(const StringView& key, const StringView& field) const;
 
 	/**
 	 * @brief Async HEXISTS (future-based).
 	 */
-	[[nodiscard]] sw::redis::Future<bool> HExistsAsync(const std::string& key,
-													   const std::string& field) const;
+	[[nodiscard]] sw::redis::Future<bool> HExistsAsync(const StringView& key,
+													   const StringView& field) const;
 
 	/**
 	 * @brief Delete one or more fields from a hash (HDEL).
@@ -276,8 +288,8 @@ class RedisConnection
 	 * @param fields List of fields to delete.
 	 * @return Number of fields that were removed.
 	 */
-	[[nodiscard]] long long HDel(const std::string& key,
-								 const std::vector<std::string>& fields) const;
+	[[nodiscard]] long long HDel(const StringView& key,
+								 const std::vector<StringView>& fields) const;
 
 	/**
 	 * @brief Async HDEL (future-based).
@@ -285,19 +297,19 @@ class RedisConnection
 	 * @return Future resolving to number of removed fields.
 	 */
 	[[nodiscard]] sw::redis::Future<long long> HDelAsync(
-		const std::string& key, const std::vector<std::string>& fields) const;
+		const StringView& key, const std::vector<StringView>& fields) const;
 
-	[[nodiscard]] auto HDelAll(const std::string& key) const { return DelKey(key); }
-	[[nodiscard]] auto HDelAllAsync(const std::string& key) const { return DelKeyAsync(key); }
+	[[nodiscard]] auto HDelAll(const StringView& key) const { return DelKey(key); }
+	[[nodiscard]] auto HDelAllAsync(const StringView& key) const { return DelKeyAsync(key); }
 	/**
 	 * @brief Get number of fields in a hash (HLEN).
 	 */
-	[[nodiscard]] long long HLen(const std::string& key) const;
+	[[nodiscard]] long long HLen(const StringView& key) const;
 
 	/**
 	 * @brief Async HLEN (future-based).
 	 */
-	[[nodiscard]] sw::redis::Future<long long> HLenAsync(const std::string& key) const;
+	[[nodiscard]] sw::redis::Future<long long> HLenAsync(const StringView& key) const;
 
 	/**
 	 * @brief Increment an integer field by @p by (HINCRBY).
@@ -306,14 +318,14 @@ class RedisConnection
 	 *
 	 * @return The new value after increment.
 	 */
-	[[nodiscard]] long long HIncrBy(const std::string& key, const std::string& field,
+	[[nodiscard]] long long HIncrBy(const StringView& key, const StringView& field,
 									long long by) const;
 
 	/**
 	 * @brief Async HINCRBY (future-based).
 	 */
-	[[nodiscard]] sw::redis::Future<long long> HIncrByAsync(const std::string& key,
-															const std::string& field,
+	[[nodiscard]] sw::redis::Future<long long> HIncrByAsync(const StringView& key,
+															const StringView& field,
 															long long by) const;
 
 	/**
@@ -322,8 +334,8 @@ class RedisConnection
 	 * @param fields Fields to fetch.
 	 * @return Vector of OptionalString aligned with @p fields order.
 	 */
-	[[nodiscard]] std::vector<OptionalString> HMGet(const std::string& key,
-													const std::vector<std::string>& fields) const;
+	[[nodiscard]] std::vector<OptionalString> HMGet(const StringView& key,
+													const std::vector<StringView>& fields) const;
 
 	/**
 	 * @brief Async HMGET (future-based).
@@ -331,20 +343,7 @@ class RedisConnection
 	 * @return Future resolving to vector of OptionalString aligned with @p fields.
 	 */
 	[[nodiscard]] sw::redis::Future<std::vector<OptionalString>> HMGetAsync(
-		const std::string& key, const std::vector<std::string>& fields) const;
-
-	// -------------------------
-	// Callback-style async (optional)
-	// -------------------------
-	template <typename ReplyT, typename Fn>
-	void GetAsyncCb(const std::string& key, Fn&& cb) const
-	{
-		WithAsyncRedisForKey(StringView{key},
-							 [&](auto& r)
-							 {
-								 r.get(key, std::forward<Fn>(cb));	// cb: void(Future<ReplyT>&&)
-							 });
-	}
+		const StringView& key, const std::vector<StringView>& fields) const;
 
 	/**
 	 * @brief Callback-style async HGET.
@@ -355,9 +354,126 @@ class RedisConnection
 	 *   void(Future<OptionalString>&&)
 	 */
 	template <typename Fn>
-	void HGetAsyncCb(const std::string& key, const std::string& field, Fn&& cb) const
+	void HGetAsyncCb(const StringView& key, const StringView& field, Fn&& cb) const
 	{
 		WithAsyncRedisForKey(StringView{key},
 							 [&](auto& r) { r.hget(key, field, std::forward<Fn>(cb)); });
 	}
+	// =========================================================================
+	// Sets (SADD / SREM / SISMEMBER / SCARD / SMEMBERS)
+	// =========================================================================
+
+	/**
+	 * @brief Add one or more members to a set (SADD).
+	 * @return Number of elements actually added (excluding existing ones).
+	 */
+	[[nodiscard]] long long SAdd(const StringView& key,
+								 const std::vector<StringView>& members) const;
+
+	/** @brief Async SADD. */
+	[[nodiscard]] sw::redis::Future<long long> SAddAsync(
+		const StringView& key, const std::vector<StringView>& members) const;
+
+	/**
+	 * @brief Remove one or more members from a set (SREM).
+	 * @return Number of elements removed.
+	 */
+	[[nodiscard]] long long SRem(const StringView& key,
+								 const std::vector<StringView>& members) const;
+
+	/** @brief Async SREM. */
+	[[nodiscard]] sw::redis::Future<long long> SRemAsync(
+		const StringView& key, const std::vector<StringView>& members) const;
+
+	/**
+	 * @brief Test if a value is a member of a set (SISMEMBER).
+	 */
+	[[nodiscard]] bool SIsMember(const StringView& key, const StringView& member) const;
+
+	/** @brief Async SISMEMBER. */
+	[[nodiscard]] sw::redis::Future<bool> SIsMemberAsync(const StringView& key,
+														 const StringView& member) const;
+
+	/**
+	 * @brief Get the number of elements in a set (SCARD).
+	 */
+	[[nodiscard]] long long SCard(const StringView& key) const;
+
+	/** @brief Async SCARD. */
+	[[nodiscard]] sw::redis::Future<long long> SCardAsync(const StringView& key) const;
+
+	/**
+	 * @brief Get all members of a set (SMEMBERS).
+	 * @note Can be expensive for large sets.
+	 */
+	[[nodiscard]] std::vector<std::string> SMembers(const StringView& key) const;
+
+	/** @brief Async SMEMBERS. */
+	[[nodiscard]] sw::redis::Future<std::vector<std::string>> SMembersAsync(
+		const StringView& key) const;
+
+	// =========================================================================
+	// Sorted Sets (ZADD / ZREM / ZSCORE / ZRANGE / ZCARD)
+	// =========================================================================
+
+	/**
+	 * @brief Add or update a member in a sorted set (ZADD).
+	 * @return Number of newly added elements.
+	 */
+	[[nodiscard]] long long ZAdd(const StringView& key, const StringView& member,
+								 double score) const;
+
+	/** @brief Async ZADD. */
+	[[nodiscard]] sw::redis::Future<long long> ZAddAsync(const StringView& key,
+														 const StringView& member,
+														 double score) const;
+
+	/**
+	 * @brief Remove a member from a sorted set (ZREM).
+	 * @return Number of elements removed (0 or 1).
+	 */
+	[[nodiscard]] long long ZRem(const StringView& key, const StringView& member) const;
+
+	/** @brief Async ZREM. */
+	[[nodiscard]] sw::redis::Future<long long> ZRemAsync(const StringView& key,
+														 const StringView& member) const;
+
+	/**
+	 * @brief Get the score of a member in a sorted set (ZSCORE).
+	 */
+	[[nodiscard]] OptionalDouble ZScore(const StringView& key, const StringView& member) const;
+
+	/** @brief Async ZSCORE. */
+	[[nodiscard]] sw::redis::Future<OptionalDouble> ZScoreAsync(const StringView& key,
+																const StringView& member) const;
+
+	/**
+	 * @brief Get a range of members by rank (ZRANGE).
+	 */
+	[[nodiscard]] std::vector<std::string> ZRange(const StringView& key, long long start,
+												  long long stop) const;
+
+	/** @brief Async ZRANGE. */
+	[[nodiscard]] sw::redis::Future<std::vector<std::string>> ZRangeAsync(const StringView& key,
+																		  long long start,
+																		  long long stop) const;
+
+	/**
+	 * @brief Get number of elements in a sorted set (ZCARD).
+	 */
+	[[nodiscard]] long long ZCard(const StringView& key) const;
+
+	/** @brief Async ZCARD. */
+	[[nodiscard]] sw::redis::Future<long long> ZCardAsync(const StringView& key) const;
+
+	struct RedisTime
+	{
+		int64_t seconds;
+		int64_t microseconds;
+	};
+	/// @brief Get current Redis server time (authoritative).
+	[[nodiscard]] RedisTime GetTimeNow() const;
+
+	/// @brief Convenience helper: seconds since epoch as double.
+	[[nodiscard]] double GetTimeNowSeconds() const;
 };

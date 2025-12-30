@@ -17,8 +17,8 @@ public:
 	InterLinkIdentifier(InterlinkType _Type, const std::string& _ID = "")
 		: Type(_Type), ID(_ID) {}
 
-	static InterLinkIdentifier MakeIDGod();
-	static InterLinkIdentifier MakeIDPartition(const std::string& _ID);
+	static InterLinkIdentifier MakeIDWatchDog();
+	static InterLinkIdentifier MakeIDShard(const std::string& _ID);
 	static InterLinkIdentifier MakeIDGameServer(const std::string& _ID);
 	static InterLinkIdentifier MakeIDGameClient(const std::string& _ID);
   static InterLinkIdentifier MakeIDGameCoordinator();
@@ -29,8 +29,9 @@ public:
 	[[nodiscard]] static std::optional<InterLinkIdentifier> FromString(const std::string& input);
 	[[nodiscard]] static std::optional<InterLinkIdentifier> FromEncodedByteStream(const std::array<std::byte,32>& input);
 	[[nodiscard]] static std::optional<InterLinkIdentifier> FromEncodedByteStream(const std::byte *data, size_t size);
-
+	
 	bool operator==(const InterLinkIdentifier& other) const noexcept
+	
 	{
 		return ToString() == other.ToString();
 	}

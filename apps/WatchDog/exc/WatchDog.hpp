@@ -10,24 +10,21 @@
 #include "PartitionShapeCache.hpp"
 #include <set>
 #include <unordered_set>
-class God : public Singleton<God>
+class WatchDog : public Singleton<WatchDog>
 {
     public:
     void ClearAllDatabaseState();
 
     private:
-        std::shared_ptr<Log> logger = std::make_shared<Log>("God");
-        Heuristic heuristic;
-        HeuristicType currentHeuristicType = QuadTree;  // Current heuristic type to use
-    PartitionShapeCache shapeCache;
-        uint32 PartitionCount = 0;
+        std::shared_ptr<Log> logger = std::make_shared<Log>("WatchDog");
+
     std::atomic_bool ShouldShutdown = false;
 
 
 
 public:
-    God();
-    ~God();
+    WatchDog();
+    ~WatchDog();
 
     void Shutdown()
     {
@@ -102,7 +99,7 @@ public:
          * @brief Redistributes an entity to the correct partition based on grid cell shapes
          * 
          * This method is called when a partition confirms it has removed an entity.
-         * God then finds the correct target partition and moves the entity there.
+         * WatchDog then finds the correct target partition and moves the entity there.
          */
         void redistributeEntityToCorrectPartition(const AtlasEntity& entity, const std::string& sourcePartition);
         

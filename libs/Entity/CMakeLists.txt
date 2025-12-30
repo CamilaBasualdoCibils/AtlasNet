@@ -23,7 +23,5 @@ install(TARGETS ${_target_name}
 
 target_link_libraries(${_target_name}
 AtlasNetGlobal
-Entity
-InternalDB
-Interlink
+
 )

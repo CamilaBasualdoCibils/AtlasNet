@@ -1,5 +1,5 @@
 #pragma once
-#include "AtlasEntity.hpp"
+#include "Entity.hpp"
 #include "AtlasNet.hpp"
 #include "AtlasNetInterface.hpp"
 #include "Log.hpp"
@@ -25,10 +25,10 @@ using KDServerResponseType = std::vector<std::byte>;
 class ATLASNET_API AtlasNetServer : public AtlasNetInterface, public Singleton<AtlasNetServer>
 {
 	std::shared_ptr<Log> logger = std::make_shared<Log>("AtlasNetServer");
-	std::unordered_map<AtlasEntityID, AtlasEntity> CachedEntities;
+	std::unordered_map<AtlasEntity::EntityID, AtlasEntity> CachedEntities;
 	std::unordered_set<InterLinkIdentifier> ConnectedClients;
 	std::vector<AtlasEntity> IncomingCache;
-	std::vector<AtlasEntityID> OutgoingCache;
+	std::vector<AtlasEntity::EntityID> OutgoingCache;
 
    public:
 	AtlasNetServer(){};
@@ -56,7 +56,7 @@ class ATLASNET_API AtlasNetServer : public AtlasNetInterface, public Singleton<A
 	 * @param OutgoingEntities Entity IDs of entities you should get rid of.
 	 */
 	void Update(std::span<AtlasEntity> entities, std::vector<AtlasEntity>& IncomingEntities,
-				std::vector<AtlasEntityID>& OutgoingEntities);
+				std::vector<AtlasEntity::EntityID>& OutgoingEntities);
 
 	/**
 	 * @brief Handles incoming messages from Interlink.

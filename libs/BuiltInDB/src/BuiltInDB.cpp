@@ -3,5 +3,5 @@
 #include "Redis/Redis.hpp"
 BuiltInDB::BuiltInDB()
 {
-	transient = Redis::Get().Connect(_BUILTINDB_REDIS_SERVICE_NAME, _BUILTINDB_REDIS_PORT);
+	transient = Redis::Get().ConnectNonCluster(_BUILTINDB_REDIS_SERVICE_NAME, _BUILTINDB_REDIS_PORT,10,200);
 }

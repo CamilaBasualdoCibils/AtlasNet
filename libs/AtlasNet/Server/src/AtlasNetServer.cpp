@@ -23,9 +23,6 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
     );
     logger = std::make_shared<Log>(myID.ToString());
     logger->Debug("AtlasNet Initialize");
-        BuiltInDB::Get().Transient()->Set("test", "ass");
-        std::cerr << "WROTE TO BUILT IN" << std::endl;
-        logger->DebugFormatted("Wrote to Built In test:{}",BuiltInDB::Get().Transient()->Get("test").value());
     // --- Interlink setup ---
     Interlink::Check();
     Interlink::Get().Init({
@@ -59,7 +56,7 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
 // ============================================================================
 void AtlasNetServer::Update(std::span<AtlasEntity> entities,
                             std::vector<AtlasEntity> &IncomingEntities,
-                            std::vector<AtlasEntityID> &OutgoingEntities)
+                            std::vector<AtlasEntity::EntityID> &OutgoingEntities)
 {
     Interlink::Get().Tick();
 
@@ -76,7 +73,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
         {
             const std::byte *ptr = reinterpret_cast<const std::byte *>(&entity);
             buffer.insert(buffer.end(), ptr, ptr + sizeof(AtlasEntity));
-            CachedEntities[entity.ID] = entity;
+            CachedEntities[entity.Client_ID] = entity;
         }
 
         InterLinkIdentifier partitionID(InterlinkType::eShard, DockerIO::Get().GetSelfContainerName());
@@ -139,7 +136,7 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
         case AtlasNetMessageHeader::EntityUpdate:
         {
             for (const auto &entity : entities)
-                CachedEntities[entity.ID] = entity;
+                CachedEntities[entity.Client_ID] = entity;
 
             logger->DebugFormatted("[Server] EntityUpdate: {} entities from {}", entities.size(), fromWhom.target.ToString());
             break;
@@ -152,7 +149,7 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
         {
             for (const auto &entity : entities)
             {
-                CachedEntities[entity.ID] = entity;
+                CachedEntities[entity.Client_ID] = entity;
                 IncomingCache.push_back(entity);
             }
             logger->DebugFormatted("[Server] Cached EntityIncoming: {} entities", entities.size());
@@ -166,8 +163,8 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
         {
             for (const auto &entity : entities)
             {
-                CachedEntities.erase(entity.ID);
-                OutgoingCache.push_back(entity.ID);
+                CachedEntities.erase(entity.Client_ID);
+                OutgoingCache.push_back(entity.Client_ID);
             }
             logger->DebugFormatted("[Server] Cached EntityOutgoing: {} entities", entities.size());
             break;

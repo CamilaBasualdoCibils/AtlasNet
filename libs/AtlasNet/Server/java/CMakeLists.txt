@@ -3,9 +3,9 @@ cmake_minimum_required(VERSION 3.16)
 find_package(JNI REQUIRED)
 find_package(Java REQUIRED)
 
-# ----------------------------
-# JNI native library (this is THE only target)
-# ----------------------------
+# ------------------------------------------------------------------------------
+# JNI native library
+# ------------------------------------------------------------------------------
 file(GLOB_RECURSE ATLASNETSERVER_JNI_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc"
@@ -32,7 +32,6 @@ set_target_properties(AtlasNetServer_Java PROPERTIES
   POSITION_INDEPENDENT_CODE ON
 )
 
-# Make libAtlasNetServer_Shared discoverable when next to JNI library
 if(APPLE)
   set_target_properties(AtlasNetServer_Java PROPERTIES
     BUILD_RPATH "@loader_path"
@@ -45,9 +44,9 @@ elseif(UNIX)
   )
 endif()
 
-# ----------------------------
-# Java sources (API jar)
-# ----------------------------
+# ------------------------------------------------------------------------------
+# Java sources
+# ------------------------------------------------------------------------------
 file(GLOB_RECURSE ATLASNETSERVER_JAVA_SOURCES CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/java/*.java"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/java/**/*.java"
@@ -56,9 +55,9 @@ file(GLOB_RECURSE ATLASNETSERVER_JAVA_SOURCES CONFIGURE_DEPENDS
 set(JAVA_CLASSES_DIR "${CMAKE_CURRENT_BINARY_DIR}/java_classes")
 set(JAVA_JAR         "${CMAKE_CURRENT_BINARY_DIR}/atlasnetserver-java.jar")
 
-# ----------------------------
-# Dist folder (what users consume)
-# ----------------------------
+# ------------------------------------------------------------------------------
+# Dist layout
+# ------------------------------------------------------------------------------
 if(WIN32)
   set(PLATFORM_DIR "windows-x86_64")
 elseif(APPLE)
@@ -69,39 +68,58 @@ endif()
 
 set(DIST_DIR         "${CMAKE_BINARY_DIR}/dist/atlasnetserver-java")
 set(DIST_NATIVES_DIR "${DIST_DIR}/natives/${PLATFORM_DIR}")
+set(DIST_JAR         "${DIST_DIR}/atlasnetserver-java.jar")
 
-# ----------------------------
-# POST_BUILD: build jar + stage dist
-# (No extra CMake targets; only AtlasNetServer_Java exists)
-# ----------------------------
-add_custom_command(TARGET AtlasNetServer_Java POST_BUILD
-  BYPRODUCTS
-    "${JAVA_JAR}"
-  COMMAND "${CMAKE_COMMAND}" -E make_directory "${JAVA_CLASSES_DIR}"
-  COMMAND "${Java_JAVAC_EXECUTABLE}" -encoding UTF-8 -d "${JAVA_CLASSES_DIR}" ${ATLASNETSERVER_JAVA_SOURCES}
-  COMMAND "${Java_JAR_EXECUTABLE}" cf "${JAVA_JAR}" -C "${JAVA_CLASSES_DIR}" .
+# ------------------------------------------------------------------------------
+# Build Java JAR + stage dist (PROPERLY MODELED)
+# ------------------------------------------------------------------------------
+add_custom_command(
+  OUTPUT
+    "${DIST_JAR}"
 
-  COMMAND "${CMAKE_COMMAND}" -E make_directory "${DIST_NATIVES_DIR}"
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${JAVA_CLASSES_DIR}"
+  COMMAND "${Java_JAVAC_EXECUTABLE}"
+          -encoding UTF-8
+          -d "${JAVA_CLASSES_DIR}"
+          ${ATLASNETSERVER_JAVA_SOURCES}
+
+  COMMAND "${Java_JAR_EXECUTABLE}"
+          cf "${JAVA_JAR}"
+          -C "${JAVA_CLASSES_DIR}" .
+
+  COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_NATIVES_DIR}"
+
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
           "${JAVA_JAR}"
-          "${DIST_DIR}/atlasnetserver-java.jar"
+          "${DIST_JAR}"
 
-  # Copy JNI shim
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
           "$<TARGET_FILE:AtlasNetServer_Java>"
           "${DIST_NATIVES_DIR}/$<TARGET_FILE_NAME:AtlasNetServer_Java>"
 
-  # Copy core server shared lib
-  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+  COMMAND ${CMAKE_COMMAND} -E copy_if_different
           "$<TARGET_FILE:AtlasNetServer_Shared>"
           "${DIST_NATIVES_DIR}/$<TARGET_FILE_NAME:AtlasNetServer_Shared>"
 
+  DEPENDS
+    AtlasNetServer_Java
+    ${ATLASNETSERVER_JAVA_SOURCES}
+
   VERBATIM
+  USES_TERMINAL
 )
 
-# Optional: expose dist info to other subprojects (nice for CMake2 staging)
+# Custom target that represents "Java artifacts exist"
+add_custom_target(AtlasNetServer_Java_Dist
+  DEPENDS "${DIST_JAR}"
+)
+
+
+# ------------------------------------------------------------------------------
+# Export properties for consumers
+# ------------------------------------------------------------------------------
 set_target_properties(AtlasNetServer_Java PROPERTIES
   ATLASNETSERVER_JAVA_DIST_DIR         "${DIST_DIR}"
-  ATLASNETSERVER_JAVA_DIST_JAR         "${DIST_DIR}/atlasnetserver-java.jar"
-  ATLASNETSERVER_JAVA_DIST_NATIVES_DIR "${DIST_DIR}/natives/${PLATFORM_DIR}"
+  ATLASNETSERVER_JAVA_DIST_JAR         "${DIST_JAR}"
+  ATLASNETSERVER_JAVA_DIST_NATIVES_DIR "${DIST_NATIVES_DIR}"
 )

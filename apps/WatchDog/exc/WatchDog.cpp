@@ -1,4 +1,4 @@
-#include "God.hpp"
+#include "WatchDog.hpp"
 
 #include <ctime>
 
@@ -11,11 +11,11 @@
 #include "Connection.hpp"
 #include "InterlinkEnums.hpp"
 #include "Misc/GeometryUtils.hpp"
-God::God() {}
+WatchDog::WatchDog() {}
 
-God::~God() {}
+WatchDog::~WatchDog() {}
 
-void God::ClearAllDatabaseState()
+void WatchDog::ClearAllDatabaseState()
 {
 	// Ensure cache is initialized
 
@@ -33,7 +33,7 @@ void God::ClearAllDatabaseState()
 	shapeCache.isValid = false;
 }
 
-void God::Init()
+void WatchDog::Init()
 {
 	logger->Debug("Init");
 	ClearAllDatabaseState();
@@ -45,7 +45,7 @@ void God::Init()
 			[](const Connection &fromWhom, std::span<const std::byte> data)
 		{
 			std::string msg(reinterpret_cast<const char *>(std::data(data)), std::size(data));
-			God::Get().handleOutlierMessage(msg);
+			WatchDog::Get().handleOutlierMessage(msg);
 		},
 	};
 	InterLinkProps.logger = logger;
@@ -79,13 +79,13 @@ void God::Init()
 	Interlink::Get().Shutdown();
 }
 
-void God::HeuristicUpdate()
+void WatchDog::HeuristicUpdate()
 {
 	computeAndStorePartitions();
 	notifyPartitionsToFetchShapes();
 }
 
-std::vector<std::string> God::GetPartitionIDs()
+std::vector<std::string> WatchDog::GetPartitionIDs()
 {
 	const std::string PartitionAccessName = std::string(_ATLASNET_STACK_NAME) +"_"+std::string(_SHARD_SERVICE_NAME);
 	std::string serviceResp = DockerIO::Get().request(
@@ -118,9 +118,9 @@ std::vector<std::string> God::GetPartitionIDs()
 	return instanceNames;
 }
 
-void God::Cleanup() {}
+void WatchDog::Cleanup() {}
 
-void God::SetPartitionCount(uint32 NewCount)
+void WatchDog::SetPartitionCount(uint32 NewCount)
 {
 	const std::string PartitionAccessName = std::string(_ATLASNET_STACK_NAME) +"_"+std::string(_SHARD_SERVICE_NAME);
 

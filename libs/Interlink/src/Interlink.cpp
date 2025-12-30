@@ -1,7 +1,7 @@
 #include "Interlink.hpp"
 #include "GameNetworkingSockets.hpp"
-#include "ServerRegistry.hpp"
-#include "ProxyRegistry.hpp"
+#include "Database/ServerRegistry.hpp"
+#include "Database/ProxyRegistry.hpp"
 #include "DockerIO.hpp"
 #include <atomic>
 #include <chrono>
@@ -480,7 +480,7 @@ void Interlink::Init(const InterlinkProperties &Properties)
 
   case InterlinkType::eShard:
   {
-    EstablishConnectionTo(InterLinkIdentifier::MakeIDGod());
+    EstablishConnectionTo(InterLinkIdentifier::MakeIDWatchDog());
   }
   break;
 
@@ -544,7 +544,7 @@ bool Interlink::EstablishConnectionAtIP(const InterLinkIdentifier &id, const IPA
   }
 
   // Step 1: Build God ID
-  InterLinkIdentifier godID = InterLinkIdentifier::MakeIDGod();
+  InterLinkIdentifier godID = InterLinkIdentifier::MakeIDWatchDog();
 
   // Step 2: Try to get public IP:port from registry
   // std::optional<IPAddress> publicAddr = ServerRegistry::Get().GetPublicAddress(godID);

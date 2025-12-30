@@ -40,6 +40,11 @@ add_compile_definitions(
   _ATLASNET_NETWORK_NAME="AtlasNet"
   _REGISTRY_SERVICE_NAME="registry"
   _REGISTRY_PORT=5000
+  
+  # Health Ping
+  _HEALTH_PING_INTERVAL_MS=500
+  _HEALTH_CHECK_INTERVAL_MS=2000
+  _HEALTH_PING_TIMESTAMP_LIFE_MS=3000
 
   #InternalDB
   _INTERNAL_REDIS_SERVICE_NAME="InternalDB"
@@ -58,7 +63,7 @@ add_compile_definitions(
   #WatchDog
   _WATCHDOG_IMAGE_NAME="watchdog"
   _WATCHDOG_SERVICE_NAME="WatchDog"
-
+  _WATCHDOG_COMPUTE_HEURISTIC_INTERVAL_S=20
   #Proxy
   _PROXY_IMAGE_NAME="proxy"
   _PROXY_SERVICE_NAME="Proxy"
@@ -94,6 +99,7 @@ else()
   add_subdirectory(libs/Database)
   add_subdirectory(libs/Debug)
   add_subdirectory(libs/Docker)
+  add_subdirectory(libs/Entity)
   add_subdirectory(libs/Heuristic)
   add_subdirectory(libs/Interlink)
   add_subdirectory(libs/InternalDB)
