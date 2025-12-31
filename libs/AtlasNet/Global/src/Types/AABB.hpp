@@ -16,7 +16,7 @@
 #include <glm/glm.hpp>
 #include <limits>
 template <uint8_t Dim, typename Type, glm::qualifier Q = glm::defaultp>
-struct AABB: public AtlasObject
+struct AABB : public AtlasObject
 {
 	static_assert(Dim > 0, "AABB dimension must be > 0");
 
@@ -44,7 +44,10 @@ struct AABB: public AtlasObject
 	{
 		return AABB(center - halfExtents, center + halfExtents);
 	}
-
+	void SetCenterExtents(const vectype& center, const vectype& halfExtents)
+	{
+		*this = FromCenterExtents(center, halfExtents);
+	}
 	void Serialize(ByteWriter& bw) const override
 	{
 		bw.write_vector<Dim>(min);
@@ -52,8 +55,8 @@ struct AABB: public AtlasObject
 	}
 	void Deserialize(ByteReader& br) override
 	{
-		min = br.read_vector<Dim,decltype(min)>();
-		max = br.read_vector<Dim,decltype(min)>();
+		min = br.read_vector<Dim, decltype(min)>();
+		max = br.read_vector<Dim, decltype(min)>();
 	}
 
 	// -------------------------------------------------

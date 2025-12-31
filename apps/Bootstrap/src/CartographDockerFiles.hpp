@@ -1,9 +1,10 @@
+#include "Misc/String_utils.hpp"
 #include "MiscDockerFiles.hpp"
 
-
-DOCKER_FILE_DEF CartographDockerFile = R"(
+DOCKER_FILE_DEF CartographDockerFile =
+	MacroParse(R"(
     
-ARG CartographPath=BootstrapRuntime/apps/Cartograph/
+ARG CartographPath=${BOOTSTRAP_RUNTIME_SRC_DIR}/apps/Cartograph/
 # ---------- Base image with Node ----------
 FROM node:22-alpine AS base
 
@@ -49,6 +50,8 @@ EXPOSE 3000
 
 # Start your Next.js app
 # (Assumes "start" script is defined in /web/package.json)
-CMD ["npm", "start"]
+CMD ["node", "--inspect=0.0.0.0:9229", "node_modules/next/dist/bin/next", "dev"]
 
-)";
+
+)",
+			   {{"BOOTSTRAP_RUNTIME_SRC_DIR", BOOTSTRAP_RUNTIME_SRC_DIR}});

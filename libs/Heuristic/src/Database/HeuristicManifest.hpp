@@ -2,6 +2,7 @@
 
 #include <boost/describe/enum_from_string.hpp>
 #include <boost/describe/enum_to_string.hpp>
+#include <memory>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -37,12 +38,12 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 		if (!get)
 			return IHeuristic::Type::eNone;
 		IHeuristic::Type type;
-		boost::describe::enum_from_string(get.value(), type);
+		IHeuristic::TypeFromString(get.value(),type);
 		return type;
 	}
 	void SetActiveHeuristicType(IHeuristic::Type type)
 	{
-		const char* str = boost::describe::enum_to_string(type, "INVALID");
+		const char* str = IHeuristic::TypeToString(type);
 		const bool result = InternalDB::Get()->Set(HeuristicTypeKey, str);
 		ASSERT(result, "Failed to set key");
 	}
@@ -89,6 +90,17 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 			bw_id.u32(ID);
 			s_id = bw_id.as_string_view();
 			InternalDB::Get()->HSet(PendingHashTable, s_id, writer.as_string_view());
+		}
+	}
+	void GetPendingBoundsAsByteReaders(std::vector<std::string>& data_for_readers,std::unordered_map<IBounds::BoundsID, ByteReader>& brs)
+	{
+		const auto values = InternalDB::Get()->HGetAll(PendingHashTable);
+		for (const auto& [key_raw, value_raw] : values) 
+		{
+			data_for_readers.push_back(value_raw);
+			ByteReader key_reader(key_raw);
+			const auto ID = key_reader.read_scalar<IBounds::BoundsID>();
+			brs.emplace(ID,ByteReader(data_for_readers.back()));
 		}
 	}
 	template <typename BoundType, typename KeyType = std::string>

@@ -125,6 +125,16 @@ void WatchDog::ComputeHeuristic()
 	std::unordered_map<IBounds::BoundsID, ByteWriter> bws;
 	Heuristic->SerializeBounds(bws);
 	HeuristicManifest::Get().StorePendingBoundsFromByteWriters(bws);
+
+	std::vector<std::string> data; std::unordered_map<IBounds::BoundsID, ByteReader> brs;
+	HeuristicManifest::Get().GetPendingBoundsAsByteReaders(data,brs);
+		
+	for (auto& [boundID,bound_reader] : brs)
+	{
+		GridShape s;
+		s.Deserialize(bound_reader);
+		logger->DebugFormatted("Retreived ID {}, min:{}, max:{}",boundID,glm::to_string(s.min),glm::to_string(s.max));
+	}
 }
 void WatchDog::SwitchHeuristic(IHeuristic::Type newHeuristic)
 {

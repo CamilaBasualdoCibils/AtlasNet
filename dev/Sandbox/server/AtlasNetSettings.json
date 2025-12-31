@@ -1,0 +1,22 @@
+{
+    "TLSDirectory" : "temp/keys",
+    "GameServerTaskFile": "sandbox-server.json",
+    "Workers--": [
+        {
+            "Name": "Dumpster",
+            "MACAddress": "some address"
+        }
+    ],
+    "RuntimeArches": [
+        "x86_64"
+    ],
+    "BuiltInDB": {
+        "Enable": true,
+        "Transient": {
+            "Enable" : true,
+            "MasterReplicas": 1,
+            "SlaveReplicas":1
+        },
+        "Persistent": {}
+    }
+}

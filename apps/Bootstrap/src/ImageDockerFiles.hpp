@@ -55,10 +55,8 @@ services:
     image: ${CARTOGRAPH_IMAGE_NAME}
     networks: [${ATLASNET_NETWORK_NAME}]
     ports:
-      - target: 3000
-        published: 3000
-        protocol: tcp
-        mode: ingress
+      - "3000:3000"   # Next.js default
+      - "9229:9229"   # Node inspector
     deploy:
       placement:
           constraints:

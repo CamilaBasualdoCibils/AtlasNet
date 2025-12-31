@@ -6,6 +6,9 @@
 #include <format>
 #include <iostream>
 #include <mutex>
+#include <functional>   // for std::function
+#include <atomic>       // for std::atomic, std::atomic_bool
+#include <random>       // for random_device, mt19937, uniform_int_distribution
 class Log
 {
 public:

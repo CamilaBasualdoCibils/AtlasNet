@@ -1,24 +1,20 @@
-"use client";
-import { useEffect, useRef } from "react";
+"use client"
+import { useEffect, useState } from "react";
 
-export default function MapPage() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+export default function ShowRedis() {
+  const [rawText, setRawText] = useState<string>("");
 
   useEffect(() => {
-    const canvas = canvasRef.current!;
-    (window as any).Module = { canvas, locateFile: (p: string) => `/wasm/${p}` };
-
-    const s = document.createElement("script");
-    s.type = "module";
-    s.textContent = `
-      import Mod from "/wasm/CartographViewer.js";
-      Mod({ canvas: document.getElementById("canvas"),
-            locateFile: (p) => "/wasm/" + p });
-    `;
-    document.body.appendChild(s);
-
-    return () => { document.body.removeChild(s); };
+    fetch("/api/redis?hash=Heuristic_Bounds_Pending")
+      .then((res) => res.text()) // <- read as raw text
+      .then((text) => setRawText(text))
+      .catch(console.error);
   }, []);
 
-  return <canvas id="canvas" ref={canvasRef} className="w-full h-[70vh] block bg-black" />;
+  return (
+    <div style={{ padding: "2rem", fontFamily: "sans-serif" }}>
+      <h1>Redis Hash Table (Raw Text)</h1>
+      <pre>{rawText}</pre>
+    </div>
+  );
 }

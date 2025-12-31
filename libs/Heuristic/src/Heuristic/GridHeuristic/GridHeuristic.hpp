@@ -2,29 +2,22 @@
 
 #include "Heuristic/IBounds.hpp"
 #include "Heuristic/IHeuristic.hpp"
+#include "Types/AABB.hpp"
 #include "pch.hpp"
 
-class GridShape : public IBounds
+struct GridShape : public IBounds, AABB3f
 {
-	vec2 Min, Max;
-
-   public:
-	virtual ~GridShape() = default;
-	virtual void Serialize(ByteWriter& bw) const override
+	void Serialize(ByteWriter& bw) const override
 	{
-		bw.vec2(Min);
-		bw.vec2(Max);
+		IBounds::Serialize(bw);
+		AABB3f::Serialize(bw);
 	}
-	virtual void Deserialize(ByteReader& br) override 
-    {
-        Min = br.vec2();
-        Max = br.vec2();
-    }
-
-	virtual bool IsInside() const override 
-    {
-        
-    }
+	void Deserialize(ByteReader& br) override
+	{
+		IBounds::Deserialize(br);
+		AABB3f::Deserialize(br);
+	}
+	bool Contains(vec3 p) const override { return AABB3f::contains(p); }
 };
 class GridHeuristic : public THeuristic<GridShape>
 {
@@ -38,7 +31,7 @@ class GridHeuristic : public THeuristic<GridShape>
 	void Compute(const AtlasEntitySpan<const AtlasEntityMinimal>&) override;
 	uint32_t GetBoundsCount() const override;
 	void GetBounds(std::vector<GridShape>& out_bounds) const override;
-	void GetBoundDeltas(std::vector<BoundDelta>& out_deltas) const override;
+	void GetBoundDeltas(std::vector<TBoundDelta<GridShape>>& out_deltas) const override;
 	IHeuristic::Type GetType() const override;
-	void SerializeBounds(std::unordered_map<IBounds::BoundsID, ByteWriter> bws) override;
+	void SerializeBounds(std::unordered_map<IBounds::BoundsID, ByteWriter>& bws) override;
 };

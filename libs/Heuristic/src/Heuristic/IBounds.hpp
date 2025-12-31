@@ -10,9 +10,9 @@ struct IBounds
 {
 	using BoundsID = uint32_t;
 	BoundsID ID;
-	virtual void Serialize(ByteWriter&) const = 0;
-	virtual void Deserialize(ByteReader&) = 0;
+	virtual void Serialize(ByteWriter& bw) const { bw.write_scalar(ID); };
+	virtual void Deserialize(ByteReader& br) { ID = br.read_scalar<BoundsID>(); }
 
-    virtual bool IsInside() const =0;
-	auto GetID() const {return ID;}
+	virtual bool Contains(vec3 p) const = 0;
+	auto GetID() const { return ID; }
 };

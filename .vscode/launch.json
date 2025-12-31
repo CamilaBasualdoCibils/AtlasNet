@@ -1,0 +1,28 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "pwa-node",
+      "request": "launch",
+      "name": "Debug Next.js",
+      "program": "${workspaceFolder}/apps/Cartograph/web/node_modules/next/dist/bin/next",
+      "args": ["dev"],
+      "cwd": "${workspaceFolder}/apps/Cartograph/web",
+      "runtimeArgs": ["--inspect"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen"
+    },
+     {
+      "type": "pwa-node",
+      "request": "attach",
+      "name": "Attach to Next.js in Docker",
+      "port": 9229,
+      "address": "localhost",
+      "localRoot": "${workspaceFolder}/apps/Cartograph/web",
+      "remoteRoot": "/app",
+      "protocol": "inspector",
+      "restart": true,
+      "skipFiles": ["<node_internals>/**"]
+    }
+  ]
+}

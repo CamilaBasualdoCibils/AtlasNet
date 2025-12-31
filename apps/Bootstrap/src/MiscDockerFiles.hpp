@@ -39,6 +39,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     docker.io iptables uidmap \
 
     openjdk-21-jdk\
+    npm nodejs libnode-dev\
+    swig\
     && rm -rf /var/lib/apt/lists/*
 )";
 DOCKER_FILE_DEF GET_REQUIRED_RUN_PKGS = R"(

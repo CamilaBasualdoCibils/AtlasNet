@@ -1,7 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 
-# Target name = this folder name (nice for add_subdirectory reuse)
-get_filename_component(_target_name "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+#set(TARGET_NAME MyCustomLibName)
+
+# Use user-defined name if provided, otherwise use folder name
+if(NOT DEFINED TARGET_NAME)
+    get_filename_component(TARGET_NAME "${CMAKE_CURRENT_SOURCE_DIR}" NAME)
+endif()
 
 # Recursively collect sources under ./src
 file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
@@ -9,21 +13,28 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cc"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
+  "${CMAKE_CURRENT_SOURCE_DIR}/src/*.hpp"
 )
 
-add_library(${_target_name} ${_sources})
+add_library(${TARGET_NAME} ${_sources})
+
 # Optional, but common: local includes
-target_include_directories(${_target_name}
+target_include_directories(${TARGET_NAME}
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
+    ${NODE_INCLUDE_DIR}
+    ${NODE_ADDON_API_INCLUDE}
 )
-install(TARGETS ${_target_name}
+
+install(TARGETS ${TARGET_NAME}
     RUNTIME DESTINATION bin      # Linux/macOS executables
 )
 
-target_link_libraries(${_target_name}
-AtlasNetGlobal
-Entity
-InternalDB
-Interlink
+target_link_libraries(${TARGET_NAME}
+    AtlasNetGlobal
+    Entity
+    InternalDB
 )
+
+add_swig_library_for_target(${TARGET_NAME})

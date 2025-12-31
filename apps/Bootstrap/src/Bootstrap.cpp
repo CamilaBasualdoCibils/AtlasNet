@@ -547,7 +547,7 @@ void Bootstrap::BuildImages()
 	BuildGameServer();	// must happen after partition
 	BuildDockerImageLocally(ProxyDockerFile, _PROXY_IMAGE_NAME);
 	// BuildDockerImageLocally(GameCoordinatorDockerFile, _GAME_COORDINATOR_IMAGE_NAME);
-	// BuildDockerImageLocally(CartographDockerFile, _CARTOGRAPH_IMAGE_NAME);
+	BuildDockerImageLocally(CartographDockerFile, _CARTOGRAPH_IMAGE_NAME);
 }
 
 void Bootstrap::BuildGameServer()

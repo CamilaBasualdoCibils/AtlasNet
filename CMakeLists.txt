@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.24)
-
+include(cmake/AddSwigLibrary.cmake)
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   if(DEFINED ENV{VCPKG_ROOT})
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -17,21 +17,12 @@ set(VCPKG_MANIFEST_FEATURES "native"
     CACHE STRING "vcpkg manifest features")
 
 project(AtlasNet LANGUAGES C CXX)
-
-# --- Global settings ---
-set(CMAKE_CXX_STANDARD 20)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_EXTENSIONS OFF)
-set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
-set_property(GLOBAL PROPERTY USE_FOLDERS ON)
-add_compile_definitions(
+set(GLOBAL_DEFINITIONS
   _PORT_WATCHDOG=25564
   _PORT_SHARD=25565
   _PORT_GAMESERVER=25566
   _PORT_PROXY=25568
 
-  #Docker Settings
   _DOCKER_OS_="ubuntu:24.04"
   _DOCKER_WORKDIR_="/atlasnet"
   _ATLASNET_STACK_NAME="atlasnet"
@@ -40,63 +31,101 @@ add_compile_definitions(
   _ATLASNET_NETWORK_NAME="AtlasNet"
   _REGISTRY_SERVICE_NAME="registry"
   _REGISTRY_PORT=5000
-  
-  # Health Ping
+
   _HEALTH_PING_INTERVAL_MS=500
   _HEALTH_CHECK_INTERVAL_MS=2000
   _HEALTH_PING_TIMESTAMP_LIFE_MS=3000
 
-  #InternalDB
   _INTERNAL_REDIS_SERVICE_NAME="InternalDB"
   _INTERNAL_REDIS_PORT=6379
 
-  #BuiltInDB
   _BUILTINDB_REDIS_SERVICE_NAME="BuiltInDB_Redis"
   _BUILTINDB_REDIS_PORT=2380
   _BUILTINDB_POSTGRES_SERVICE_NAME="BuiltInDB_PostGres"
   _BUILTINDB_POSTGRES_PORT=5432
 
-  #Shard
   _SHARD_SERVICE_NAME="Shard"
   _SHARD_IMAGE_NAME="shard"
 
-  #WatchDog
   _WATCHDOG_IMAGE_NAME="watchdog"
   _WATCHDOG_SERVICE_NAME="WatchDog"
   _WATCHDOG_COMPUTE_HEURISTIC_INTERVAL_S=20
-  #Proxy
+
   _PROXY_IMAGE_NAME="proxy"
   _PROXY_SERVICE_NAME="Proxy"
 
-  #Cartograph
   _CARTOGRAPH_IMAGE_NAME="cartograph"
   _CARTOGRAPH_SERVICE_NAME="Cartograph"
 
-  #Game Server
   _GAME_SERVER_IMAGE_NAME="shard_game_server"
 
-  #Registry
   _REGISTRY_CERT_SECRET_NAME="registry_tls_cert"
   _REGISTRY_KEY_SECRET_NAME="registry_tls_key"
-  _REGISTRY_PORT=5000
 
-  # Builder
   _BUILDER_CONTAINER_NAME="atlasnet_builder"
 )
+# --- SWIG settings ---
+# Where all JS/WASM outputs go
+set(NATIVE_JS_OUT ${CMAKE_BINARY_DIR}/js)
+file(MAKE_DIRECTORY ${NATIVE_JS_OUT})
+
+# Global SWIG
+find_package(SWIG REQUIRED)
+include(${SWIG_USE_FILE})
+set(NODE_PROJECT_DIR
+    ${CMAKE_SOURCE_DIR}/apps/Cartograph/web
+)
+execute_process(
+    COMMAND node -p "process.execPath"
+    OUTPUT_VARIABLE NODE_EXEC
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+if (NODE_EXEC STREQUAL "")
+    message(FATAL_ERROR "Node.js not found")
+endif()
+
+get_filename_component(NODE_BIN_DIR "${NODE_EXEC}" DIRECTORY)
+get_filename_component(NODE_ROOT_DIR "${NODE_BIN_DIR}" DIRECTORY)
+
+set(NODE_INCLUDE_DIR "${NODE_ROOT_DIR}/include/node")
+
+if (NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
+    message(FATAL_ERROR
+        "Node headers not found at ${NODE_INCLUDE_DIR}\n"
+        "Make sure Node is installed with development headers"
+    )
+endif()
+
+message(STATUS "Node include dir = ${NODE_INCLUDE_DIR}")
+execute_process(
+    COMMAND node -p "require('node-addon-api').include"
+    WORKING_DIRECTORY ${NODE_PROJECT_DIR}
+    OUTPUT_VARIABLE NODE_ADDON_API_INCLUDE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+
+string(REPLACE "\"" "" NODE_ADDON_API_INCLUDE "${NODE_ADDON_API_INCLUDE}")
+
+# --- Global settings ---
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+
+set_property(GLOBAL PROPERTY USE_FOLDERS ON)
+foreach(def IN LISTS GLOBAL_DEFINITIONS)
+  add_compile_definitions(${def})
+endforeach()
 
 
-if(ATLASNET_BUILD_WASM)
-  # Only include wasm-safe libs + Cartograph
-  #add_subdirectory(libs/AtlasNet/General)   # or whatever subset you can compile to wasm
-  add_subdirectory(apps/Cartograph)
-else()
-
-# Full native build
+  # Full native build
   add_subdirectory(libs/AtlasNet/Server)
   add_subdirectory(libs/AtlasNet/Client)
   add_subdirectory(libs/AtlasNet/Global)
   add_subdirectory(libs/BuiltInDB)
   add_subdirectory(libs/Database)
+  add_subdirectory(apps/Cartograph)
   add_subdirectory(libs/Debug)
   add_subdirectory(libs/Docker)
   add_subdirectory(libs/Entity)
@@ -121,5 +150,5 @@ else()
     add_subdirectory("${_rel}")
   endif()
 endforeach()
-endif()
+
 

@@ -1,6 +1,6 @@
 #pragma once
 
-class AABBTree
+class QuadTree
 {
 
     

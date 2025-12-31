@@ -5,46 +5,46 @@
 #include <iostream>
 #include <string_view>
 
-long long RedisConnection::HSet(const StringView& key, const StringView& field,
-								const StringView& value) const
+long long RedisConnection::HSet(const std::string_view& key, const std::string_view& field,
+								const std::string_view& value) const
 {
 	return WithSync([&](auto& r) -> long long { return r.hset(key, field, value); });
 }
 
-sw::redis::Future<long long> RedisConnection::HSetAsync(const StringView& key,
-														const StringView& field,
-														const StringView& value) const
+std::future<long long> RedisConnection::HSetAsync(const std::string_view& key,
+														const std::string_view& field,
+														const std::string_view& value) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long>
+	return WithAsync([&](auto& r) -> std::future<long long>
 					 { return r.hset(key, field, value); });
 }
 
-RedisConnection::OptionalString RedisConnection::HGet(const StringView& key,
-													  const StringView& field) const
+std::optional<std::string> RedisConnection::HGet(const std::string_view& key,
+													  const std::string_view& field) const
 {
-	return WithSync([&](auto& r) -> OptionalString { return r.hget(key, field); });
+	return WithSync([&](auto& r) -> std::optional<std::string> { return r.hget(key, field); });
 }
 
-sw::redis::Future<RedisConnection::OptionalString> RedisConnection::HGetAsync(
-	const StringView& key, const StringView& field) const
+std::future<std::optional<std::string>> RedisConnection::HGetAsync(
+	const std::string_view& key, const std::string_view& field) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<OptionalString>
+	return WithAsync([&](auto& r) -> std::future<std::optional<std::string>>
 					 { return r.hget(key, field); });
 }
 
-bool RedisConnection::HExists(const StringView& key, const StringView& field) const
+bool RedisConnection::HExists(const std::string_view& key, const std::string_view& field) const
 {
 	return WithSync([&](auto& r) -> bool { return r.hexists(key, field); });
 }
 
-sw::redis::Future<bool> RedisConnection::HExistsAsync(const StringView& key,
-													  const StringView& field) const
+std::future<bool> RedisConnection::HExistsAsync(const std::string_view& key,
+													  const std::string_view& field) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<bool> { return r.hexists(key, field); });
+	return WithAsync([&](auto& r) -> std::future<bool> { return r.hexists(key, field); });
 }
 
-long long RedisConnection::HDel(const StringView& key,
-								const std::vector<StringView>& fields) const
+long long RedisConnection::HDel(const std::string_view& key,
+								const std::vector<std::string_view>& fields) const
 {
 	return WithSync(
 		[&](auto& r) -> long long
@@ -55,12 +55,12 @@ long long RedisConnection::HDel(const StringView& key,
 		});
 }
 
-sw::redis::Future<long long> RedisConnection::HDelAsync(
-	const StringView& key, const std::vector<StringView>& fields) const
+std::future<long long> RedisConnection::HDelAsync(
+	const std::string_view& key, const std::vector<std::string_view>& fields) const
 {
 	return WithAsync(
 
-		[&](auto& r) -> sw::redis::Future<long long>
+		[&](auto& r) -> std::future<long long>
 		{
 			if (fields.empty())
 				return r.template command<long long>(
@@ -69,37 +69,37 @@ sw::redis::Future<long long> RedisConnection::HDelAsync(
 		});
 }
 
-long long RedisConnection::HLen(const StringView& key) const
+long long RedisConnection::HLen(const std::string_view& key) const
 {
 	return WithSync([&](auto& r) -> long long { return r.hlen(key); });
 }
 
-sw::redis::Future<long long> RedisConnection::HLenAsync(const StringView& key) const
+std::future<long long> RedisConnection::HLenAsync(const std::string_view& key) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long> { return r.hlen(key); });
+	return WithAsync([&](auto& r) -> std::future<long long> { return r.hlen(key); });
 }
 
-long long RedisConnection::HIncrBy(const StringView& key, const StringView& field,
+long long RedisConnection::HIncrBy(const std::string_view& key, const std::string_view& field,
 								   long long by) const
 {
 	return WithSync([&](auto& r) -> long long { return r.hincrby(key, field, by); });
 }
 
-sw::redis::Future<long long> RedisConnection::HIncrByAsync(const StringView& key,
-														   const StringView& field,
+std::future<long long> RedisConnection::HIncrByAsync(const std::string_view& key,
+														   const std::string_view& field,
 														   long long by) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long>
+	return WithAsync([&](auto& r) -> std::future<long long>
 					 { return r.hincrby(key, field, by); });
 }
 
-std::vector<RedisConnection::OptionalString> RedisConnection::HMGet(
-	const StringView& key, const std::vector<StringView>& fields) const
+std::vector<std::optional<std::string>> RedisConnection::HMGet(
+	const std::string_view& key, const std::vector<std::string_view>& fields) const
 {
 	return WithSync(
-		[&](auto& r) -> std::vector<OptionalString>
+		[&](auto& r) -> std::vector<std::optional<std::string>>
 		{
-			std::vector<OptionalString> out;
+			std::vector<std::optional<std::string>> out;
 			out.reserve(fields.size());
 			if (!fields.empty())
 			{
@@ -109,24 +109,24 @@ std::vector<RedisConnection::OptionalString> RedisConnection::HMGet(
 		});
 }
 
-sw::redis::Future<std::vector<RedisConnection::OptionalString>> RedisConnection::HMGetAsync(
-	const StringView& key, const std::vector<StringView>& fields) const
+std::future<std::vector<std::optional<std::string>>> RedisConnection::HMGetAsync(
+	const std::string_view& key, const std::vector<std::string_view>& fields) const
 {
 	return WithAsync(
-		[&](auto& r) -> sw::redis::Future<std::vector<OptionalString>>
+		[&](auto& r) -> std::future<std::vector<std::optional<std::string>>>
 		{
 			// Many redis++ async methods can fill an output iterator (like
 			// sync). If your async version doesn't support OutputIt, tell me
 			// your redis++ version and I'll adapt this to a command()-based
 			// parsing approach.
-			std::vector<OptionalString> out;
+			std::vector<std::optional<std::string>> out;
 			out.reserve(fields.size());
 
 			// If async hmget(OutputIt) exists:
-			return r.template hmget<std::vector<OptionalString>>(key, fields.begin(), fields.end());
+			return r.template hmget<std::vector<std::optional<std::string>>>(key, fields.begin(), fields.end());
 		});
 }
-std::unordered_map<std::string, std::string> RedisConnection::HGetAll(const StringView& key) const
+std::unordered_map<std::string, std::string> RedisConnection::HGetAll(const std::string_view& key) const
 {
 	std::unordered_map<std::string, std::string> out;
 
@@ -139,103 +139,103 @@ std::unordered_map<std::string, std::string> RedisConnection::HGetAll(const Stri
 
 	return out;
 }
-sw::redis::Future<std::unordered_map<std::string, std::string>> RedisConnection::HGetAllAsync(
-	const StringView& key) const
+std::future<std::unordered_map<std::string, std::string>> RedisConnection::HGetAllAsync(
+	const std::string_view& key) const
 {
 	return WithAsync(
 
-		[&](auto& r) -> sw::redis::Future<std::unordered_map<std::string, std::string>>
+		[&](auto& r) -> std::future<std::unordered_map<std::string, std::string>>
 		{ return r.template hgetall<std::unordered_map<std::string, std::string>>(key); });
 }
-long long RedisConnection::DelKey(const StringView& key) const
+long long RedisConnection::DelKey(const std::string_view& key) const
 {
 	return WithSync([&](auto& r) -> long long { return r.del(key); });
 }
-sw::redis::Future<long long> RedisConnection::DelKeyAsync(const StringView& key) const
+std::future<long long> RedisConnection::DelKeyAsync(const std::string_view& key) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long> { return r.del(key); });
+	return WithAsync([&](auto& r) -> std::future<long long> { return r.del(key); });
 }
-RedisConnection::OptionalString RedisConnection::Get(StringView key) const
+std::optional<std::string> RedisConnection::Get(std::string_view key) const
 {
 	return WithSync([&](auto& r) { return r.get(key); });
 }
-RedisConnection::Future<RedisConnection::OptionalString> RedisConnection::GetAsync(
-	StringView key) const
+std::future<std::optional<std::string>> RedisConnection::GetAsync(
+	std::string_view key) const
 {
 	return WithAsync([&](auto& r) { return r.get(key); });
 }
-void RedisConnection::GetAsyncCb(StringView key, ResultCb<OptionalString> ok, ErrorCb err) const
+void RedisConnection::GetAsyncCb(std::string_view key, ResultCb<std::optional<std::string>> ok, ErrorCb err) const
 {
-	FutureToCallback<OptionalString>(GetAsync(key), std::move(ok), std::move(err));
+	FutureToCallback<std::optional<std::string>>(GetAsync(key), std::move(ok), std::move(err));
 }
-bool RedisConnection::Set(StringView key, StringView value) const
+bool RedisConnection::Set(std::string_view key, std::string_view value) const
 {
 	return WithSync([&](auto& r) { return r.set(key, value); });
 }
-RedisConnection::Future<bool> RedisConnection::SetAsync(StringView key, StringView value) const
+std::future<bool> RedisConnection::SetAsync(std::string_view key, std::string_view value) const
 {
 	return WithAsync([&](auto& r) { return r.set(key, value); });
 }
-void RedisConnection::SetAsyncCb(StringView key, StringView value, ResultCb<bool> ok,
+void RedisConnection::SetAsyncCb(std::string_view key, std::string_view value, ResultCb<bool> ok,
 								 ErrorCb err) const
 {
 	FutureToCallback<bool>(SetAsync(key, value), std::move(ok), std::move(err));
 }
-long long RedisConnection::ExistsCount(StringView key) const
+long long RedisConnection::ExistsCount(std::string_view key) const
 {
 	return WithSync([&](auto& r) { return r.exists(key); });
 }
-bool RedisConnection::Exists(StringView key) const
+bool RedisConnection::Exists(std::string_view key) const
 {
 	return ExistsCount(key) != 0;
 }
-RedisConnection::Future<long long> RedisConnection::ExistsCountAsync(StringView key) const
+std::future<long long> RedisConnection::ExistsCountAsync(std::string_view key) const
 {
 	return WithAsync([&](auto& r) { return r.exists(key); });
 }
-RedisConnection::Future<bool> RedisConnection::ExistsAsync(StringView key) const
+std::future<bool> RedisConnection::ExistsAsync(std::string_view key) const
 {
 	return MapFuture<long long>(ExistsCountAsync(key), [](long long n) { return n != 0; });
 }
-void RedisConnection::ExistsAsyncCb(StringView key, ResultCb<bool> ok, ErrorCb err) const
+void RedisConnection::ExistsAsyncCb(std::string_view key, ResultCb<bool> ok, ErrorCb err) const
 {
 	FutureToCallback<bool>(ExistsAsync(key), std::move(ok), std::move(err));
 }
-long long RedisConnection::Del(StringView key) const
+long long RedisConnection::Del(std::string_view key) const
 {
 	return WithSync([&](auto& r) { return r.del(key); });
 }
-RedisConnection::Future<long long> RedisConnection::DelAsync(StringView key) const
+std::future<long long> RedisConnection::DelAsync(std::string_view key) const
 {
 	return WithAsync([&](auto& r) { return r.del(key); });
 }
-void RedisConnection::DelAsyncCb(StringView key, ResultCb<long long> ok, ErrorCb err) const
+void RedisConnection::DelAsyncCb(std::string_view key, ResultCb<long long> ok, ErrorCb err) const
 {
 	FutureToCallback<long long>(DelAsync(key), std::move(ok), std::move(err));
 }
-bool RedisConnection::Expire(StringView key, std::chrono::seconds ttl) const
+bool RedisConnection::Expire(std::string_view key, std::chrono::seconds ttl) const
 {
 	return WithSync([&](auto& r) { return r.expire(key, ttl); });
 }
-RedisConnection::Future<bool> RedisConnection::ExpireAsync(StringView key,
+std::future<bool> RedisConnection::ExpireAsync(std::string_view key,
 														   std::chrono::seconds ttl) const
 {
 	return WithAsync([&](auto& r) { return r.expire(key, ttl); });
 }
-void RedisConnection::ExpireAsyncCb(StringView key, std::chrono::seconds ttl, ResultCb<bool> ok,
+void RedisConnection::ExpireAsyncCb(std::string_view key, std::chrono::seconds ttl, ResultCb<bool> ok,
 									ErrorCb err) const
 {
 	FutureToCallback<bool>(ExpireAsync(key, ttl), std::move(ok), std::move(err));
 }
-long long RedisConnection::TTL(StringView key) const
+long long RedisConnection::TTL(std::string_view key) const
 {
 	return WithSync([&](auto& r) { return r.ttl(key); });
 }
-RedisConnection::Future<long long> RedisConnection::TTLAsync(StringView key) const
+std::future<long long> RedisConnection::TTLAsync(std::string_view key) const
 {
 	return WithAsync([&](auto& r) { return r.ttl(key); });
 }
-void RedisConnection::TTLAsyncCb(StringView key, ResultCb<long long> ok, ErrorCb err) const
+void RedisConnection::TTLAsyncCb(std::string_view key, ResultCb<long long> ok, ErrorCb err) const
 {
 	FutureToCallback<long long>(TTLAsync(key), std::move(ok), std::move(err));
 }
@@ -244,8 +244,8 @@ void RedisConnection::TTLAsyncCb(StringView key, ResultCb<long long> ok, ErrorCb
 // Sets
 // =====================
 
-long long RedisConnection::SAdd(const StringView& key,
-								const std::vector<StringView>& members) const
+long long RedisConnection::SAdd(const std::string_view& key,
+								const std::vector<std::string_view>& members) const
 {
 	return WithSync(
 		[&](auto& r) -> long long
@@ -256,11 +256,11 @@ long long RedisConnection::SAdd(const StringView& key,
 		});
 }
 
-sw::redis::Future<long long> RedisConnection::SAddAsync(
-	const StringView& key, const std::vector<StringView>& members) const
+std::future<long long> RedisConnection::SAddAsync(
+	const std::string_view& key, const std::vector<std::string_view>& members) const
 {
 	return WithAsync(
-		[&](auto& r) -> sw::redis::Future<long long>
+		[&](auto& r) -> std::future<long long>
 		{
 			if (members.empty())
 				return r.template command<long long>("ECHO", "0");
@@ -268,8 +268,8 @@ sw::redis::Future<long long> RedisConnection::SAddAsync(
 		});
 }
 
-long long RedisConnection::SRem(const StringView& key,
-								const std::vector<StringView>& members) const
+long long RedisConnection::SRem(const std::string_view& key,
+								const std::vector<std::string_view>& members) const
 {
 	return WithSync(
 		[&](auto& r) -> long long
@@ -280,11 +280,11 @@ long long RedisConnection::SRem(const StringView& key,
 		});
 }
 
-sw::redis::Future<long long> RedisConnection::SRemAsync(
-	const StringView& key, const std::vector<StringView>& members) const
+std::future<long long> RedisConnection::SRemAsync(
+	const std::string_view& key, const std::vector<std::string_view>& members) const
 {
 	return WithAsync(
-		[&](auto& r) -> sw::redis::Future<long long>
+		[&](auto& r) -> std::future<long long>
 		{
 			if (members.empty())
 				return r.template command<long long>("ECHO", "0");
@@ -292,28 +292,28 @@ sw::redis::Future<long long> RedisConnection::SRemAsync(
 		});
 }
 
-bool RedisConnection::SIsMember(const StringView& key, const StringView& member) const
+bool RedisConnection::SIsMember(const std::string_view& key, const std::string_view& member) const
 {
 	return WithSync([&](auto& r) -> bool { return r.sismember(key, member); });
 }
 
-sw::redis::Future<bool> RedisConnection::SIsMemberAsync(const StringView& key,
-														const StringView& member) const
+std::future<bool> RedisConnection::SIsMemberAsync(const std::string_view& key,
+														const std::string_view& member) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<bool> { return r.sismember(key, member); });
+	return WithAsync([&](auto& r) -> std::future<bool> { return r.sismember(key, member); });
 }
 
-long long RedisConnection::SCard(const StringView& key) const
+long long RedisConnection::SCard(const std::string_view& key) const
 {
 	return WithSync([&](auto& r) -> long long { return r.scard(key); });
 }
 
-sw::redis::Future<long long> RedisConnection::SCardAsync(const StringView& key) const
+std::future<long long> RedisConnection::SCardAsync(const std::string_view& key) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long> { return r.scard(key); });
+	return WithAsync([&](auto& r) -> std::future<long long> { return r.scard(key); });
 }
 
-std::vector<std::string> RedisConnection::SMembers(const StringView& key) const
+std::vector<std::string> RedisConnection::SMembers(const std::string_view& key) const
 {
 	return WithSync(
 		[&](auto& r) -> std::vector<std::string>
@@ -324,10 +324,10 @@ std::vector<std::string> RedisConnection::SMembers(const StringView& key) const
 		});
 }
 
-sw::redis::Future<std::vector<std::string>> RedisConnection::SMembersAsync(
-	const StringView& key) const
+std::future<std::vector<std::string>> RedisConnection::SMembersAsync(
+	const std::string_view& key) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<std::vector<std::string>>
+	return WithAsync([&](auto& r) -> std::future<std::vector<std::string>>
 					 { return r.template smembers<std::vector<std::string>>(key); });
 }
 
@@ -335,45 +335,45 @@ sw::redis::Future<std::vector<std::string>> RedisConnection::SMembersAsync(
 // Sorted Sets
 // =====================
 
-long long RedisConnection::ZAdd(const StringView& key, const StringView& member,
+long long RedisConnection::ZAdd(const std::string_view& key, const std::string_view& member,
 								double score) const
 {
 	return WithSync([&](auto& r) -> long long { return r.zadd(key, member, score); });
 }
 
-sw::redis::Future<long long> RedisConnection::ZAddAsync(const StringView& key,
-														const StringView& member,
+std::future<long long> RedisConnection::ZAddAsync(const std::string_view& key,
+														const std::string_view& member,
 														double score) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long>
+	return WithAsync([&](auto& r) -> std::future<long long>
 					 { return r.zadd(key, member, score); });
 }
 
-long long RedisConnection::ZRem(const StringView& key, const StringView& member) const
+long long RedisConnection::ZRem(const std::string_view& key, const std::string_view& member) const
 {
 	return WithSync([&](auto& r) -> long long { return r.zrem(key, member); });
 }
 
-sw::redis::Future<long long> RedisConnection::ZRemAsync(const StringView& key,
-														const StringView& member) const
+std::future<long long> RedisConnection::ZRemAsync(const std::string_view& key,
+														const std::string_view& member) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long> { return r.zrem(key, member); });
+	return WithAsync([&](auto& r) -> std::future<long long> { return r.zrem(key, member); });
 }
 
-RedisConnection::OptionalDouble RedisConnection::ZScore(const StringView& key,
-														const StringView& member) const
+std::optional<double> RedisConnection::ZScore(const std::string_view& key,
+														const std::string_view& member) const
 {
-	return WithSync([&](auto& r) -> OptionalDouble { return r.zscore(key, member); });
+	return WithSync([&](auto& r) -> std::optional<double> { return r.zscore(key, member); });
 }
 
-sw::redis::Future<RedisConnection::OptionalDouble> RedisConnection::ZScoreAsync(
-	const StringView& key, const StringView& member) const
+std::future<std::optional<double>> RedisConnection::ZScoreAsync(
+	const std::string_view& key, const std::string_view& member) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<OptionalDouble>
+	return WithAsync([&](auto& r) -> std::future<std::optional<double>>
 					 { return r.zscore(key, member); });
 }
 
-std::vector<std::string> RedisConnection::ZRange(const StringView& key, long long start,
+std::vector<std::string> RedisConnection::ZRange(const std::string_view& key, long long start,
 												 long long stop) const
 {
 	return WithSync(
@@ -385,27 +385,27 @@ std::vector<std::string> RedisConnection::ZRange(const StringView& key, long lon
 		});
 }
 
-sw::redis::Future<std::vector<std::string>> RedisConnection::ZRangeAsync(const StringView& key,
+std::future<std::vector<std::string>> RedisConnection::ZRangeAsync(const std::string_view& key,
 																		 long long start,
 																		 long long stop) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<std::vector<std::string>>
+	return WithAsync([&](auto& r) -> std::future<std::vector<std::string>>
 					 { return r.template zrange<std::vector<std::string>>(key, start, stop); });
 }
 
-long long RedisConnection::ZCard(const StringView& key) const
+long long RedisConnection::ZCard(const std::string_view& key) const
 {
 	return WithSync([&](auto& r) -> long long { return r.zcard(key); });
 }
 
-sw::redis::Future<long long> RedisConnection::ZCardAsync(const StringView& key) const
+std::future<long long> RedisConnection::ZCardAsync(const std::string_view& key) const
 {
-	return WithAsync([&](auto& r) -> sw::redis::Future<long long> { return r.zcard(key); });
+	return WithAsync([&](auto& r) -> std::future<long long> { return r.zcard(key); });
 }
 RedisConnection::RedisTime RedisConnection::GetTimeNow() const
 {
 	// Redis TIME command returns: [seconds, microseconds]
-	const std::array<StringView, 1> args = {"TIME"};
+	const std::array<std::string_view, 1> args = {"TIME"};
 	try
 	{
 		auto res = WithSync([&](auto& r) -> auto { return r.command(args.begin(), args.end()); });
