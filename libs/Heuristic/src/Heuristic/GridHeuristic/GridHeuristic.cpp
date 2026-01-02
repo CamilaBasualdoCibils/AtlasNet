@@ -15,7 +15,7 @@ void GridHeuristic::SerializeBounds(std::unordered_map<IBounds::BoundsID, ByteWr
 	{
 		GridShape s;
 		s.SetCenterExtents(vec3(((i % 2) ? 1 : -1) * 50, ((i / 2) ? 1 : -1) * 50, 0),
-							 vec3(options.GridSize, 0));
+							 vec3(options.GridSize/2.0f, 0));
 		s.ID = i;
 		ByteWriter& bw = bws[s.ID];
 		s.Serialize(bw); 

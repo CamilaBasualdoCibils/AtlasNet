@@ -45,5 +45,6 @@
   "typescript.tsserver.maxTsServerMemory": 1024,
   "java.compile.nullAnalysis.mode": "disabled",
   "java.configuration.updateBuildConfiguration": "automatic",
-  "cmake.useCMakePresets": "never"
+  "cmake.useCMakePresets": "never",
+  "explorer.compactFolders": false
 }

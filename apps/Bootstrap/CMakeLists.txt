@@ -55,6 +55,10 @@ add_custom_command(
           "${ATLASNET_ROOT_CMAKE_DIR}/apps"
           "$<TARGET_FILE_DIR:${_target_name}>/${BOOTSTRAP_RUNTIME_SRC_DIR}/apps"
 
+  COMMAND ${CMAKE_COMMAND} -E copy_directory
+          "${ATLASNET_ROOT_CMAKE_DIR}/cmake"
+          "$<TARGET_FILE_DIR:${_target_name}>/${BOOTSTRAP_RUNTIME_SRC_DIR}/cmake"  
+                
   COMMAND ${CMAKE_COMMAND} -E copy
           "${ATLASNET_ROOT_CMAKE_DIR}/vcpkg.json"
           "$<TARGET_FILE_DIR:${_target_name}>/${BOOTSTRAP_RUNTIME_SRC_DIR}"

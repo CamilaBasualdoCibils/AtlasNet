@@ -22,6 +22,7 @@ add_custom_target(cartograph_web_native_deps ALL
         AtlasNetGlobal_swig
         Heuristic_swig
         Entity_swig
+        Render_swig
 )
 
 add_custom_command(
@@ -31,10 +32,6 @@ add_custom_command(
             ${NEXTJS_NATIVE_DIR}
     VERBATIM
 )
-
-
-
-
 
 set(ENV_FILE "${CARTOGRAPH_WEB_ROOT}/.env")
 
@@ -56,17 +53,18 @@ message(STATUS "Generated Next.js .env file at ${ENV_FILE}")
 find_program(NPM_EXECUTABLE npm REQUIRED)
 # Optional: also ensure node exists
 find_program(NODE_EXECUTABLE node REQUIRED)
-add_custom_target(Cartograph_web_npm_install
-  COMMAND ${CMAKE_COMMAND} -E chdir "${CARTOGRAPH_WEB_ROOT}" ${NPM_EXECUTABLE} install
-  WORKING_DIRECTORY "${CARTOGRAPH_WEB_ROOT}"
-  COMMENT "[web] npm install"
-)
+execute_process(
+    COMMAND ${NPM_EXECUTABLE} install
+    WORKING_DIRECTORY ${CARTOGRAPH_WEB_ROOT}
+    RESULT_VARIABLE npm_result
 
+)
 add_custom_target(Cartograph_web_dev
-  COMMAND ${CMAKE_COMMAND} -E chdir "${CARTOGRAPH_WEB_ROOT}" ${NPM_EXECUTABLE} run dev
+  COMMAND ${CMAKE_COMMAND} -E chdir "${CARTOGRAPH_WEB_ROOT}" ${NPM_EXECUTABLE} run dev:all 
   USES_TERMINAL
   WORKING_DIRECTORY "${CARTOGRAPH_WEB_ROOT}"
   COMMENT "[web] Running Next.js dev server (hot reload on :3000)"
 )
-add_dependencies(Cartograph_web_dev Cartograph_web_npm_install)
+#add_dependencies(Cartograph_web_dev Cartograph_web_npm_install)
+add_dependencies(Cartograph_web_dev cartograph_web_native_deps)
 #add_dependencies(Cartograph_web_npm_install ${CARTOGRAPH_TARGET})

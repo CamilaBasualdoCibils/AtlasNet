@@ -117,8 +117,7 @@ void WatchDog::ComputeHeuristic()
 		e.transform.position = {10 * ((i / 2) ? 1 : -1), 10 * ((i % 2) ? 1 : -1), 0};
 		entities.push_back(e);
 	}
-	logger->DebugFormatted("Computing Heuristic: {}",
-						   boost::describe::enum_to_string(ActiveHeuristic, "UNKNOWN-ERROR"));
+	logger->DebugFormatted("Computing Heuristic: {}",IHeuristic::TypeToString(ActiveHeuristic));
 
 	HeuristicManifest::Get().SetActiveHeuristicType(ActiveHeuristic);
 	Heuristic->Compute(entities.span());

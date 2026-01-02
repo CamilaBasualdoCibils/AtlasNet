@@ -7,40 +7,20 @@
 DOCKER_FILE_DEF GET_REQUIRED_BUILD_PKGS = R"(
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Init / quality-of-life
-    tini less coreutils \
-    \
+    tini less coreutils tree \
     # Networking / server debugging
-    iproute2 iputils-ping net-tools dnsutils tcpdump nmap socat \
     curl wget jq openssh-client libssl-dev \
-    \
     # Build toolchain (general)
-    build-essential g++ binutils \
+    g++ binutils \
     clang clangd\
     cmake ninja-build pkg-config ccache \
     autoconf automake libtool m4 \
-    \
-    # Debuggers / tooling
-    gdb gdbserver git \
-    \
-    # Archives
-    tar zip unzip \
-    \
     # Dev headers / misc
     uuid-dev \
-    \
-    # Web desktop (Xvfb + VNC + noVNC)
-    xvfb fluxbox xterm x11vnc novnc websockify supervisor \
-    \
-    # X11 + OpenGL (headers + runtime/mesa)
-    xorg-dev libxmu-dev libxi-dev libxinerama-dev libxcursor-dev \
-    libgl-dev libglu1-mesa-dev mesa-utils libgl1-mesa-dri libglx-mesa0 \
-    \
+    openjdk-21-jdk\
     # DinD
     docker.io iptables uidmap \
-
-    openjdk-21-jdk\
-    npm nodejs libnode-dev\
-    swig\
+    swig npm nodejs libnode-dev\
     && rm -rf /var/lib/apt/lists/*
 )";
 DOCKER_FILE_DEF GET_REQUIRED_RUN_PKGS = R"(
@@ -48,7 +28,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     # Init / quality-of-life
     binutils supervisor tini \
     # for debugging
-    lf \
     ca-certificates \
     libc6 \
     libstdc++6 \
@@ -66,22 +45,27 @@ ARG VCPKG_COMMIT= # optional: pin to a commit for reproducibility
 
 ENV VCPKG_ROOT=${VCPKG_ROOT}
 ENV PATH="${VCPKG_ROOT}:${PATH}"
+ENV VCPKG_INSTALLED_DIR=/opt/vcpkg_installed
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates curl git unzip tar zip cmake ninja-build \
-    build-essential pkg-config \
- && rm -rf /var/lib/apt/lists/*
+ca-certificates curl git unzip tar zip cmake ninja-build \
+build-essential pkg-config \
+&& rm -rf /var/lib/apt/lists/*
 
 # Install vcpkg
 RUN git clone https://github.com/microsoft/vcpkg.git "${VCPKG_ROOT}" \
- && if [ -n "${VCPKG_COMMIT}" ]; then cd "${VCPKG_ROOT}" && git checkout "${VCPKG_COMMIT}"; fi \
- && "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
+&& if [ -n "${VCPKG_COMMIT}" ]; then cd "${VCPKG_ROOT}" && git checkout "${VCPKG_COMMIT}"; fi \
+&& "${VCPKG_ROOT}/bootstrap-vcpkg.sh" -disableMetrics
 
 # Optional: make CMake pick up vcpkg toolchain automatically if you want
 # ENV CMAKE_TOOLCHAIN_FILE="${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
 # ENV VCPKG_DEFAULT_TRIPLET="x64-linux"
-COPY ${BOOTSTRAP_RUNTIME_SRC_DIR}/vcpkg.json ./vcpkg.json
-RUN vcpkg install
+#COPY ${BOOTSTRAP_RUNTIME_SRC_DIR}/vcpkg.json ./vcpkg.json
+#ENV VCPKG_INSTALLED_DIR="${WORKDIR}/build/vcpkg_installed"
+
+#RUN vcpkg install
+
+
 )",
 			   {{"BOOTSTRAP_RUNTIME_SRC_DIR", BOOTSTRAP_RUNTIME_SRC_DIR}});
 DOCKER_FILE_DEF CopyBuild_StripLib = R"(

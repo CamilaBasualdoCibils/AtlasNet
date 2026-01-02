@@ -32,92 +32,20 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 	const std::string ClaimedHashTable = "Heuristic_Bounds_Claimed";
 
    public:
-	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const
-	{
-		const auto get = InternalDB::Get()->Get(HeuristicTypeKey);
-		if (!get)
-			return IHeuristic::Type::eNone;
-		IHeuristic::Type type;
-		IHeuristic::TypeFromString(get.value(),type);
-		return type;
-	}
-	void SetActiveHeuristicType(IHeuristic::Type type)
-	{
-		const char* str = IHeuristic::TypeToString(type);
-		const bool result = InternalDB::Get()->Set(HeuristicTypeKey, str);
-		ASSERT(result, "Failed to set key");
-	}
+	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const;
+	void SetActiveHeuristicType(IHeuristic::Type type);
+
 	template <typename BoundType, typename KeyType = std::string>
-	void GetAllPendingBounds(std::vector<BoundType>& out_bounds)
-	{
-		out_bounds.clear();
-		const auto PendingBoundsSet = InternalDB::Get()->SMembers(PendingHashTable);
-		out_bounds.reserve(PendingBoundsSet.size());
-
-		for (const auto& boundsString : PendingBoundsSet)
-		{
-			const auto in = out_bounds.emplace(BoundType());
-			const BoundType& b = out_bounds.at(in);
-			ByteReader br(boundsString);
-			b.Deserialize(br);
-		}
-	}
+	void GetAllPendingBounds(std::vector<BoundType>& out_bounds);
 	template <typename BoundType, typename KeyType = std::string>
-	void StorePendingBounds(const std::vector<BoundType>& in_bounds)
-	{
-		std::string_view s_b, s_id;
-		for (int i = 0; i < in_bounds.size(); i++)
-		{
-			const auto& bounds = in_bounds[i];
-
-			ByteWriter bw;
-			bounds.Serialize(bw);
-			s_b = bw.as_string_view();
-
-			ByteWriter bw_id;
-			bw_id.u32(bounds.GetID());
-			s_id = bw_id.as_string_view();
-			InternalDB::Get()->HSet(PendingHashTable, s_id, s_b);
-		}
-	}
+	void StorePendingBounds(const std::vector<BoundType>& in_bounds);
 	void StorePendingBoundsFromByteWriters(
-		const std::unordered_map<IBounds::BoundsID, ByteWriter>& in_writers)
-	{
-		std::string_view s_id;
-		for (const auto& [ID, writer] : in_writers)
-		{
-			ByteWriter bw_id;
-			bw_id.u32(ID);
-			s_id = bw_id.as_string_view();
-			InternalDB::Get()->HSet(PendingHashTable, s_id, writer.as_string_view());
-		}
-	}
-	void GetPendingBoundsAsByteReaders(std::vector<std::string>& data_for_readers,std::unordered_map<IBounds::BoundsID, ByteReader>& brs)
-	{
-		const auto values = InternalDB::Get()->HGetAll(PendingHashTable);
-		for (const auto& [key_raw, value_raw] : values) 
-		{
-			data_for_readers.push_back(value_raw);
-			ByteReader key_reader(key_raw);
-			const auto ID = key_reader.read_scalar<IBounds::BoundsID>();
-			brs.emplace(ID,ByteReader(data_for_readers.back()));
-		}
-	}
-	template <typename BoundType, typename KeyType = std::string>
-	void GetAllClaimedBounds(std::unordered_map<KeyType, BoundType>& out_bounds)
-	{
-		out_bounds.clear();
-		const auto BoundsTable = InternalDB::Get()->HGetAll(ClaimedHashTable);
-		out_bounds.reserve(BoundsTable.size());
+		const std::unordered_map<IBounds::BoundsID, ByteWriter>& in_writers);
+	void GetPendingBoundsAsByteReaders(std::vector<std::string>& data_for_readers,
+									   std::unordered_map<IBounds::BoundsID, ByteReader>& brs);
 
-		for (const auto& [key, boundsString] : BoundsTable)
-		{
-			const auto in = out_bounds.emplace(key, BoundType());
-			const BoundType& b = out_bounds.at(in);
-			ByteReader br(boundsString);
-			b.Deserialize(br);
-		}
-	}
+	template <typename BoundType, typename KeyType = std::string>
+	void GetAllClaimedBounds(std::unordered_map<KeyType, BoundType>& out_bounds);
 
 	// IHeuristic::Type GetActiveHeuristic() const;
 	// template <typename KeyType = std::string>
@@ -196,3 +124,53 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 	//	return true;
 	//};
 };
+template <typename BoundType, typename KeyType>
+inline void HeuristicManifest::GetAllPendingBounds(std::vector<BoundType>& out_bounds)
+{
+	out_bounds.clear();
+	std::vector<std::string> data_for_readers;
+	std::unordered_map<IBounds::BoundsID, ByteReader> brs;
+	GetPendingBoundsAsByteReaders(data_for_readers, brs);
+	const auto PendingBoundsSet = InternalDB::Get()->HGetAll(PendingHashTable);
+	out_bounds.reserve(PendingBoundsSet.size());
+	for (auto& [bound_id, boundByteReader] : brs)
+	{
+		out_bounds.emplace_back(BoundType());
+		BoundType& b = out_bounds.back();
+		b.Deserialize(boundByteReader);
+	}
+}
+template <typename BoundType, typename KeyType>
+void HeuristicManifest::StorePendingBounds(const std::vector<BoundType>& in_bounds)
+{
+	std::string_view s_b, s_id;
+	for (int i = 0; i < in_bounds.size(); i++)
+	{
+		const auto& bounds = in_bounds[i];
+
+		ByteWriter bw;
+		bounds.Serialize(bw);
+		s_b = bw.as_string_view();
+
+		ByteWriter bw_id;
+		bw_id.u32(bounds.GetID());
+		s_id = bw_id.as_string_view();
+		InternalDB::Get()->HSet(PendingHashTable, s_id, s_b);
+	}
+}
+
+template <typename BoundType, typename KeyType>
+void HeuristicManifest::GetAllClaimedBounds(std::unordered_map<KeyType, BoundType>& out_bounds)
+{
+	out_bounds.clear();
+	const auto BoundsTable = InternalDB::Get()->HGetAll(ClaimedHashTable);
+	out_bounds.reserve(BoundsTable.size());
+
+	for (const auto& [key, boundsString] : BoundsTable)
+	{
+		const auto in = out_bounds.emplace(key, BoundType());
+		const BoundType& b = out_bounds.at(in);
+		ByteReader br(boundsString);
+		b.Deserialize(br);
+	}
+}

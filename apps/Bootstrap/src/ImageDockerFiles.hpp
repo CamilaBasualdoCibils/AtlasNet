@@ -38,7 +38,7 @@ services:
        condition: on-failure
 
   ${INTERNAL_REDIS_SERVICE_NAME}:
-    image: redis:7
+    image: redis:latest
     command: ["redis-server", "--appendonly", "yes","--port", "${INTERNAL_REDIS_PORT}"]
     networks: [${ATLASNET_NETWORK_NAME}]
     ports:
@@ -139,17 +139,20 @@ COPY ${BOOTSTRAP_RUNTIME_SRC_DIR}/. ./
 			   {{"BOOTSTRAP_RUNTIME_SRC_DIR", BOOTSTRAP_RUNTIME_SRC_DIR}});
 DOCKER_FILE_DEF BUILD_ATLASNET_SRC = R"DOCKER(
 RUN mkdir build
-RUN --mount=type=cache,target=${WORKDIR}/build \
-    cmake -S . -B ${WORKDIR}/build -DCMAKE_BUILD_TYPE=Debug
+#--mount=type=cache,target=${WORKDIR}/build \
+ENV CC=clang
+ENV CXX=clang++
 
-RUN --mount=type=cache,target=${WORKDIR}/build \
-    cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
+RUN --mount=type=cache,target=${WORKDIR}/build cmake -S . -B ${WORKDIR}/build -DCMAKE_BUILD_TYPE=Debug
 
-RUN --mount=type=cache,target=${WORKDIR}/build \
-    cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
 
-RUN --mount=type=cache,target=${WORKDIR}/build \
-    mkdir -p "${WORKDIR}/deps" && \
+RUN --mount=type=cache,target=${WORKDIR}/build cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
+
+
+RUN --mount=type=cache,target=${WORKDIR}/build cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
+
+
+RUN --mount=type=cache,target=${WORKDIR}/build mkdir -p "${WORKDIR}/deps" && \
     cd "${WORKDIR}/build/vcpkg_installed" && \
     find . -type f -name '*.so*' | while read -r f; do \
         base=$(basename "$f"); \
@@ -187,6 +190,31 @@ DOCKER_FILE_DEF ShardDockerFile = MacroParse(
 	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + VCPKG_Install + COPY_ATLASNET_SRC +
 		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + CopyBuild_StripLib,
 	{{"OS_VERSION", _DOCKER_OS_}, {"WORKDIR", _DOCKER_WORKDIR_}, {"BUILD_PROJECT", "Shard"}});
+
+  DOCKER_FILE_DEF CartographDockerFile = MacroParse(
+	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + VCPKG_Install + COPY_ATLASNET_SRC +
+		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + R"(WORKDIR ${WORKDIR}/web
+ENV NODE_ENV=development
+RUN apt update \
+ && apt install -y curl ca-certificates \
+ && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+ && apt install -y nodejs \
+ && node -v \
+ && npm -v
+# Copy built app + node_modules
+COPY --from=builder ${WORKDIR}/apps/Cartograph/web ./
+RUN rm -rf ./node_modules ./.next ./native-server/node_modules
+RUN  npm install
+# RUN npm run build
+# Next.js default port
+EXPOSE 3000
+#EXPOSE 9229  # optional if you want debugging
+
+# Start your Next.js app using npm run dev
+
+CMD ["npm", "run", "dev:all"]
+)",
+	{{"OS_VERSION", _DOCKER_OS_}, {"WORKDIR", _DOCKER_WORKDIR_}, {"BUILD_PROJECT", "cartograph_web_native_deps"}});
 
 DOCKER_FILE_DEF ShardSuperVisordConf = R"(
 [supervisord]

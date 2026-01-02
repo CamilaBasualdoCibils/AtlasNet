@@ -31,13 +31,7 @@ enum class ConnectionState
 };
 BOOST_DESCRIBE_ENUM(ConnectionState, eInvalid, ePreConnecting, eConnecting, eConnected, eDisconnecting, eClosed,eError)
 
-/// @brief Packet Types Internal to InterLink
-enum InterlinkPacketType
-{
-	eDataPacket, /// Packet with data to be given to host of Interlink, contains data foreign to
-				 /// InterLink,
-	eRelay, /// this packet should or has been redirected
-};
+
 enum class InterlinkMessageSendFlag
 {
 	eImmidiateOrDrop = k_nSteamNetworkingSend_NoDelay, /// Send it NOW or drop it. extremely

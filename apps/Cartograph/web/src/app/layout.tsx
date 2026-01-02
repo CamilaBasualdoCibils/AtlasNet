@@ -6,7 +6,7 @@ import Link from "next/link";
 import {
   LayoutDashboard,
   Map,
-  Server, 
+  Server,
   Users,
   Database,
   Compass,
@@ -33,7 +33,7 @@ export default function RootLayout({
             {/* Logo / brand */}
             <div className="flex items-center gap-2 px-2">
 
-                <Compass className="h-8 w-8" />
+              <Compass className="h-8 w-8" />
 
               <div className="font-semibold text-lg">AtlasNet</div>
             </div>
@@ -58,7 +58,7 @@ export default function RootLayout({
                 href="/players"
                 className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-900"
               >
-                 <Users className="h-4 w-4" />
+                <Users className="h-4 w-4" />
                 <span>Players</span>
               </Link>
               <Link
@@ -83,9 +83,12 @@ export default function RootLayout({
           </aside>
 
           {/* Main content */}
-          <main className="flex-1 bg-slate-950 p-8">
-            <div className="mx-auto max-w-6xl">{children}</div>
-          </main>
+          <main className="flex-1 flex flex-col overflow-hidden">
+           <div className="flex-1 p-8">
+    {children}
+  </div>
+        </main>
+
         </div>
       </body>
     </html>

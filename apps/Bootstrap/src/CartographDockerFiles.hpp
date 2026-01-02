@@ -1,7 +1,7 @@
 #include "Misc/String_utils.hpp"
 #include "MiscDockerFiles.hpp"
 
-DOCKER_FILE_DEF CartographDockerFile =
+DOCKER_FILE_DEF CartographDockerFile_old =
 	MacroParse(R"(
     
 ARG CartographPath=${BOOTSTRAP_RUNTIME_SRC_DIR}/apps/Cartograph/
@@ -12,46 +12,70 @@ FROM node:22-alpine AS base
 WORKDIR /app
 
 # ---------- Install dependencies ----------
+# deps stage
 FROM base AS deps
 ARG CartographPath
-# Copy only package files first (better Docker cache)
-COPY ${CartographPath}web/package*.json ./web/
 
 WORKDIR /app/web
+
+# Copy main package.json
+COPY ${CartographPath}web/package*.json ./
+# Copy native-server package.json correctly relative to /app/web
+COPY ${CartographPath}web/native-server/package*.json ./native-server/
+
+# Install dependencies (postinstall will now find native-server correctly)
 RUN npm install
+
 
 # ---------- Build the Next.js app ----------
 FROM base AS builder
 
 WORKDIR /app/web
 ARG CartographPath
-# Bring in node_modules from deps stage
 
-# Copy the rest of your Next.js project from /web
+# Copy the rest of the web project
 COPY ${CartographPath}web/ ./
-RUN rm -rf ./node_modules
-RUN rm -rf ./.next
 
+# Remove local node_modules just in case
+RUN rm -rf ./node_modules ./.next
+
+# Copy node_modules from deps stage
 COPY --from=deps /app/web/node_modules ./node_modules
-# Build for production
+
+# Build Next.js
 RUN npm run build
 
-# ---------- Runtime image ----------
-FROM node:22-alpine AS runner
 
+# ---------- Runtime image ----------
+FROM node:22-bookworm AS runner  
+# <-- changed to Ubuntu-based
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends \
+        build-essential \
+        g++-12 \
+        gcc-12 \
+        libstdc++6 && \
+    update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100 && \
+    update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 && \
+    rm -rf /var/lib/apt/lists/*
+
+
+${GET_RUN_PKGS}  # make sure these are apt packages if needed
 WORKDIR /app/web
-ENV NODE_ENV=production
+ENV NODE_ENV=development
 
 # Copy built app + node_modules
 COPY --from=builder /app/web ./
 
 # Next.js default port
 EXPOSE 3000
+#EXPOSE 9229  # optional if you want debugging
 
-# Start your Next.js app
-# (Assumes "start" script is defined in /web/package.json)
-CMD ["node", "--inspect=0.0.0.0:9229", "node_modules/next/dist/bin/next", "dev"]
+# Start your Next.js app using npm run dev
+CMD ["npm", "run", "dev:all"]
+
 
 
 )",
-			   {{"BOOTSTRAP_RUNTIME_SRC_DIR", BOOTSTRAP_RUNTIME_SRC_DIR}});
+			   {{"BOOTSTRAP_RUNTIME_SRC_DIR", BOOTSTRAP_RUNTIME_SRC_DIR},
+				{"GET_RUN_PKGS", GET_REQUIRED_RUN_PKGS}});

@@ -66,10 +66,7 @@ class IHeuristic
 	// #ifndef SWIG
 	//	//BOOST_DESCRIBE_NESTED_ENUM(Type, eNone, eGridCell, eOctree, eQuadtree)
 	// #endif
-	struct Value
-	{
-		vec3 Position;
-	};
+
 
    private:
    public:

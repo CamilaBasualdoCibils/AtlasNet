@@ -8,7 +8,7 @@
 #include "Connection.hpp"
 class Proxy : public Singleton<Proxy>
 {
-	std::shared_ptr<Log> logger = std::make_shared<Log>("Demigod");
+	std::shared_ptr<Log> logger = std::make_shared<Log>("Proxy");
 	std::atomic_bool ShouldShutdown = false;
 	InterLinkIdentifier ID;
 

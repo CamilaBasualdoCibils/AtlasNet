@@ -75,7 +75,8 @@
         "mutantdino.resourcemonitor",
         "vscjava.vscode-java-pack",
         "twxs.cmake",
-        "tintinweb.graphviz-interactive-preview"
+        "tintinweb.graphviz-interactive-preview",
+        "ms-vscode.hexeditor"
       ]
     }
   }

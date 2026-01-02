@@ -32,9 +32,7 @@ install(TARGETS ${TARGET_NAME}
 )
 
 target_link_libraries(${TARGET_NAME}
-    AtlasNetGlobal
-    Entity
-    InternalDB
+    Heuristic
 )
 
 add_swig_library_for_target(${TARGET_NAME}
@@ -43,6 +41,9 @@ add_swig_library_for_target(${TARGET_NAME}
         "std_map.i"
         "std_pair.i"
     STL_TEMPLATES
+        "std::vector<IBoundsDrawShape>"
+        "std::vector<std::pair<float,float>>"
+        "std::pair<float,float>"
     #   "std::vector<std::string>"
     #   "std::unordered_map<IBounds::BoundsID, ByteReader>"
 )

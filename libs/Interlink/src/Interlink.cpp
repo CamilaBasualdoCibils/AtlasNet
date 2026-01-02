@@ -386,8 +386,8 @@ void Interlink::Init(const InterlinkProperties &Properties)
     ServerRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
 
     // Register public address
-    pubIP = DockerIO::Get().GetServiceNodePublicIP("Demigod");
-    pubPort = DockerIO::Get().GetServicePublishedPort("Demigod", ListenPort);
+    pubIP = DockerIO::Get().GetServiceNodePublicIP(_PROXY_SERVICE_NAME);
+    pubPort = _PORT_PROXY;
     pub.Parse(*pubIP + ":" + std::to_string(*pubPort));
     ProxyRegistry::Get().RegisterPublicAddress(MyIdentity, pub);
     ServerRegistry::Get().RegisterPublicAddress(MyIdentity, pub);

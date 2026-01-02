@@ -1,5 +1,4 @@
 cmake_minimum_required(VERSION 3.24)
-include(cmake/AddSwigLibrary.cmake)
 if(NOT DEFINED CMAKE_TOOLCHAIN_FILE)
   if(DEFINED ENV{VCPKG_ROOT})
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake"
@@ -13,8 +12,6 @@ set(VCPKG_INSTALLED_DIR "${CMAKE_BINARY_DIR}/vcpkg_installed"
     CACHE PATH "vcpkg installed dir")
 
 # If you want manifest features, also cache it (or use vcpkg.json)
-set(VCPKG_MANIFEST_FEATURES "native"
-    CACHE STRING "vcpkg manifest features")
 
 project(AtlasNet LANGUAGES C CXX)
 set(GLOBAL_DEFINITIONS
@@ -98,21 +95,16 @@ if (NOT EXISTS "${NODE_INCLUDE_DIR}/node_api.h")
 endif()
 
 message(STATUS "Node include dir = ${NODE_INCLUDE_DIR}")
-execute_process(
-    COMMAND node -p "require('node-addon-api').include"
-    WORKING_DIRECTORY ${NODE_PROJECT_DIR}
-    OUTPUT_VARIABLE NODE_ADDON_API_INCLUDE
-    OUTPUT_STRIP_TRAILING_WHITESPACE
-)
 
 string(REPLACE "\"" "" NODE_ADDON_API_INCLUDE "${NODE_ADDON_API_INCLUDE}")
 
 # --- Global settings ---
+set(CMAKE_CXX_COMPILER clang++)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-
+set(CMAKE_EXPORT_COMPILE_COMMANDS,ON)
 set_property(GLOBAL PROPERTY USE_FOLDERS ON)
 foreach(def IN LISTS GLOBAL_DEFINITIONS)
   add_compile_definitions(${def})
@@ -120,18 +112,28 @@ endforeach()
 
 
   # Full native build
+  add_subdirectory(apps/Cartograph) # HAS TO GO FIRST DUE TO NODEJS SWIG REASONS
+  execute_process(
+    COMMAND node -p "require('node-addon-api').include"
+    WORKING_DIRECTORY ${NODE_PROJECT_DIR}
+    OUTPUT_VARIABLE NODE_ADDON_API_INCLUDE
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+  )
+  string(REPLACE "\"" "" NODE_ADDON_API_INCLUDE "${NODE_ADDON_API_INCLUDE}")
+  include(cmake/AddSwigLibrary.cmake)
+
   add_subdirectory(libs/AtlasNet/Server)
   add_subdirectory(libs/AtlasNet/Client)
   add_subdirectory(libs/AtlasNet/Global)
   add_subdirectory(libs/BuiltInDB)
   add_subdirectory(libs/Database)
-  add_subdirectory(apps/Cartograph)
   add_subdirectory(libs/Debug)
   add_subdirectory(libs/Docker)
   add_subdirectory(libs/Entity)
   add_subdirectory(libs/Heuristic)
   add_subdirectory(libs/Interlink)
   add_subdirectory(libs/InternalDB)
+  add_subdirectory(libs/Render)
   add_subdirectory(apps/WatchDog)
   add_subdirectory(apps/Proxy)
   add_subdirectory(apps/Shard)
