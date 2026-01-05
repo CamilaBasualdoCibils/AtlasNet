@@ -1,19 +1,21 @@
 #pragma once
-#include "GameNetworkingSockets.hpp"
+#include <type_traits>
+
 #include "Connection.hpp"
+#include "DockerIO.hpp"
+#include "GameNetworkingSockets.hpp"
+#include "InterlinkEnums.hpp"
+#include "InterlinkIdentifier.hpp"
 #include "Log.hpp"
 #include "Misc/Singleton.hpp"
+#include "Packet/Packet.hpp"
+#include "Packet/PacketManager.hpp"
 #include "pch.hpp"
-#include "InterlinkMessage.hpp"
-#include "DockerIO.hpp"
-
 struct InterlinkCallbacks
 {
 	std::function<bool(const Connection &)> acceptConnectionCallback;
 	std::function<void(const InterLinkIdentifier &)> OnConnectedCallback;
-	std::function<void(const Connection &, std::span<const std::byte>)> OnMessageArrival;
-  std::function<void(const InterLinkIdentifier&)> OnDisconnectedCallback;
-
+	std::function<void(const InterLinkIdentifier &)> OnDisconnectedCallback;
 };
 struct InterlinkProperties
 {
@@ -72,7 +74,7 @@ class Interlink : public Singleton<Interlink>
 	InterLinkIdentifier MyIdentity;
 	std::optional<HSteamListenSocket> ListeningSocket;
 	std::optional<HSteamNetPollGroup> PollGroup;
-
+	PacketManager packet_manager;
 	InterlinkCallbacks callbacks;
 	PortType ListenPort;
 	bool b_InDockerNetwork = true;
@@ -80,19 +82,18 @@ class Interlink : public Singleton<Interlink>
 		{InterlinkType::eWatchDog, _PORT_WATCHDOG},
 		{InterlinkType::eShard, _PORT_SHARD},
 		{InterlinkType::eGameServer, _PORT_GAMESERVER},
-    {InterlinkType::eProxy, _PORT_PROXY},
-		{InterlinkType::eGameClient, 25569} // temp client port
+		{InterlinkType::eProxy, _PORT_PROXY},
+		{InterlinkType::eGameClient, 25569}	 // temp client port
 	};
 
-public:
+   public:
 	bool EstablishConnectionAtIP(const InterLinkIdentifier &who, const IPAddress &ip);
-  void CloseConnectionTo(const InterLinkIdentifier& id, int reason = 0, const char* debug = nullptr);
-  bool EstablishConnectionTo(const InterLinkIdentifier &who);
-  
-  
-  private:
-  
-  void DispatchDisconnected(const InterLinkIdentifier& id);
+	void CloseConnectionTo(const InterLinkIdentifier &id, int reason = 0,
+						   const char *debug = nullptr);
+	bool EstablishConnectionTo(const InterLinkIdentifier &who);
+
+   private:
+	void DispatchDisconnected(const InterLinkIdentifier &id);
 	void GenerateNewConnections();
 	void OnDebugOutput(ESteamNetworkingSocketsDebugOutputType eType, const char *pszMsg);
 
@@ -106,20 +107,26 @@ public:
 	using SteamCBInfo = SteamNetConnectionStatusChangedCallback_t *;
 	void CallbackOnConnecting(SteamCBInfo info);
 	void CallbackOnClosedByPear(SteamCBInfo info);
-  void CallbackOnProblemDetectedLocally(SteamCBInfo info);
+	void CallbackOnProblemDetectedLocally(SteamCBInfo info);
 	void CallbackOnConnected(SteamCBInfo info);
 	void OpenListenSocket(PortType port);
 	void ReceiveMessages();
 
-	void DebugPrint();
+	// void DebugPrint();
 
-public:
+   public:
 	void Init(const InterlinkProperties &properties);
 	void Shutdown();
 
 	void Tick();
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
 
-	void SendMessageRaw(const InterLinkIdentifier &who, std::span<const std::byte> data, InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
-	void SendMessage(const InterlinkMessage &message);
+	// void SendMessageRaw(const InterLinkIdentifier &who, std::span<const std::byte> data,
+	// InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
+	template <typename T, std::enable_if_t<std::is_base_of_v<IPacket, T>>>
+	void SendMessage(const InterLinkIdentifier &who, const T &packet,
+					 InterlinkMessageSendFlag sendFlag);
+	void SendMessage(const InterLinkIdentifier &who, const std::shared_ptr<IPacket> &packet,
+					 InterlinkMessageSendFlag sendFlag);
+	PacketManager &GetPacketManager() { return packet_manager; }
 };

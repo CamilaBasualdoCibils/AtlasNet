@@ -51,7 +51,12 @@ class ByteWriter
 	template <typename T>
 	void write_scalar(T v)
 	{
-		if constexpr (std::is_integral_v<T>)
+		if constexpr (std::is_enum_v<T>)
+		{
+			using U = std::underlying_type_t<T>;
+			write_scalar<U>(static_cast<U>(v));
+		}
+		else if constexpr (std::is_integral_v<T>)
 		{
 			if constexpr (sizeof(T) == 1)
 				buf.push_back(uint8_t(v));

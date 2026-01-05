@@ -1,5 +1,5 @@
 #pragma once
-#include "InterlinkPacket.hpp"
+#include "Packet/
 #include <pch.hpp>
 #include "InterlinkEnums.hpp"
 

@@ -46,12 +46,14 @@ class HealthManifest : public Singleton<HealthManifest>
 					{
 						for (const auto expired_key : expired_pings)
 						{
-							const auto expired_ID = InterLinkIdentifier::FromString(expired_key);
-							ASSERT(
-								expired_ID.has_value(),
-								std::format("Failed to parse key in expired pings: {}", expired_key)
-									.c_str());
-							onHealthCheckFail(expired_ID.value(),expired_key);
+							ByteReader br(expired_key);
+							InterLinkIdentifier id;
+							id.Deserialize(br);
+							//ASSERT(
+							//	expired_ID.has_value(),
+							//	std::format("Failed to parse key in expired pings: {}", expired_key)
+							//		.c_str());
+							onHealthCheckFail(id,expired_key);
 						}
 					}
 					std::this_thread::sleep_for(
@@ -80,13 +82,19 @@ class HealthManifest : public Singleton<HealthManifest>
 
 	void HealthUpdate(const InterLinkIdentifier& identifier)
 	{
-		const auto id_string = identifier.ToString();
+		ByteWriter bw;
+		identifier.Serialize(bw);
 
 		const double now = InternalDB::Get()->GetTimeNowSeconds();
 
 		const double TTL = now + _HEALTH_PING_TIMESTAMP_LIFE_MS*0.001;
 
-		InternalDB::Get()->HSet(HealthPingTable, id_string, std::to_string(TTL));
+		const auto setResult = InternalDB::Get()->HSet(HealthPingTable, bw.as_string_view(), std::to_string(TTL));
+		if (setResult != 0)
+		{
+			std::printf("Failed to update health in Health Manifest. HSET result: %lli",setResult);
+		}
+	
 	}
 };
 template <typename KeyType>

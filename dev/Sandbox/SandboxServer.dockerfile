@@ -83,15 +83,4 @@ RUN --mount=type=cache,target=/atlasnet/build \
         cp "$$f" "/atlasnet/deps/$$f"; \
     done
 
-${ATLASNET_PARTITION_INHERIT}
-WORKDIR /atlasnet
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    # Init / quality-of-life
-    binutils \
-    && rm -rf /var/lib/apt/lists/*
-COPY --from=builder /atlasnet/bin /atlasnet/
-COPY --from=builder /atlasnet/ /atlasnet/
-COPY --from=builder /atlasnet/deps /usr/local/lib
-RUN ldconfig
-
-${ATLASNET_PARTITION_ENTRYPOINT}
+${GAME_SERVER_ENTRYPOINT}

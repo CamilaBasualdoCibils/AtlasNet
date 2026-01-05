@@ -40,10 +40,10 @@ void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties
                 {
                     printf("[AtlasNet] Connected to %s\n", id.ToString().c_str());
                 }
-            },
-            .OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data) {
-                HandleMessage(fromWhom, data);
-            }
+            }//,
+            //.OnMessageArrival = [this](const Connection &fromWhom, std::span<const std::byte> data) {
+            //    HandleMessage(fromWhom, data);
+            //}
         }
     });
 
@@ -59,7 +59,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
                             std::vector<AtlasEntity::EntityID> &OutgoingEntities)
 {
     Interlink::Get().Tick();
-
+    /*
     // ------------------------------------------------------------
     // Step 1: Send regular entity updates (EntityUpdate)
     // ------------------------------------------------------------
@@ -100,7 +100,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
         OutgoingEntities = std::move(OutgoingCache);
         logger->DebugFormatted("[Server] Sent EntityOutgoing ({} entities) to game", OutgoingEntities.size());
         OutgoingCache.clear();
-    }
+    }*/
 }
 
 // ============================================================================
@@ -108,6 +108,7 @@ void AtlasNetServer::Update(std::span<AtlasEntity> entities,
 // ============================================================================
 void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const std::byte> data)
 {
+    /*
     if (data.size() < 1)
     {
         logger->ErrorFormatted("[Server] Received empty message from {}, ABORT", fromWhom.target.ToString());
@@ -192,5 +193,5 @@ void AtlasNetServer::HandleMessage(const Connection &fromWhom, std::span<const s
     {
         for (const auto &id : ConnectedClients)
             Interlink::Get().SendMessageRaw(id, data);
-    }
+    }*/
 }

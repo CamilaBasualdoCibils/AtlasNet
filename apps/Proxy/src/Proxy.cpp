@@ -2,6 +2,7 @@
 
 #include <thread>
 
+#include "Crash/CrashHandler.hpp"
 #include "Database/HealthManifest.hpp"
 #include "Interlink.hpp"
 #include "InterlinkIdentifier.hpp"
@@ -23,6 +24,7 @@ void Proxy::Run()
 }
 void Proxy::Init()
 {
+	CrashHandler::Get().Init();
 	ID = InterLinkIdentifier(InterlinkType::eProxy, DockerIO::Get().GetSelfContainerName());
 	HealthManifest::Get().ScheduleHealthPings(ID);
 
@@ -33,8 +35,8 @@ void Proxy::Init()
 			.acceptConnectionCallback = [this](const Connection& c)
 			{ return OnAcceptConnection(c); },
 			.OnConnectedCallback = [this](const InterLinkIdentifier& id) { OnConnected(id); },
-			.OnMessageArrival = [this](const Connection& from, std::span<const std::byte> data)
-			{ OnMessageReceived(from, data); },
+			//.OnMessageArrival = [this](const Connection& from, std::span<const std::byte> data)
+			//{ OnMessageReceived(from, data); },
 			.OnDisconnectedCallback = [this](const InterLinkIdentifier& id)
 			{ OnDisconnected(id); }}});
 }

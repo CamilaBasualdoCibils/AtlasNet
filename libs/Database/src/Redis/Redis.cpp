@@ -48,23 +48,27 @@ static bool LooksLikeNotClusterError(const std::string& msg)
 			 // Something else went wrong (auth, network, etc.) → surface it.
 			 throw;
 		 }*/
-std::shared_ptr<RedisConnection> Redis::Connect(const Redis::Options& in_options,
-												uint32_t max_retries, uint32_t retry_interval_ms)
+std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint32_t max_retries,
+												uint32_t retry_interval_ms)
 {
+	// ---- Fast path (locked, no I/O) ----
+	std::lock_guard<std::mutex> lock(connections_mutex);
+	{
+		auto it = redis_connections.find(in_options);
+		if (it != redis_connections.end())
+		{
+			if (auto cached = it->second.lock())
+				return cached;
+		}
+	}
+
+	// ---- Slow path: create connection without holding mutex ----
 	sw::redis::ConnectionOptions options;
 	options.host = in_options.host;
 	options.port = in_options.port;
 
 	sw::redis::ConnectionPoolOptions pool;
 	pool.size = 5;
-
-	// Cache check
-	auto cache_it = redis_connections.find(in_options);
-	if (cache_it != redis_connections.end())
-	{
-		if (auto cached = cache_it->second.lock())
-			return cached;
-	}
 
 	uint32_t attempt = 0;
 
@@ -73,26 +77,38 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Redis::Options& in_options
 		try
 		{
 			std::shared_ptr<RedisConnection> redisC;
+
 			if (in_options.IsCluster)
 			{
-				std::unique_ptr<sw::redis::RedisCluster> Handle =
-					std::make_unique<sw::redis::RedisCluster>(options, pool);
-				std::unique_ptr<sw::redis::AsyncRedisCluster> HandleAsync =
-					std::make_unique<sw::redis::AsyncRedisCluster>(options, pool);
+				auto handle = std::make_unique<sw::redis::RedisCluster>(options, pool);
+				auto handleAsync = std::make_unique<sw::redis::AsyncRedisCluster>(options, pool);
+
+				handle->for_each([](sw::redis::Redis& r) { r.ping(); });
+
 				redisC =
-					std::make_shared<RedisConnection>(std::move(Handle), std::move(HandleAsync));
+					std::make_shared<RedisConnection>(std::move(handle), std::move(handleAsync));
 			}
 			else
 			{
-				std::unique_ptr<sw::redis::Redis> Handle =
-					std::make_unique<sw::redis::Redis>(options, pool);
-				std::unique_ptr<sw::redis::AsyncRedis> HandleAsync =
-					std::make_unique<sw::redis::AsyncRedis>(options, pool);
-				redisC =
-					std::make_shared<RedisConnection>(std::move(Handle), std::move(HandleAsync));
-			}
+				auto handle = std::make_unique<sw::redis::Redis>(options, pool);
+				auto handleAsync = std::make_unique<sw::redis::AsyncRedis>(options, pool);
 
-			redis_connections.emplace(in_options, redisC);
+				handle->ping();
+
+				redisC =
+					std::make_shared<RedisConnection>(std::move(handle), std::move(handleAsync));
+			}
+			redisC->Set("test", "test");
+			redisC->Del("test");
+			auto& slot = redis_connections[in_options];
+
+			// Another thread may have won the race
+			if (auto existing = slot.lock())
+				return existing;
+
+			slot = redisC;
+
+			std::cerr << "Successfully Connected to Redis\n";
 			return redisC;
 		}
 		catch (const sw::redis::Error& e)
@@ -113,6 +129,7 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Redis::Options& in_options
 		}
 	}
 }
+
 std::shared_ptr<RedisConnection> Redis::ConnectNonCluster(const std::string& address, int32_t port,
 														  uint32_t max_retries,
 														  uint32_t retry_interval_ms)

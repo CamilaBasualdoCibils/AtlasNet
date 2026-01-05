@@ -38,8 +38,8 @@ services:
        condition: on-failure
 
   ${INTERNAL_REDIS_SERVICE_NAME}:
-    image: redis:latest
-    command: ["redis-server", "--appendonly", "yes","--port", "${INTERNAL_REDIS_PORT}"]
+    image: valkey/valkey:latest
+    command: ["valkey-server", "--appendonly", "yes", "--port", "${INTERNAL_REDIS_PORT}"]
     networks: [${ATLASNET_NETWORK_NAME}]
     ports:
       - target: 6379

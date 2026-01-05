@@ -4,8 +4,8 @@
 DOCKER_FILE_DEF BuiltInDbStack =
 	MacroParse(R"(
   ${BUILTINDB_REDIS_SERVICE_NAME}:
-    image: redis:7
-    command: ["redis-server", "--appendonly", "yes", "--port", "${BUILTINDB_REDIS_PORT}"]
+    image: valkey/valkey:latest
+    command: ["valkey-server", "--appendonly", "yes", "--port", "${BUILTINDB_REDIS_PORT}"]
     networks: [${ATLASNET_NETWORK_NAME}]
     ports:
       - target: ${BUILTINDB_REDIS_PORT}

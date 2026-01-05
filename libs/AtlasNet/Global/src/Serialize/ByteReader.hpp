@@ -38,13 +38,19 @@ public:
 // ---------------- Generic Scalar -----------------------------
 template<typename T>
 T read_scalar() {
-    if constexpr (std::is_integral_v<T>) {
+    if constexpr (std::is_enum_v<T>) {
+        using U = std::underlying_type_t<T>;
+        return static_cast<T>(read_scalar<U>());
+    }
+    else if constexpr (std::is_integral_v<T>) {
         if constexpr (sizeof(T) == 1) return read_int<T>();
         else return read_be<T>();
-    } else if constexpr (std::is_floating_point_v<T>) {
+    }
+    else if constexpr (std::is_floating_point_v<T>) {
         if constexpr (sizeof(T) == 4) return f32();
         else if constexpr (sizeof(T) == 8) return f64();
-    } else {
+    }
+    else {
         static_assert(!sizeof(T*), "read_scalar: unsupported type");
     }
 }

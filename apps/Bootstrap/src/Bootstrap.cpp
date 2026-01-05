@@ -185,7 +185,7 @@ Bootstrap::Task Bootstrap::ParseTaskFile(std::filesystem::path file_path)
 }
 void Bootstrap::Run(const RunArgs &args)
 {
-	settings = ParseSettingsFile(args.AtlasNetSettingsPath.value_or("./AtlasNetSettings"));
+	settings = ParseSettingsFile(args.AtlasNetSettingsPath.value_or("./AtlasNetSettings.json"));
 	std::filesystem::path game_server_task_file_path =
 		args.AtlasNetSettingsPath.value_or("./AtlasNetSettings").parent_path().string() + "/" +
 		settings.GameServerTaskFile;

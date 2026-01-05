@@ -4,6 +4,7 @@
 #include <thread>
 #include "Interlink.hpp"
 
+#include "Packet/CommandPacket.hpp"
 #include "pch.hpp"
 #include "Database/HealthManifest.hpp"
 Partition::Partition()
@@ -29,8 +30,8 @@ void Partition::Init()
 			{
 				
 			},
-			.OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data)
-			{ },
+			//.OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data)
+			//{ },
 			.OnDisconnectedCallback =
 				[this](const InterLinkIdentifier &Connection)
 			{

@@ -6,7 +6,7 @@
 using PortType = uint16;
 using IPv4_Type = uint32;
 using IPv6_Type = std::array<uint8, 16>;
-
+#include "Packet/Packet.hpp"
 class IPAddress
 {
 	SteamNetworkingIPAddr SteamAddress;
@@ -42,48 +42,7 @@ struct Connection
   bool IsExternal() const noexcept { return kind == ConnectionKind::eExternal; }
 
 	uint64 MessagesSent;
-	std::vector<std::pair<InterlinkMessageSendFlag, std::vector<std::byte>>> MessagesToSendOnConnect;
+	std::vector<std::pair<InterlinkMessageSendFlag, std::shared_ptr<IPacket>>> MessagesToSendOnConnect;
 
 	void SetNewState(ConnectionState newState);
-
-	std::string ToString() const
-	{
-		std::ostringstream oss;
-		oss << "Connection {\n";
-		oss << "  Address: " << address.ToString() << "\n";
-		oss << "  OldState: " << static_cast<int>(oldState)
-			<< " -> State: " << static_cast<int>(state) << "\n";
-		oss << "  Target: \"" << target.ToString() << "\" ";
-		for (const auto& c : target.ToString())
-		{
-			oss << (int)c << " ";
-
-		}
-		oss << std::endl;
-		oss << "  SteamConnection: " << SteamConnection << "\n";
-		oss << "  MessagesSent: " << MessagesSent << "\n";
-		oss << "  MessagesToSendOnConnect: [\n";
-		for (const auto &msgPair : MessagesToSendOnConnect)
-		{
-			const auto &flag = msgPair.first;
-			const auto &data = msgPair.second;
-
-			oss << "    { Flag=" << static_cast<int>(flag)
-				<< ", Size=" << data.size() << " bytes, Data=[";
-			size_t preview = std::min<size_t>(data.size(), 8);
-			for (size_t i = 0; i < preview; ++i)
-			{
-				oss << std::hex << std::setw(2) << std::setfill('0')
-					<< static_cast<int>(data[i]);
-				if (i + 1 < preview)
-					oss << " ";
-			}
-			if (data.size() > preview)
-				oss << " ...";
-			oss << "] }\n";
-		}
-		oss << "  ]\n";
-		oss << "}";
-		return oss.str();
-	}
 };

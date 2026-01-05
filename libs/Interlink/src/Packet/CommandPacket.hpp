@@ -4,7 +4,7 @@
 #include "Serialize/ByteReader.hpp"
 #include "Serialize/ByteWriter.hpp"
 
-class CommandPacket : IPacket
+class CommandPacket : public TPacket<CommandPacket, PacketType::eCommand>
 {
    public:
 	enum class Type
@@ -14,7 +14,7 @@ class CommandPacket : IPacket
 		eShutdown,
 	};
 	Type command = Type::eInvalidCommand;
-	CommandPacket() : IPacket(PacketType::eCommand) {}
+	CommandPacket() : TPacket(){}
 	std::vector<uint8_t> Args;
 	void SerializeData(ByteWriter& bw) const override
 	{
@@ -48,4 +48,7 @@ class CommandPacket : IPacket
 		Args.assign(span.begin(), span.end());
 		return *this;
 	}
+	bool ValidateData() const override {
+        return command != CommandPacket::Type::eInvalidCommand;
+    }
 };

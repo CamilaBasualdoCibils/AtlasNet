@@ -14,7 +14,10 @@
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "Interlink.hpp"
+#include "InterlinkEnums.hpp"
 #include "InterlinkIdentifier.hpp"
+#include "Packet/CommandPacket.hpp"
+#include "Packet/RelayPacket.hpp"
 #include "Transform.hpp"
 WatchDog::WatchDog() {}
 
@@ -50,9 +53,9 @@ void WatchDog::Init()
 	InterlinkProperties InterLinkProps;
 	InterLinkProps.callbacks = InterlinkCallbacks{
 		.acceptConnectionCallback = [](const Connection &c) { return true; },
-		.OnConnectedCallback = [](const InterLinkIdentifier &Connection) {},
-		.OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data)
-		{ std::string msg(reinterpret_cast<const char *>(std::data(data)), std::size(data)); },
+		.OnConnectedCallback = [](const InterLinkIdentifier &Connection) {}	 //,
+		//.OnMessageArrival = [](const Connection &fromWhom, std::span<const std::byte> data)
+		//{ std::string msg(reinterpret_cast<const char *>(std::data(data)), std::size(data)); },
 	};
 	InterLinkProps.logger = logger;
 	InterLinkProps.ThisID = ID;
@@ -68,6 +71,8 @@ void WatchDog::Init()
 	logger->Debug("Shutting down");
 	Cleanup();
 	Interlink::Get().Shutdown();
+
+
 }
 
 void WatchDog::Cleanup()
@@ -117,7 +122,7 @@ void WatchDog::ComputeHeuristic()
 		e.transform.position = {10 * ((i / 2) ? 1 : -1), 10 * ((i % 2) ? 1 : -1), 0};
 		entities.push_back(e);
 	}
-	logger->DebugFormatted("Computing Heuristic: {}",IHeuristic::TypeToString(ActiveHeuristic));
+	logger->DebugFormatted("Computing Heuristic: {}", IHeuristic::TypeToString(ActiveHeuristic));
 
 	HeuristicManifest::Get().SetActiveHeuristicType(ActiveHeuristic);
 	Heuristic->Compute(entities.span());
@@ -125,14 +130,16 @@ void WatchDog::ComputeHeuristic()
 	Heuristic->SerializeBounds(bws);
 	HeuristicManifest::Get().StorePendingBoundsFromByteWriters(bws);
 
-	std::vector<std::string> data; std::unordered_map<IBounds::BoundsID, ByteReader> brs;
-	HeuristicManifest::Get().GetPendingBoundsAsByteReaders(data,brs);
-		
-	for (auto& [boundID,bound_reader] : brs)
+	std::vector<std::string> data;
+	std::unordered_map<IBounds::BoundsID, ByteReader> brs;
+	HeuristicManifest::Get().GetPendingBoundsAsByteReaders(data, brs);
+
+	for (auto &[boundID, bound_reader] : brs)
 	{
 		GridShape s;
 		s.Deserialize(bound_reader);
-		logger->DebugFormatted("Retreived ID {}, min:{}, max:{}",boundID,glm::to_string(s.min),glm::to_string(s.max));
+		logger->DebugFormatted("Retreived ID {}, min:{}, max:{}", boundID, glm::to_string(s.min),
+							   glm::to_string(s.max));
 	}
 }
 void WatchDog::SwitchHeuristic(IHeuristic::Type newHeuristic)
