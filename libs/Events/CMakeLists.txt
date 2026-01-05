@@ -35,4 +35,5 @@ target_link_libraries(${TARGET_NAME}
     AtlasNetGlobal
     Entity
     InternalDB
+    Interlink
 )

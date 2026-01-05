@@ -19,10 +19,7 @@ file(GLOB NODE_ADDONS
 
 add_custom_target(cartograph_web_native_deps ALL
     DEPENDS
-        AtlasNetGlobal_swig
-        Heuristic_swig
-        Entity_swig
-        Render_swig
+        Web_swig
 )
 
 add_custom_command(

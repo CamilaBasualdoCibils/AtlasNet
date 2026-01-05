@@ -1,9 +1,10 @@
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <string_view>
 
 #include "ByteStream.hpp"
-
+#include "pch.hpp"
 class ByteWriter
 {
    public:
@@ -129,6 +130,12 @@ class ByteWriter
 	// ---------------- Strings / blobs -----------------------------
 
 	void str(const std::string& s)
+	{
+		var_u32(uint32_t(s.size()));
+		write(s.data(), s.size());
+	}
+	template <std::size_t N>
+	void str(const static_string<N>& s)
 	{
 		var_u32(uint32_t(s.size()));
 		write(s.data(), s.size());

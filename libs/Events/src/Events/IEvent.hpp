@@ -5,3 +5,10 @@ class IEvent
 {
 
 };
+
+
+template <typename T>
+class RegisteredEvent
+{
+
+};

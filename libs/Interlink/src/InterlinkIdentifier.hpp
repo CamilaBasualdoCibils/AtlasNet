@@ -12,7 +12,8 @@
 struct InterLinkIdentifier
 {
 	InterlinkType Type = InterlinkType::eInvalid;
-	std::string ID = "";
+	static_string<64> ID;
+	//std::string ID = "";
 
    public:
 	InterLinkIdentifier() = default;
@@ -53,15 +54,20 @@ struct InterLinkIdentifier
 		ID = br.str();
 	}
 };
-
 namespace std
 {
 template <>
 struct hash<InterLinkIdentifier>
 {
-	size_t operator()(const InterLinkIdentifier& key) const noexcept
-	{
-		return std::hash<int>()(static_cast<int>(key.Type)) ^ std::hash<std::string>()(key.ID);
-	}
+    size_t operator()(const InterLinkIdentifier& key) const noexcept
+    {
+        size_t h1 = std::hash<int>{}(static_cast<int>(key.Type));
+        size_t h2 = std::hash<std::string_view>{}(
+            std::string_view(key.ID.data(), key.ID.size())
+        );
+
+        // standard hash combine
+        return h1 ^ (h2 + 0x9e3779b97f4a7c15ULL + (h1 << 6) + (h1 >> 2));
+    }
 };
-}  // namespace std
+}

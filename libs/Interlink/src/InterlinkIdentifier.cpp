@@ -56,7 +56,7 @@ std::string InterLinkIdentifier::ToString() const
     std::string type_string = boost::describe::enum_to_string(Type, "UnknownUnknownType?");
     if (!ID.empty())
     {
-        type_string += std::string(" ") + (ID);
+        type_string += std::string(" ") + (ID.c_str());
     }
     return NukeString(type_string);
 }

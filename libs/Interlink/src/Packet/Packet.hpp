@@ -10,8 +10,11 @@ enum class PacketType
 	eInvalid = 0,
 	eRelay = 1,
 	eCommand = 2,
+
+    //Event System
+    eEventSystemRequest = 3,
 };
-BOOST_DESCRIBE_ENUM(PacketType, eInvalid, eRelay)
+BOOST_DESCRIBE_ENUM(PacketType, eInvalid, eRelay,eCommand,eEventSystemRequest)
 
 class IPacket
 {

@@ -1,6 +1,6 @@
 #pragma once
 #include "ByteStream.hpp"
-
+#include "pch.hpp"
 class ByteReader {
 public:
   ByteReader(std::span<const uint8_t> data)
@@ -99,7 +99,16 @@ T read_vector() {
     i += len;
     return s;
   }
-
+  template <std::size_t N>
+	static_string<N> str()
+	{
+		 uint32_t len = var_u32();
+    if (remaining() < len)
+      throw ByteError("string overflow");
+    static_string<N> s(reinterpret_cast<const char*>(p + i), len);
+    i += len;
+    return s;
+	}
   std::span<const uint8_t> blob() {
     uint32_t len = var_u32();
     if (remaining() < len)
