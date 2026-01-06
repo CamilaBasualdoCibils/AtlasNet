@@ -1,0 +1,80 @@
+# AtlasNetToolchain.cmake
+# Self-contained AtlasNet toolchain
+#  - Adds global definitions
+#  - Sets up vcpkg
+#  - Lets external projects add subdirectories in /libs/
+
+# ------------------------------
+# Compiler defaults
+# ------------------------------
+if(NOT DEFINED CMAKE_C_COMPILER)
+    set(CMAKE_C_COMPILER "/usr/bin/gcc" CACHE STRING "C compiler")
+endif()
+if(NOT DEFINED CMAKE_CXX_COMPILER)
+    set(CMAKE_CXX_COMPILER "/usr/bin/g++" CACHE STRING "C++ compiler")
+endif()
+
+# ------------------------------
+# vcpkg integration
+# ------------------------------
+
+    include("$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake")
+    message(STATUS "vcpkg integration enabled via AtlasNet toolchain")
+
+
+# ------------------------------
+# Global compile definitions
+# ------------------------------
+set(ATLASNET_GLOBAL_DEFINITIONS
+    _PORT_WATCHDOG=25564
+    _PORT_SHARD=25565
+    _PORT_GAMESERVER=25566
+    _PORT_PROXY=25568
+    _DOCKER_OS_="ubuntu:24.04"
+    _DOCKER_WORKDIR_="/atlasnet"
+    _ATLASNET_STACK_NAME="atlasnet"
+    _SWARM_DEFAULT_PORT=2377
+    _DOCKER_TEMP_FILES_DIR="temp/docker/"
+    _ATLASNET_NETWORK_NAME="AtlasNet"
+    _REGISTRY_SERVICE_NAME="registry"
+    _REGISTRY_PORT=5000
+    _HEALTH_PING_INTERVAL_MS=500
+    _HEALTH_CHECK_INTERVAL_MS=2000
+    _HEALTH_PING_TIMESTAMP_LIFE_MS=3000
+    _INTERNAL_REDIS_SERVICE_NAME="InternalDB"
+    _INTERNAL_REDIS_PORT=6379
+    _BUILTINDB_REDIS_SERVICE_NAME="BuiltInDB_Redis"
+    _BUILTINDB_REDIS_PORT=2380
+    _BUILTINDB_POSTGRES_SERVICE_NAME="BuiltInDB_PostGres"
+    _BUILTINDB_POSTGRES_PORT=5432
+    _SHARD_SERVICE_NAME="Shard"
+    _SHARD_IMAGE_NAME="shard"
+    _WATCHDOG_IMAGE_NAME="watchdog"
+    _WATCHDOG_SERVICE_NAME="WatchDog"
+    _PROXY_IMAGE_NAME="proxy"
+    _PROXY_SERVICE_NAME="Proxy"
+    _CARTOGRAPH_IMAGE_NAME="cartograph"
+    _CARTOGRAPH_SERVICE_NAME="Cartograph"
+    _GAME_SERVER_IMAGE_NAME="shard_game_server"
+    _REGISTRY_CERT_SECRET_NAME="registry_tls_cert"
+    _REGISTRY_KEY_SECRET_NAME="registry_tls_key"
+    _BUILDER_CONTAINER_NAME="atlasnet_builder"
+)
+
+foreach(def IN LISTS ATLASNET_GLOBAL_DEFINITIONS)
+    add_compile_definitions(${def})
+endforeach()
+
+# ------------------------------
+# Default C++ settings
+# ------------------------------
+set(CMAKE_CXX_STANDARD 20)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
+
+# ------------------------------
+# Optional: set root path variable for external projects
+# ------------------------------
+set(ATLASNET_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
