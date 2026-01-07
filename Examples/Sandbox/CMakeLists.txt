@@ -13,14 +13,23 @@ execute_process(
 )
 
 
-include(.AtlasNet/AtlasNetSDK.cmake)
-add_subdirectory(lib)
-add_subdirectory(client)
-add_subdirectory(server)
+if (EXISTS "${ATLASNET_TARGET}/AtlasNetSDK.cmake")
+    include("${ATLASNET_TARGET}/AtlasNetSDK.cmake")
+    add_subdirectory(lib)
+    add_subdirectory(client)
+    add_subdirectory(server)
+    
+    add_custom_target(run_sandbox
+        COMMAND  ${ATLASNET_ROOT}/bin/AtlasNet 
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        VERBATIM
+    )
 
-add_custom_target(run_sandbox
-    COMMAND  ${ATLASNET_ROOT}/bin/AtlasNet 
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    VERBATIM
-)
+else()
+    message(WARNING
+        "AtlasNet SDK not found at ${ATLASNET_TARGET}.
+         Build will continue, but AtlasNet-dependent targets may fail."
+    )
+    
+endif()
 
