@@ -3,5 +3,9 @@
 # Files in AtlasNet use the build compile_commands.json
 If:
   PathMatch: "AtlasNet/.*"
-CompileFlags:
-  CompilationDatabase: "/workspaces/AtlasNetNew/AtlasNet/build/compile_commands.json"
+CompilationDatabase: "/workspaces/AtlasNetNew/AtlasNet/build/compile_commands.json"
+
+# Everything else (outside AtlasNet)
+If:
+  PathMatch: ".*"   # matches any file
+CompilationDatabase: "/workspaces/AtlasNetNew/build/compile_commands.json"

@@ -10,7 +10,7 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cxx"
   "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
 )
-set(GAMENETWORKINGSOCKETS_ROOT "${CMAKE_SOURCE_DIR}/deps/GameNetworkingSockets_install")
+set(GAMENETWORKINGSOCKETS_ROOT "${ATLASNET_ROOT}/deps/GameNetworkingSockets_install")
 
 add_library(${_target_name} ${_sources})
 # Optional, but common: local includes

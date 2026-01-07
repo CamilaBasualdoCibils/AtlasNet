@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
-# Exit immediately if any command fails, catch unset variables, and fail on pipeline errors
 set -euo pipefail
 
-# get the directory this script is in
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# remove the package folder relative to the script
-rm -rf "$SCRIPT_DIR/package"
+# Optional install path argument
+INSTALL_DIR="${1:-$SCRIPT_DIR/package}"
 
-# run cmake commands relative to the script directory
-cmake -B "$SCRIPT_DIR/build" -S "$SCRIPT_DIR"
+# Remove previous package folder if it exists
+rm -rf "$INSTALL_DIR"
+
+
+# Configure build with custom install prefix
+cmake -B "$SCRIPT_DIR/build" -S "$SCRIPT_DIR" -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR"
+
+# Build targets
 cmake --build "$SCRIPT_DIR/build" --parallel --target AtlasNet AtlasNetServer_Static AtlasNetServer_Shared
+
+# Install to the chosen prefix
 cmake --install "$SCRIPT_DIR/build" --component AtlasNetBootstrap

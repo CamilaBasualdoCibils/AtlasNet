@@ -7,10 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-include (cmake/Definitions.cmake)
+
+set(ATLASNET_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+include (${CMAKE_CURRENT_SOURCE_DIR}/cmake/Definitions.cmake)
 # --- Node.js conditional flag ---
 option(ENABLE_NODE "Enable Node.js build for Cartograph" OFF)
-
+option(ENABLE_JAVA "Enable Java build for AtlasNetSC" OFF)
 # --- SWIG and Node.js setup (conditional) ---
 if(ENABLE_NODE)
     message(STATUS "Node.js integration enabled")

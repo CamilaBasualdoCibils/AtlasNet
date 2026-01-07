@@ -21,3 +21,4 @@ install(TARGETS SandboxServer
     RUNTIME DESTINATION bin      # Linux/macOS executables
     COMPONENT SandboxServer
 )
+

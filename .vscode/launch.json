@@ -2,27 +2,28 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "type": "pwa-node",
+      "name": "Run CMake Utility Target",
+      "type": "cppdbg",                // Use cppdbg for Linux/macOS; cppvsdbg for Windows
       "request": "launch",
-      "name": "Debug Next.js",
-      "program": "${workspaceFolder}/apps/Cartograph/web/node_modules/next/dist/bin/next",
-      "args": ["dev"],
-      "cwd": "${workspaceFolder}/apps/Cartograph/web",
-      "runtimeArgs": ["--inspect"],
-      "console": "integratedTerminal",
-      "internalConsoleOptions": "neverOpen"
-    },
-     {
-      "type": "pwa-node",
-      "request": "attach",
-      "name": "Attach to Next.js in Docker",
-      "port": 9229,
-      "address": "localhost",
-      "localRoot": "${workspaceFolder}/apps/Cartograph/web",
-      "remoteRoot": "/app",
-      "protocol": "inspector",
-      "restart": true,
-      "skipFiles": ["<node_internals>/**"]
+      "program": "/usr/bin/cmake",      // Path to your CMake binary
+      "args": [
+        "--build",
+        "build",     // Path to your build directory
+        "--target",
+        "run_sandbox",    // Your CMake custom target
+                // Optional: run in parallel
+      ],
+      "cwd": "${workspaceFolder}/Examples/Sandbox",      // Working directory
+      "externalConsole": false,          // So you see full terminal output
+      "MIMode": "gdb",                  // Or lldb
+      "setupCommands": [
+        {
+          "description": "Enable pretty-printing for gdb",
+          "text": "-enable-pretty-printing",
+          "ignoreFailures": true
+        }
+      ],
+      "preLaunchTask": "CMake: Configure Build"
     }
   ]
 }

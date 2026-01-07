@@ -31,7 +31,7 @@ target_include_directories(${TARGET_NAME}
 target_link_libraries(${TARGET_NAME}
     Heuristic
 )
-
+if(ENABLE_NODE)
 add_swig_library_for_target(${TARGET_NAME}
     STL_INCLUDES
         "std_vector.i"
@@ -44,3 +44,4 @@ add_swig_library_for_target(${TARGET_NAME}
     #   "std::vector<std::string>"
     #   "std::unordered_map<IBounds::BoundsID, ByteReader>"
 )
+endif()

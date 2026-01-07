@@ -15,7 +15,7 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
 add_library(${TARGET_NAME} ${_sources})
 
 # Find Boost first
-set(BOOST_ROOT "${CMAKE_SOURCE_DIR}/deps/boost_install")  # path to your local Boost
+set(BOOST_ROOT "${ATLASNET_ROOT}/deps/boost_install")  # path to your local Boost
 set(BOOST_INCLUDEDIR "${BOOST_ROOT}/include")
 set(BOOST_LIBRARYDIR "${BOOST_ROOT}/lib")
 

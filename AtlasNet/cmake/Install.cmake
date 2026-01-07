@@ -1,28 +1,21 @@
+# Set default installation directories
 include(GNUInstallDirs)
 
-
-# Root of AtlasNet installation
-set(ATLASNET_INSTALL_ROOT ${CMAKE_INSTALL_PREFIX})
-set(ATLASNET_INSTALL_BIN     bin)
-set(ATLASNET_INSTALL_SDK     sdk)
-set(ATLASNET_INSTALL_DOCKER  docker)
-set(ATLASNET_INSTALL_SCHEMA  schemas)
-set(ATLASNET_INSTALL_CMAKE   cmake)
-set(ATLASNET_INSTALL_LIB  lib)
-
-
-# Override for debug build (install locally)
-if(TRUE)
-    message(STATUS "Debug build: installing to local ./bin instead of system prefix")
-    set(ATLASNET_INSTALL_ROOT ${CMAKE_SOURCE_DIR}/package)
-    set(ATLASNET_INSTALL_BIN     ${ATLASNET_INSTALL_ROOT}/bin)
-    set(ATLASNET_INSTALL_DEPS     ${ATLASNET_INSTALL_ROOT}/deps)
-    set(ATLASNET_INSTALL_SDK     ${ATLASNET_INSTALL_ROOT}/sdk)
-    set(ATLASNET_INSTALL_RUNTIME_APPS  ${ATLASNET_INSTALL_ROOT}/runtime)
-    set(ATLASNET_INSTALL_SCHEMA  ${ATLASNET_INSTALL_ROOT}/schemas)
-    set(ATLASNET_INSTALL_LIB  ${ATLASNET_INSTALL_ROOT}/lib)
-    set(ATLASNET_INSTALL_CMAKE   ${ATLASNET_INSTALL_ROOT}/cmake)
+# Use the user-specified prefix, or default to ./package
+if(CMAKE_INSTALL_PREFIX_INITIALIZED_TO_DEFAULT)
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/package" CACHE PATH "Install path prefix" FORCE)
 endif()
+
+# Set all AtlasNet install directories relative to CMAKE_INSTALL_PREFIX
+set(ATLASNET_INSTALL_ROOT ${CMAKE_INSTALL_PREFIX})
+set(ATLASNET_INSTALL_BIN     "${ATLASNET_INSTALL_ROOT}/bin")
+set(ATLASNET_INSTALL_DEPS    "${ATLASNET_INSTALL_ROOT}/deps")
+set(ATLASNET_INSTALL_SDK     "${ATLASNET_INSTALL_ROOT}/sdk")
+set(ATLASNET_INSTALL_RUNTIME_APPS  "${ATLASNET_INSTALL_ROOT}/runtime")
+set(ATLASNET_INSTALL_SCHEMA  "${ATLASNET_INSTALL_ROOT}/schemas")
+set(ATLASNET_INSTALL_LIB     "${ATLASNET_INSTALL_ROOT}/lib")
+set(ATLASNET_INSTALL_CMAKE   "${ATLASNET_INSTALL_ROOT}/cmake")
+
 
 SET(ATLASNET_INSTALL_BOOTSTRAP_CMD AtlasNetBootstrap)
 SET(ATLASNET_INSTALL_INDOCKER_CMD AtlasNetDocker)
@@ -62,7 +55,14 @@ install(
 install(
     FILES ${CMAKE_SOURCE_DIR}/CMakeLists.txt 
     DESTINATION ${ATLASNET_INSTALL_CMAKE}
-    COMPONENT ${ATLASNET_INSTALL_BOOTSTRAP_CMD}
+    COMPONENT 
+    ${ATLASNET_INSTALL_BOOTSTRAP_CMD}
+)
+install(
+    FILES ${CMAKE_SOURCE_DIR}/cmake/AtlasNetSDK.cmake
+    DESTINATION ${ATLASNET_INSTALL_ROOT}
+    COMPONENT 
+    ${ATLASNET_INSTALL_BOOTSTRAP_CMD}
 )
 install(
     FILES ${CMAKE_SOURCE_DIR}/AtlasNetSetup.sh
@@ -86,6 +86,12 @@ if(EXISTS "${CMAKE_SOURCE_DIR}/deps")
         DESTINATION ${ATLASNET_INSTALL_DEPS}
         COMPONENT ${ATLASNET_INSTALL_BOOTSTRAP_CMD}
         FILES_MATCHING
+        PATTERN "*.h"
+        PATTERN "*.hpp"
+        PATTERN "*.c"
+        PATTERN "*.cpp"
+        PATTERN "*.ipp"
+        #PATTERN "*.a"
         # Optional: you can filter by file type if needed, or remove FILES_MATCHING to copy everything
     )
 endif()

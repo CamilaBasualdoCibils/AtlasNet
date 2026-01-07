@@ -1,6 +1,6 @@
 {
     "TLSDirectory" : "temp/keys",
-    "GameServerTaskFile": "server/server-task.json",
+    "GameServerTaskFile": "sandbox-server.json",
     "Workers--": [
         {
             "Name": "Dumpster",

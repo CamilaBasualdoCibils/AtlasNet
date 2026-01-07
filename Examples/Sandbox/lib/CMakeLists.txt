@@ -16,3 +16,4 @@ target_include_directories(SandboxLib
   PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
+#add_dependencies(SandboxLib install_atlasnet)

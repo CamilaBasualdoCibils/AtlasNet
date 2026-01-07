@@ -9,10 +9,17 @@ echo "=== AtlasNet Ubuntu dependency installer ==="
 
 mkdir -p "$DEPS_DIR"
 
+# --- Sudo handling (ONLY for apt) ---
+if [ "$(id -u)" -ne 0 ]; then
+    SUDO="sudo"
+else
+    SUDO=""
+fi
+
 # --- System packages (apt) ---
 echo "Installing system packages..."
-  apt update
-  apt install -y \
+$SUDO apt update
+$SUDO apt install -y \
     build-essential \
     cmake \
     git \
@@ -31,7 +38,9 @@ echo "Installing system packages..."
     libprotobuf-dev \
     libcurl4-openssl-dev \
     autoconf \
-    libtool
+    libtool \
+    libuv1 \
+    libuv1-dev
 
 # --- Boost ---
 BOOST_VERSION="1.90.0"
@@ -49,20 +58,18 @@ fi
 if [ ! -d "$BOOST_DIR" ]; then
     echo "Extracting Boost..."
     tar -xzf "$BOOST_TAR" -C "$DEPS_DIR"
-
 fi
 
 cd "$BOOST_DIR"
 rm "$BOOST_TAR"
 
-# Convert module array to comma-separated list
 BOOST_COMPONENTS=$(IFS=','; echo "${BOOST_MODULES[*]}")
 
 echo "Bootstrapping Boost with modules: $BOOST_COMPONENTS"
 ./bootstrap.sh --prefix="$BOOST_INSTALL_DIR" --with-libraries="$BOOST_COMPONENTS"
 
 echo "Building and installing Boost..."
-./b2 install -j$(nproc) \
+./b2 install -j"$(nproc)" \
     cxxflags="-fPIC" \
     cflags="-fPIC" \
     link=static \
@@ -72,14 +79,13 @@ cd "$BASE_DIR"
 rm -rf "$BOOST_DIR"
 echo "Boost installed in $BOOST_INSTALL_DIR"
 
-
-
 # --- GameNetworkingSockets ---
 GNS_DIR="$DEPS_DIR/GameNetworkingSockets"
 if [ ! -d "$GNS_DIR" ]; then
     echo "Cloning GameNetworkingSockets..."
     git clone --recursive https://github.com/ValveSoftware/GameNetworkingSockets.git "$GNS_DIR"
 fi
+
 cd "$GNS_DIR"
 mkdir -p build && cd build
 cmake .. \
@@ -87,8 +93,9 @@ cmake .. \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR/GameNetworkingSockets_install" \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DBUILD_SHARED_LIBS=OFF
-make -j$(nproc)
+make -j"$(nproc)"
 make install
+
 cd "$BASE_DIR"
 rm -rf "$GNS_DIR"
 
@@ -98,6 +105,7 @@ if [ ! -d "$HIREDIS_DIR" ]; then
     echo "Cloning hiredis..."
     git clone https://github.com/redis/hiredis.git "$HIREDIS_DIR"
 fi
+
 cd "$HIREDIS_DIR"
 mkdir -p build && cd build
 cmake .. \
@@ -106,14 +114,14 @@ cmake .. \
     -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
     -DENABLE_SSL=ON \
     -DCMAKE_INSTALL_PREFIX="$DEPS_DIR/hiredis_install"
-make -j$(nproc)
+make -j"$(nproc)"
 make install
+
 cd "$BASE_DIR"
 rm -rf "$HIREDIS_DIR"
 
 # --- redis-plus-plus ---
 REDIS_PLUS_DIR="$DEPS_DIR/redis-plus-plus"
-
 if [ ! -d "$REDIS_PLUS_DIR" ]; then
     echo "Cloning redis-plus-plus..."
     git clone https://github.com/sewenew/redis-plus-plus.git "$REDIS_PLUS_DIR"
@@ -121,7 +129,6 @@ fi
 
 cd "$REDIS_PLUS_DIR"
 mkdir -p build && cd build
-
 cmake .. \
     -DCMAKE_BUILD_TYPE=Debug \
     -DCMAKE_CXX_STANDARD=17 \
@@ -136,8 +143,5 @@ make install
 
 cd "$BASE_DIR"
 rm -rf "$REDIS_PLUS_DIR"
-#rm -rf deps
+
 echo "All dependencies installed successfully!"
-#echo ""
-#echo "To build AtlasNet or examples using these deps, pass CMake:"
-#echo "  -DCMAKE_PREFIX_PATH=$DEPS_DIR/GameNetworkingSockets/install;$DEPS_DIR/redis-plus-plus/install;$DEPS_DIR/ftxui/install"

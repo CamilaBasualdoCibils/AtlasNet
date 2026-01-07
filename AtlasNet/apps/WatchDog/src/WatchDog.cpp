@@ -141,6 +141,7 @@ void WatchDog::ComputeHeuristic()
 		logger->DebugFormatted("Retreived ID {}, min:{}, max:{}", boundID, glm::to_string(s.min),
 							   glm::to_string(s.max));
 	}
+	SetShardCount(bws.size());
 }
 void WatchDog::SwitchHeuristic(IHeuristic::Type newHeuristic)
 {

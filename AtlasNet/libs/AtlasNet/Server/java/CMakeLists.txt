@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.16)
+if(ENABLE_JAVA)
 
 find_package(JNI REQUIRED)
 find_package(Java REQUIRED)
@@ -123,3 +124,5 @@ set_target_properties(AtlasNetServer_Java PROPERTIES
   ATLASNETSERVER_JAVA_DIST_JAR         "${DIST_JAR}"
   ATLASNETSERVER_JAVA_DIST_NATIVES_DIR "${DIST_NATIVES_DIR}"
 )
+
+endif()

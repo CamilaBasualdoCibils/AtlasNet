@@ -46,4 +46,4 @@ set_target_properties(AtlasNetServer_Shared PROPERTIES
 #     DESTINATION ${ATLASNET_INSTALL_LIB}/cmake
 #     COMPONENT ${ATLASNET_INSTALL_BOOTSTRAP_CMD}
 # )
-add_subdirectory(java)
+#add_subdirectory(java)

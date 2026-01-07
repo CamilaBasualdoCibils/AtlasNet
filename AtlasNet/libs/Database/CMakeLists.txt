@@ -18,8 +18,8 @@ target_include_directories(${_target_name}
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
-set(REDIS_PLUS_PLUS_ROOT "${CMAKE_SOURCE_DIR}/deps/redis-plus-plus_install")
-set(HIREDIS_ROOT "${CMAKE_SOURCE_DIR}/deps/hiredis_install")  # hiredis is inside the same install
+set(REDIS_PLUS_PLUS_ROOT "${ATLASNET_ROOT}/deps/redis-plus-plus_install")
+set(HIREDIS_ROOT "${ATLASNET_ROOT}/deps/hiredis_install")  # hiredis is inside the same install
 
 # Add include directories
 target_include_directories(${_target_name} PUBLIC
