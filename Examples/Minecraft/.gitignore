@@ -8,7 +8,9 @@ src/build
 run
 .architectury-transformer
 src/common/build/
+src/common/.gradle/
 src/fabric/build/
+src/fabric/.gradle/
 src/neoforge/build/
 src/build/
 src/.gradle/

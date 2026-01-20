@@ -7,29 +7,10 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
-set(ATLASNET_TARGET "${CMAKE_CURRENT_SOURCE_DIR}/.AtlasNet")
-execute_process(
-    COMMAND "/workspaces/AtlasNetNew/AtlasNet/AtlasNetInstall.sh" ${ATLASNET_TARGET}   # remove if already exists
+
+add_run_target(
+    NAME run_atlasnet_sandbox
+    TARGET AtlasNet
+    ARGS -f ${CMAKE_CURRENT_SOURCE_DIR}/AtlasNetSettings.json
+    ENV ATLASNET_ROOT=${ATLASNET_ROOT}
 )
-
-
-if (EXISTS "${ATLASNET_TARGET}/AtlasNetSDK.cmake")
-    include("${ATLASNET_TARGET}/AtlasNetSDK.cmake")
-    add_subdirectory(lib)
-    add_subdirectory(client)
-    add_subdirectory(server)
-    
-    add_custom_target(run_sandbox
-        COMMAND  ${ATLASNET_ROOT}/bin/AtlasNet 
-        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-        VERBATIM
-    )
-
-else()
-    message(WARNING
-        "AtlasNet SDK not found at ${ATLASNET_TARGET}.
-         Build will continue, but AtlasNet-dependent targets may fail."
-    )
-    
-endif()
-
