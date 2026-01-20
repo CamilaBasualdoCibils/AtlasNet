@@ -52,7 +52,6 @@
     //"ghcr.io/devcontainers/features/kubectl-helm-minikube:1":{},
     "ghcr.io/msclock/features/vcpkg:2": {},
     "ghcr.io/devcontainers/features/docker-in-docker:2": {},
-    "ghcr.io/ebaskoro/devcontainer-features/emscripten:1": {},
     "ghcr.io/devcontainers/features/node:1": {
       "version": "lts"
     }
@@ -76,7 +75,8 @@
         "mutantdino.resourcemonitor",
         "vscjava.vscode-java-pack",
         "twxs.cmake",
-        "tintinweb.graphviz-interactive-preview"
+        "tintinweb.graphviz-interactive-preview",
+        "ms-vscode.hexeditor"
       ]
     }
   }

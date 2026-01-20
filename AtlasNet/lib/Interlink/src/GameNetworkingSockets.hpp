@@ -1,0 +1,11 @@
+#pragma once
+#include "steam/steamnetworkingsockets.h"
+#include "steam/isteamnetworkingsockets.h"
+#include "steam/isteamnetworkingutils.h"
+#include "steam/isteamnetworkingmessages.h"
+#include "steam/steam_api_common.h"
+#include "steam/steamclientpublic.h"
+#include "steam/steamnetworkingcustomsignaling.h"
+#include "steam/steamnetworkingtypes.h"
+#include "steam/steamtypes.h"
+#include "steam/steamuniverse.h"

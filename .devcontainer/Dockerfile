@@ -32,7 +32,28 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     openjdk-21-jdk\
 
     # NPM
-    npm \
+    npm nodejs libnode-dev\
+    swig \
+     cmake \
+    git \
+    curl \
+    pkg-config \
+    libssl-dev \
+    zlib1g-dev \
+    libglm-dev \
+    nlohmann-json3-dev \
+    python3 \
+    python3-pip \
+    unzip \
+    wget \
+    ninja-build \
+    protobuf-compiler \
+    libprotobuf-dev \
+    libcurl4-openssl-dev \
+    autoconf \
+    libtool \
+    libuv1 \
+    libuv1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 RUN usermod -aG docker vscode

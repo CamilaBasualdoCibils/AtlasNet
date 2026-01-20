@@ -1,34 +1,23 @@
 {
   "cmake.ignoreCMakeListsMissing": true,
-  "clangd.arguments": [
-    "--compile-commands-dir=${workspaceFolder}/build/",
-    "--clang-tidy",
-    "--clang-tidy-checks=*",
-    "--header-insertion=iwyu",
-    "--completion-style=detailed",
-    "--background-index",
-    "--all-scopes-completion",
-    "--log=verbose"
-  ],
+  
   "clangd.enable": true,
   "workbench.colorTheme": "Default Dark Modern",
   "cmake.generator": "Ninja",
   "cmake.debugConfig": {
     "cwd": "${workspaceFolder}"
   },
-  //"cmake.configureArgs": [
-  //   "-DCMAKE_TOOLCHAIN_FILE=$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+  "cmake.configureArgs": [
+    // "-DCMAKE_TOOLCHAIN_FILE=${workspaceFolder}/AtlasNet/AtlasNetToolchain.cmake",
   //  "-DVCPKG_TARGET_TRIPLET=wasm32-emscripten",
   //  "-DVCPKG_CHAINLOAD_TOOLCHAIN_FILE=$env{EMSDK}/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake",
   //  "-DCMAKE_C_COMPILER=$env{EMSDK}/upstream/emscripten/emcc",
   //  "-DCMAKE_CXX_COMPILER=$env{EMSDK}/upstream/emscripten/em++"
-  //],
+  ],
   "cmake.configureSettings": {
     "CMAKE_C_COMPILER": "clang",
     "CMAKE_CXX_COMPILER": "clang++"
   },
-  "cmake.exportCompileCommandsFile": true,
-  "cmake.copyCompileCommands": "${workspaceFolder}/build/compile_commands.json",
   "C_Cpp.intelliSenseEngine": "disabled",
   "[cpp]": {
     "editor.defaultFormatter": "llvm-vs-code-extensions.vscode-clangd"
@@ -45,5 +34,6 @@
   "typescript.tsserver.maxTsServerMemory": 1024,
   "java.compile.nullAnalysis.mode": "disabled",
   "java.configuration.updateBuildConfiguration": "automatic",
-  "cmake.useCMakePresets": "never"
+  "cmake.useCMakePresets": "never",
+  "explorer.compactFolders": false
 }
