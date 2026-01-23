@@ -13,6 +13,7 @@
 #include "Packet/Packet.hpp"
 #include "Serialize/ByteWriter.hpp"
 #include "pch.hpp"
+#include "steam/steamclientpublic.h"
 
 // ===== Safe, single-process guard for GNS init ===============================
 static bool EnsureGNSInitialized()
@@ -821,4 +822,46 @@ void Interlink::Tick()
 	GenerateNewConnections();
 	ReceiveMessages();
 	networkInterface->RunCallbacks();  // process events
+}
+
+
+void Interlink::GetConnectionTelemetry(std::vector<ConnectionTelemetry>& out)
+{
+    out.clear();
+
+    ISteamNetworkingSockets* sockets = SteamNetworkingSockets();
+    if (!sockets)
+        return;
+
+    const auto& byState = Connections.get<IndexByState>();
+
+    auto [it, end] = byState.equal_range(ConnectionState::eConnected);
+    for (; it != end; ++it)
+    {
+        const Connection& conn = *it;
+
+        SteamNetConnectionRealTimeStatus_t status{};
+        sockets->GetConnectionRealTimeStatus(conn.SteamConnection, &status, 0, nullptr);
+
+        ConnectionTelemetry t{};
+		t.pingMs = status.m_nPing;
+		t.inBytesPerSec = status.m_flInBytesPerSec;
+		t.outBytesPerSec = status.m_flOutBytesPerSec;
+		t.inPacketsPerSec = status.m_flInPacketsPerSec;
+
+		t.pendingReliableBytes = status.m_cbPendingReliable;
+		t.pendingUnreliableBytes = status.m_cbPendingUnreliable;
+		t.sentUnackedReliableBytes = status.m_cbSentUnackedReliable;
+
+		t.queueTimeUsec = status.m_usecQueueTime;
+
+		t.qualityLocal = status.m_flConnectionQualityLocal;
+		t.qualityRemote = status.m_flConnectionQualityRemote;
+		t.state = status.m_eState;
+
+		t.IdentityId = MyIdentity.ToString();
+		t.targetId = conn.target.ToString();
+
+        out.push_back(std::move(t));
+    }
 }

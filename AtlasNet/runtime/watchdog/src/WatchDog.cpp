@@ -7,6 +7,7 @@
 
 #include "Connection.hpp"
 #include "Database/HealthManifest.hpp"
+#include "Telemetry/NetworkManifest.hpp"
 #include "Database/HeuristicManifest.hpp"
 #include "DockerIO.hpp"
 #include "Entity.hpp"
@@ -42,6 +43,7 @@ void WatchDog::Run()
 void WatchDog::Init()
 {
 	logger->Debug("Init");
+	NetworkManifest::Get().ScheduleNetworkPings(ID);
 	HealthManifest::Get().ScheduleHealthPings(ID);
 	HealthManifest::Get().ScheduleHealthChecks(
 		[&](const InterLinkIdentifier &ID_fail, const std::string &key)

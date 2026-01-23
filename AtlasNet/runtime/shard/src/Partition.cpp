@@ -7,6 +7,7 @@
 #include "Packet/CommandPacket.hpp"
 #include "pch.hpp"
 #include "Database/HealthManifest.hpp"
+#include "Telemetry/NetworkManifest.hpp"
 Partition::Partition()
 {
 
@@ -20,6 +21,7 @@ void Partition::Init()
 
 	logger = std::make_shared<Log>(partitionIdentifier.ToString());
 	HealthManifest::Get().ScheduleHealthPings(partitionIdentifier);
+	NetworkManifest::Get().ScheduleNetworkPings(partitionIdentifier);
 	Interlink::Get().Init(InterlinkProperties{
 		.ThisID = partitionIdentifier,
 		.logger = logger,

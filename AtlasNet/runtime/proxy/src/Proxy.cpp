@@ -4,6 +4,7 @@
 
 #include "Crash/CrashHandler.hpp"
 #include "Database/HealthManifest.hpp"
+#include "Telemetry/NetworkManifest.hpp"
 #include "Interlink.hpp"
 #include "InterlinkIdentifier.hpp"
 void Proxy::Run()
@@ -26,8 +27,8 @@ void Proxy::Init()
 {
 	CrashHandler::Get().Init();
 	ID = InterLinkIdentifier(InterlinkType::eProxy, DockerIO::Get().GetSelfContainerName());
+	NetworkManifest::Get().ScheduleNetworkPings(ID);
 	HealthManifest::Get().ScheduleHealthPings(ID);
-
 	Interlink::Get().Init(InterlinkProperties{
 		.ThisID = ID,
 		.logger = logger,

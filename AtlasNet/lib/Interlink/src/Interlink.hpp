@@ -10,6 +10,7 @@
 #include "Misc/Singleton.hpp"
 #include "Packet/Packet.hpp"
 #include "Packet/PacketManager.hpp"
+#include "Telemetry/ConnectionTelemetry.hpp"
 #include "pch.hpp"
 struct InterlinkCallbacks
 {
@@ -113,14 +114,15 @@ class Interlink : public Singleton<Interlink>
 	void ReceiveMessages();
 
 	// void DebugPrint();
-
-   public:
+	
+	public:
 	void Init(const InterlinkProperties &properties);
 	void Shutdown();
-
+	
 	void Tick();
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);
-
+	
+	void GetConnectionTelemetry(std::vector<ConnectionTelemetry>& out);
 	// void SendMessageRaw(const InterLinkIdentifier &who, std::span<const std::byte> data,
 	// InterlinkMessageSendFlag sendFlag = InterlinkMessageSendFlag::eReliableBatched);
 	template <typename T, std::enable_if_t<std::is_base_of_v<IPacket, T>>>

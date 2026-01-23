@@ -2,6 +2,7 @@
 #include <iostream>
 #include <unordered_map>
 #include "Database/HealthManifest.hpp"
+#include "Telemetry/NetworkManifest.hpp"
 #include "Serialize/ByteReader.hpp"
 #include "InterlinkIdentifier.hpp"
 
@@ -17,6 +18,8 @@ void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids) {
         id.Deserialize(br);
 
         std::cerr << id.ToString() << std::endl;
+
+        // for each live ping, grab all network telemetry
 
         out_live_ids.push_back(id.ToString());
     }

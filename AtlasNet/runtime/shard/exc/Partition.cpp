@@ -11,6 +11,7 @@
 #include "Shape.hpp"
 #include "pch.hpp"
 #include "Database/HealthManifest.hpp"
+#include "Telemetry/NetworkManifest.hpp"
 Partition::Partition()
 {
 	// Initialize persistent database connection
@@ -32,6 +33,7 @@ void Partition::Init()
 											DockerIO::Get().GetSelfContainerName());
 
 	logger = std::make_shared<Log>(partitionIdentifier.ToString());
+	NetworkManifest::Get().ScheduleNetworkPings(partitionIdentifier);
 	HealthManifest::Get().InitHealthPing(partitionIdentifier);
 	Interlink::Get().Init(InterlinkProperties{
 		.ThisID = partitionIdentifier,
