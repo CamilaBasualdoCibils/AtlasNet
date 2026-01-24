@@ -30,12 +30,12 @@ void NetworkTelemetry::GetAllTelemetry(std::vector<std::vector<std::string>>& ou
     NetworkManifest::Get().GetAllTelemetry(out_telemetry);
 
 
-    for (const auto& telemetry_entry : out_telemetry) {
-        std::cerr << "Telemetry Entry:" << std::endl;
-        for (const auto& field : telemetry_entry) {
-            std::cerr << "  " << field << std::endl;
-        }
-    }
+    //for (const auto& telemetry_entry : out_telemetry) {
+    //    std::cerr << "Telemetry Entry:" << std::endl;
+    //    for (const auto& field : telemetry_entry) {
+    //        std::cerr << "  " << field << std::endl;
+    //    }
+    //}
 }
 
 void NetworkTelemetry::GetLivePingUploadSpeed(float &out_upload_kbps) {

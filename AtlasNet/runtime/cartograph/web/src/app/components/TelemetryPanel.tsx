@@ -3,13 +3,18 @@
 import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
 
 const CONNECTION_FIELDS = [
-  { key: 'connectionId', label: 'Conn ID' },
-  { key: 'sourceShard', label: 'Src' },
-  { key: 'destShard', label: 'Dst' },
-  { key: 'rttMs', label: 'RTT (ms)', align: 'right' },
-  { key: 'packetLossPct', label: 'Loss %', align: 'right' },
-  { key: 'sendKbps', label: 'Send KB/s', align: 'right' },
-  { key: 'recvKbps', label: 'Recv KB/s', align: 'right' },
+  { key: 'IdentityId', label: 'IdentityId' },
+  { key: 'targetId', label: 'targetId' },
+  { key: 'pingMs', label: 'ping (ms)', align: 'right' },
+  { key: 'inBytesPerSec', label: 'In KB/s', align: 'right' },
+  { key: 'outBytesPerSec', label: 'Out KB/s', align: 'right' },
+  { key: 'inPacketsPerSec', label: 'In Packets/s', align: 'right' },
+  { key: 'pendingReliableBytes', label: 'Pending Reliable Bytes', align: 'right' },
+  { key: 'pendingUnreliableBytes', label: 'Pending Unreliable Bytes', align: 'right' },
+  { key: 'sentUnackedReliableBytes', label: 'Sent Unacked Reliable Bytes', align: 'right' },
+  { key: 'queueTimeUsec', label: 'Queue Time (us)', align: 'right' },
+  { key: 'qualityLocal', label: 'Local Quality', align: 'right' },
+  { key: 'qualityRemote', label: 'Remote Quality', align: 'right' },
   { key: 'state', label: 'State' },
 ] as const;
 
@@ -72,10 +77,9 @@ export function TelemetryPanel({
           ))}
         </tbody>
       </table>
-      
       <div style={{ marginBottom: 8, fontFamily: 'monospace', fontSize: 12 }}>
-        <div>downloadKbps: {shard.downloadKbps}</div>
-        <div>uploadKbps: {shard.uploadKbps}</div>
+        {/*<div>downloadKbps: {shard.downloadKbps}</div>*/}
+        {/*<div>uploadKbps: {shard.uploadKbps}</div>*/}
         <div>rows: {rows.length}</div>
       </div>
 

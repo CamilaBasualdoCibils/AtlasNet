@@ -4,7 +4,7 @@ import { NextResponse } from 'next/server';
 import type { ShardTelemetry } from '../../lib/networkTelemetryTypes';
 
 export async function GET() {
-  const response = await fetch('http://localhost:4000/networktelemetry', {
+  const response = await fetch('http://127.0.0.1:4000/networktelemetry', {
     cache: 'no-store',
   });
 

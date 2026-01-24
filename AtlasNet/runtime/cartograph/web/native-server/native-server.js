@@ -6,14 +6,19 @@ const { HeuristicDraw, IBoundsDrawShape, std_vector_IBoundsDrawShape_ } = addon;
 
 function decodeConnectionRow(row) {
   return {
-    connectionId: row[0],
-    sourceShard: row[1],
-    destShard: row[2],
-    rttMs: Number(row[3]),
-    packetLossPct: Number(row[4]),
-    sendKbps: Number(row[5]),
-    recvKbps: Number(row[6]),
-    state: row[7],
+    IdentityId: row[0],
+    targetId: row[1],
+    pingMs: Number(row[2]),
+    inBytesPerSec: Number(row[3]),
+    outBytesPerSec: Number(row[4]),
+    inPacketsPerSec: Number(row[5]),
+    pendingReliableBytes: Number(row[6]),
+    pendingUnreliableBytes: row[7],
+    sentUnackedReliableBytes: Number(row[8]),
+    queueTimeUsec: Number(row[9]),
+    qualityLocal: Number(row[10]),
+    qualityRemote: Number(row[11]),
+    state: row[12],
   };
 }
 function inspectObject(name, obj) {
@@ -44,20 +49,22 @@ app.get('/networktelemetry', (req, res) => {
     nt.GetAllTelemetry(telemetryVec);
     const ids = [];
     for (let i = 0; i < idsVec.size(); i++) {
-      //ids.push(String(idsVec.get(i)));
       ids.push(String(idsVec.get(i)));
-      console.log(idsVec.get(i));
-      //ids.push(idsVec.get(i).c_str());
+      //console.log(idsVec.get(i));
 
     }
-    console.log(ids);
+    //console.log(ids);
 
     // Convert telemetryVec: std::vector<std::vector<std::string>> -> string[][]
     const allRows = [];
     for (let i = 0; i < telemetryVec.size(); i++) {
       const rowVec = telemetryVec.get(i);
       const row = [];
-      for (let j = 0; j < rowVec.size(); j++) row.push(String(rowVec.get(j)));
+      for (let j = 0; j < rowVec.size(); j++) 
+      {
+        row.push(String(rowVec.get(j)));
+        //console.log(String(rowVec.get(j)));
+      }
       allRows.push(row);
     }
 
@@ -75,6 +82,7 @@ app.get('/networktelemetry', (req, res) => {
         rowsByShard.set(shardId, []);
     }
     rowsByShard.get(shardId).push(decoded);
+    console.log(`Decoded row for shard ${shardId}:`, decoded);
     }
 
     // Upload/Download: your C++ methods currently do nothing (commented out),

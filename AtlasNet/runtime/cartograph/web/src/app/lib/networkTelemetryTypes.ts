@@ -1,11 +1,16 @@
 export interface ConnectionTelemetry {
-  connectionId: string;
-  sourceShard: string;
-  destShard: string;
-  rttMs: number;
-  packetLossPct: number;
-  sendKbps: number;
-  recvKbps: number;
+  IdentityId: string;
+  targetId: string;
+  pingMs: number;
+  inBytesPerSec: number;
+  outBytesPerSec: number;
+  inPacketsPerSec: number;
+  pendingReliableBytes: number;
+  pendingUnreliableBytes: number;
+  sentUnackedReliableBytes: number;
+  queueTimeUsec: number;
+  qualityLocal: number;
+  qualityRemote: number;
   state: string;
 }
 
