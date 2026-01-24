@@ -130,9 +130,9 @@ void NetworkManifest::GetAllTelemetry(
             row.push_back(std::to_string(t.qualityRemote));
             row.push_back(std::to_string(t.state));
 
-            for (auto& field : row) {
-                std::cerr << "  " << field << std::endl;
-            }
+            //for (auto& field : row) {
+            //    std::cerr << "  " << field << std::endl;
+            //}
 
             out_telemetry.push_back(std::move(row));
         }

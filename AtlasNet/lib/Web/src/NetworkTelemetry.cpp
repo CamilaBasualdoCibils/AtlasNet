@@ -25,8 +25,8 @@ void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids, st
         out_health.push_back(std::to_string(pair.second));
     }
 
-    std::cerr << "Live Ping IDs: " << out_live_ids.size() << std::endl;
-    std::cerr << "Live Healths: " << out_health.size() << std::endl;
+    //std::cerr << "Live Ping IDs: " << out_live_ids.size() << std::endl;
+    //std::cerr << "Live Healths: " << out_health.size() << std::endl;
 }
 
 void NetworkTelemetry::GetAllTelemetry(std::vector<std::vector<std::string>>& out_telemetry) {
