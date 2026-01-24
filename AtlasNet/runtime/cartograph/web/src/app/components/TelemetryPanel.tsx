@@ -74,8 +74,8 @@ export function TelemetryPanel({
 
           {/* Summary */}
           <div className="grid grid-cols-3 gap-4 rounded-2xl bg-slate-900/60 border border-slate-800 p-4">
-            <Metric label="Download" value={`${shard.downloadKbps.toFixed(1)} KB/s`} />
-            <Metric label="Upload" value={`${shard.uploadKbps.toFixed(1)} KB/s`} />
+            <Metric label="Download" value={`${shard.downloadKbps.toFixed(1)} Bytes/s`} />
+            <Metric label="Upload" value={`${shard.uploadKbps.toFixed(1)} Bytes/s`} />
             <Metric label="Connections" value={shard.connections.length} />
           </div>
 
@@ -108,8 +108,8 @@ export function TelemetryPanel({
                   <Metric label="Queue (µs)" value={c.queueTimeUsec} />
 
                   {/* Throughput */}
-                  <Metric label="In KB/s" value={c.inBytesPerSec} />
-                  <Metric label="Out KB/s" value={c.outBytesPerSec} />
+                  <Metric label="In Bytes/s" value={c.inBytesPerSec} />
+                  <Metric label="Out Bytes/s" value={c.outBytesPerSec} />
                   <Metric label="In Packets/s" value={c.inPacketsPerSec} />
 
                   {/* Reliability */}

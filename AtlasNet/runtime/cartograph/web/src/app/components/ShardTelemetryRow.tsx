@@ -54,7 +54,7 @@ export function ShardTelemetryRow({
       </td>
 
       <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
-        {downloadKbps.toFixed(1)} KB/s
+        {downloadKbps.toFixed(1)} Bytes/s
       </td>
 
       <td style={{ padding: 8 }}>
@@ -62,7 +62,7 @@ export function ShardTelemetryRow({
       </td>
 
       <td style={{ padding: 8, textAlign: 'right', whiteSpace: 'nowrap' }}>
-        {uploadKbps.toFixed(1)} KB/s
+        {uploadKbps.toFixed(1)} Bytes/s
       </td>
 
       <td style={{ padding: 8 }}>

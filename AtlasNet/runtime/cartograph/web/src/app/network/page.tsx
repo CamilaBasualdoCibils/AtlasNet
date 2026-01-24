@@ -107,9 +107,9 @@ export default function NetworkTelemetryPage() {
         <thead>
           <tr style={{ borderBottom: '1px solid #ccc' }}>
             <th align="left">Shard</th>
-            <th align="right">Download</th>
+            <th align="right">Download Avg</th>
             <th>Download Graph</th>
-            <th align="right">Upload</th>
+            <th align="right">Upload Avg</th>
             <th>Upload Graph</th>
           </tr>
         </thead>

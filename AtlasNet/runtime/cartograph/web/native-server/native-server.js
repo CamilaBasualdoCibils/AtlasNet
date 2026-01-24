@@ -21,6 +21,25 @@ function decodeConnectionRow(row) {
     state: row[12],
   };
 }
+function computeShardAverages(connections) {
+  if (!connections || connections.length === 0) {
+    return { inAvg: 0, outAvg: 0 };
+  }
+
+  let inSum = 0;
+  let outSum = 0;
+
+  for (const c of connections) {
+    inSum += c.inBytesPerSec;
+    outSum += c.outBytesPerSec;
+  }
+
+  return {
+    inAvg: inSum / connections.length,
+    outAvg: outSum / connections.length,
+  };
+}
+
 function inspectObject(name, obj) {
     console.log(`${name} keys:`, Object.keys(obj));
     if (obj.prototype) {
@@ -90,14 +109,19 @@ app.get('/networktelemetry', (req, res) => {
     //console.log(`Decoded row for shard ${shardId}:`, decoded);
     }
 
-    // Upload/Download: currently do nothing,
-    // so hardcode here for now OR return null/0 until implemented.
-    const telemetry = ids.map((id, idx) => ({
-      shardId: id,
-      downloadKbps: healthByShard.get(id) ?? 0, // fake for now
-      uploadKbps: 80 + idx * 20,    // fake for now
-      connections: rowsByShard.get(id) ?? [],
-    }));
+    // Upload/Download: average from connections
+    const telemetry = ids.map((id) => {
+    const connections = rowsByShard.get(id) ?? [];
+    const { inAvg, outAvg } = computeShardAverages(connections);
+
+    return {
+        shardId: id,
+        downloadKbps: inAvg,   // avg inBytesPerSec
+        uploadKbps: outAvg,   // avg outBytesPerSec
+        connections,
+    };
+    });
+
 
 
     res.json(telemetry);
