@@ -42,14 +42,24 @@ app.get('/networktelemetry', (req, res) => {
 
     // SWIG string vector
     const idsVec = new std_vector_std_string_();
+    const healthVec = new std_vector_std_string_();
     const telemetryVec = new std_vector_std_vector_std_string__();
 
-    nt.GetLivePingIDs(idsVec);
+    nt.GetLivePingIDs(idsVec, healthVec);
     nt.GetAllTelemetry(telemetryVec);
+    // Convert idsVec and healthVec to JS arrays
     const ids = [];
-    for (let i = 0; i < idsVec.size(); i++) {
-      ids.push(String(idsVec.get(i)));
+    const healthByShard = new Map();
+
+    const count = Math.min(idsVec.size(), healthVec.size());
+    for (let i = 0; i < count; i++) {
+    const shardId = String(idsVec.get(i));
+    const health = Number(healthVec.get(i)); // ping ms
+
+    ids.push(shardId);
+    healthByShard.set(shardId, health);
     }
+
 
     // Convert telemetryVec: std::vector<std::vector<std::string>> -> string[][]
     const allRows = [];
@@ -84,7 +94,7 @@ app.get('/networktelemetry', (req, res) => {
     // so hardcode here for now OR return null/0 until implemented.
     const telemetry = ids.map((id, idx) => ({
       shardId: id,
-      downloadKbps: 200 + idx * 50, // fake for now
+      downloadKbps: healthByShard.get(id) ?? 0, // fake for now
       uploadKbps: 80 + idx * 20,    // fake for now
       connections: rowsByShard.get(id) ?? [],
     }));

@@ -7,7 +7,7 @@
 #include "Serialize/ByteReader.hpp"
 #include "InterlinkIdentifier.hpp"
 
-void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids) {
+void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids, std::vector<std::string>& out_health) {
     std::unordered_map<std::string, double> all_pings;
 
     HealthManifest::Get().GetAllPings(all_pings);
@@ -15,15 +15,18 @@ void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids) {
     for (const auto& pair : all_pings) {
 
         ByteReader br(pair.first);
+        //ByteReader br_val(pair.second);
         InterLinkIdentifier id;
         id.Deserialize(br);
 
         std::cerr << id.ToString() << std::endl;
 
         out_live_ids.push_back(id.ToString());
+        out_health.push_back(std::to_string(pair.second));
     }
 
     std::cerr << "Live Ping IDs: " << out_live_ids.size() << std::endl;
+    std::cerr << "Live Healths: " << out_health.size() << std::endl;
 }
 
 void NetworkTelemetry::GetAllTelemetry(std::vector<std::vector<std::string>>& out_telemetry) {
