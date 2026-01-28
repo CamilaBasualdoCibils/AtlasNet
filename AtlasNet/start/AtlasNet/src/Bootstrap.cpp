@@ -559,19 +559,21 @@ void Bootstrap::BuildImages()
 {
 	QueueDockerImageBuild(WatchDogDockerFile, _WATCHDOG_IMAGE_NAME);
 	QueueDockerImageBuild(ShardDockerFile, _SHARD_IMAGE_NAME);
-	
+
 	QueueDockerImageBuild(ProxyDockerFile, _PROXY_IMAGE_NAME);
 	// BuildDockerImageLocally(GameCoordinatorDockerFile, _GAME_COORDINATOR_IMAGE_NAME);
 	QueueDockerImageBuild(CartographDockerFile, _CARTOGRAPH_IMAGE_NAME);
 
 	BuildAllImages();
-	
-	// BuildDockerImageLocally(WatchDogDockerFile, _WATCHDOG_IMAGE_NAME);
-	// BuildDockerImageLocally(ShardDockerFile, _SHARD_IMAGE_NAME);
-	// BuildGameServer();	// must happen after partition
-	// BuildDockerImageLocally(ProxyDockerFile, _PROXY_IMAGE_NAME);
-	//// BuildDockerImageLocally(GameCoordinatorDockerFile, _GAME_COORDINATOR_IMAGE_NAME);
-	// BuildDockerImageLocally(CartographDockerFile, _CARTOGRAPH_IMAGE_NAME);
+
+	//BuildDockerImageLocally(atlasDockerfileContents, "atlasnetsdk");
+	//BuildDockerImageLocally(WatchDogDockerFile, _WATCHDOG_IMAGE_NAME);
+	//BuildDockerImageLocally(ShardDockerFile, _SHARD_IMAGE_NAME);
+	BuildGameServer();	// must happen after partition
+	//					// BuildAllImages();
+	//BuildDockerImageLocally(ProxyDockerFile, _PROXY_IMAGE_NAME);
+	////// BuildDockerImageLocally(GameCoordinatorDockerFile, _GAME_COORDINATOR_IMAGE_NAME);
+	//BuildDockerImageLocally(CartographDockerFile, _CARTOGRAPH_IMAGE_NAME);
 }
 
 void Bootstrap::BuildGameServer()
@@ -592,8 +594,10 @@ void Bootstrap::BuildGameServer()
 
 	std::cerr << DockerFileContents << " \nat : " << game_server_task.task_path.parent_path()
 			  << std::endl;
-	QueueDockerImageBuild(DockerFileContents, _GAME_SERVER_IMAGE_NAME,
-						  game_server_task.task_path.parent_path(), {_SHARD_IMAGE_NAME});
+	BuildDockerImageLocally(DockerFileContents, _GAME_SERVER_IMAGE_NAME,
+							game_server_task.task_path.parent_path());
+	// buildo(DockerFileContents, _GAME_SERVER_IMAGE_NAME,
+	//					  game_server_task.task_path.parent_path(), {_SHARD_IMAGE_NAME});
 }
 void Bootstrap::BuildDockerImageLocally(const std::string &DockerFileContent,
 										const std::string &ImageName,
@@ -606,10 +610,9 @@ void Bootstrap::BuildDockerImageLocally(const std::string &DockerFileContent,
 		"cd {} && docker buildx build "
 		"-f {} "
 		"-t {} "
-		"--build-context atlasnetsdk={} "
 		" .",
 		std::filesystem::absolute(workingDir).string(),
-		std::filesystem::absolute(dockerFile).string(), ImageName, GetSDKPath().string());
+		std::filesystem::absolute(dockerFile).string(), ImageName);
 
 	logger.DebugFormatted("🏗️ Building image '{}' for arch '{}' ", ImageName, dockerFile);
 	if (system(buildCmd.c_str()) != 0)
@@ -637,98 +640,95 @@ void Bootstrap::QueueDockerImageBuild(const std::string &DockerFileContent,
 }
 void Bootstrap::BuildAllImages()
 {
-    if (images_to_build.empty())
-        return;
+	if (images_to_build.empty())
+		return;
 
-    const auto atlasDockerfilePath =
-        std::filesystem::path(_DOCKER_TEMP_FILES_DIR) / "atlasnetsdk.dockerfile";
-    std::string atlasDockerfileContents =
-        R"(# Minimal atlasnetsdk stage
+	const auto atlasDockerfilePath =
+		std::filesystem::path(_DOCKER_TEMP_FILES_DIR) / "atlasnetsdk.dockerfile";
+	std::string atlasDockerfileContents =
+		R"(# Minimal atlasnetsdk stage
 FROM scratch AS atlasnetsdk
 COPY . /)";
-    WriteFile(atlasDockerfilePath.string(), atlasDockerfileContents);
+	WriteFile(atlasDockerfilePath.string(), atlasDockerfileContents);
 
-    // 1️⃣ First, build atlasnetsdk as a regular docker image
-    std::string atlasBuildCmd = std::format(
-        "docker build -f {} -t atlasnetsdk {}",
-        atlasDockerfilePath.string(),
-        GetAtlasNetPath().string()
-    );
-    logger.DebugFormatted("🏗️ Building atlasnetsdk first: {}", atlasBuildCmd);
+	// 1️⃣ First, build atlasnetsdk as a regular docker image
+	std::string atlasBuildCmd =
+		std::format("docker build -f {} -t atlasnetsdk {}", atlasDockerfilePath.string(),
+					GetAtlasNetPath().string());
+	logger.DebugFormatted("🏗️ Building atlasnetsdk first: {}", atlasBuildCmd);
 
-    if (system(atlasBuildCmd.c_str()) != 0)
-    {
-        logger.Error("❌ atlasnetsdk build failed");
-        throw std::runtime_error("atlasnetsdk build failed");
-    }
+	if (system(atlasBuildCmd.c_str()) != 0)
+	{
+		logger.Error("❌ atlasnetsdk build failed");
+		throw std::runtime_error("atlasnetsdk build failed");
+	}
 
-    // 2️⃣ Now generate docker-bake.json for the rest of the images
-    nlohmann::json bakeJson;
-    nlohmann::json targetsArray = nlohmann::json::array();
+	// 2️⃣ Now generate docker-bake.json for the rest of the images
+	nlohmann::json bakeJson;
+	nlohmann::json targetsArray = nlohmann::json::array();
 
-    std::unordered_set<std::string> ReadDirs;
-    for (const auto &img : images_to_build)
-    {
-        nlohmann::json target;
-        target["context"] = std::filesystem::absolute(img.workingDir).string();
-        target["dockerfile"] = std::filesystem::absolute(img.dockerfile).string();
-        target["tags"] = {img.ImageName};
-        target["push"] = false;
-        target["load"] = true;
-        ReadDirs.insert(std::filesystem::absolute(img.workingDir).string());
-        target["memory"] = "2g";
+	std::unordered_set<std::string> ReadDirs;
+	for (const auto &img : images_to_build)
+	{
+		nlohmann::json target;
+		target["context"] = std::filesystem::absolute(img.workingDir).string();
+		target["dockerfile"] = std::filesystem::absolute(img.dockerfile).string();
+		target["tags"] = {img.ImageName};
+		target["push"] = false;
+		target["load"] = true;
+		ReadDirs.insert(std::filesystem::absolute(img.workingDir).string());
+		//target["memory"] = "2g";
 
-        nlohmann::json depends = nlohmann::json::array();
-        nlohmann::json buildContexts = nlohmann::json::object();
+		nlohmann::json depends = nlohmann::json::array();
+		nlohmann::json buildContexts = nlohmann::json::object();
 
-        // Always depend on atlasnetsdk
-        depends.push_back("atlasnetsdk");
-        buildContexts["atlasnetsdk"] = "image:atlasnetsdk";  // reference the already built image
+		// Always depend on atlasnetsdk
+		depends.push_back("atlasnetsdk");
+		buildContexts["atlasnetsdk"] = "image:atlasnetsdk";	 // reference the already built image
 
-        // Add other dependencies from img.DependsOn
-        for (const auto &dep : img.DependsOn)
-        {
-            depends.push_back(dep);
-            buildContexts[dep] = "target:" + dep;
-        }
+		// Add other dependencies from img.DependsOn
+		for (const auto &dep : img.DependsOn)
+		{
+			depends.push_back(dep);
+			buildContexts[dep] = "target:" + dep;
+		}
 
-        target["depends-on"] = depends;
-        target["shm-size"] = "2g";
-        target["build-contexts"] = buildContexts;
+		target["depends-on"] = depends;
+		//target["shm-size"] = "2g";
+		target["build-contexts"] = buildContexts;
 
-        bakeJson["target"][img.ImageName] = target;
-        targetsArray.push_back(img.ImageName);
-    }
+		bakeJson["target"][img.ImageName] = target;
+		targetsArray.push_back(img.ImageName);
+	}
 
-    bakeJson["group"]["default"]["targets"] = targetsArray;
+	bakeJson["group"]["default"]["targets"] = targetsArray;
 
-    // 3️⃣ Write JSON to temp file
-    const auto bakeFile = std::filesystem::path(_DOCKER_TEMP_FILES_DIR) / "docker-bake.json";
-    WriteFile(bakeFile.string(), bakeJson.dump(4));
-    logger.DebugFormatted("📦 Generated docker-bake.json at '{}'", bakeFile.string());
+	// 3️⃣ Write JSON to temp file
+	const auto bakeFile = std::filesystem::path(_DOCKER_TEMP_FILES_DIR) / "docker-bake.json";
+	WriteFile(bakeFile.string(), bakeJson.dump(4));
+	logger.DebugFormatted("📦 Generated docker-bake.json at '{}'", bakeFile.string());
 
-    // 4️⃣ Build remaining images via BuildKit bake
-    std::string bakeCmd =
-        std::format("docker buildx bake --file {} --allow=fs.read={} --allow=fs.read={} ",
-                    bakeFile.string(), GetAtlasNetPath().string(), _DOCKER_TEMP_FILES_DIR);
-    for (const auto &readDir : ReadDirs)
-    {
-        bakeCmd += std::format("--allow=fs.read={} ", readDir);
-    }
+	// 4️⃣ Build remaining images via BuildKit bake
+	std::string bakeCmd =
+		std::format("docker buildx bake --file {} --allow=fs.read={} --allow=fs.read={} ",
+					bakeFile.string(), GetAtlasNetPath().string(), _DOCKER_TEMP_FILES_DIR);
+	for (const auto &readDir : ReadDirs)
+	{
+		bakeCmd += std::format("--allow=fs.read={} ", readDir);
+	}
 
-    for (const auto &image : images_to_build)
-    {
-        bakeCmd += " " + image.ImageName;
-    }
+	for (const auto &image : images_to_build)
+	{
+		bakeCmd += " " + image.ImageName;
+	}
 
-    logger.DebugFormatted("🏗️ Running: {}", bakeCmd);
+	logger.DebugFormatted("🏗️ Running: {}", bakeCmd);
 
-    if (system(bakeCmd.c_str()) != 0)
-    {
-        logger.Error("❌ One or more image builds failed");
-        throw std::runtime_error("Buildx bake failed");
-    }
+	if (system(bakeCmd.c_str()) != 0)
+	{
+		logger.Error("❌ One or more image builds failed");
+		throw std::runtime_error("Buildx bake failed");
+	}
 
-    logger.Debug("✅ All images built successfully");
+	logger.Debug("✅ All images built successfully");
 }
-

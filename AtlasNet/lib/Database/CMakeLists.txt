@@ -27,10 +27,12 @@ pkg_check_modules(LIBUV REQUIRED libuv)
 find_package(OpenSSL REQUIRED)
 find_package(Protobuf REQUIRED)
 # Manually link the static libraries
-target_link_libraries(${_target_name}
+target_link_libraries(${_target_name} PUBLIC
 ${LIBUV_LIBRARIES} 
-    redis++_static
-    hiredis
+    redis++::redis++_static
+    hiredis::hiredis_ssl
+    hiredis::hiredis
+    $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
     AtlasNetGlobal
     OpenSSL::SSL
     OpenSSL::Crypto

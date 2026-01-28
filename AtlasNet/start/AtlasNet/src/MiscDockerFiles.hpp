@@ -7,7 +7,7 @@
 DOCKER_FILE_DEF GET_REQUIRED_BUILD_PKGS = R"(
 RUN apt-get update && apt-get install -y --no-install-recommends \
     # Init / quality-of-life
-    tini less coreutils tree \
+    tini less coreutils tree zip unzip\
     # Networking / server debugging
     curl libcurl4-openssl-dev wget jq openssh-client libssl-dev \
     # Build toolchain (general)
@@ -16,12 +16,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ninja-build pkg-config ccache \
     autoconf automake libtool m4 \
     # Dev headers / misc
-    uuid-dev \
+    uuid-dev libuv1-dev\
     protobuf-compiler \
     libprotobuf-dev \
     # DinD
     docker.io iptables uidmap \
-    swig npm nodejs libnode-dev \
     # Needed for Kitware CMake install
     ca-certificates gnupg lsb-release \
     && rm -rf /var/lib/apt/lists/*

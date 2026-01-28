@@ -7,12 +7,13 @@
 #include "pch.hpp"
 enum class PacketType
 {
-	eInvalid = 0,
-	eRelay = 1,
-	eCommand = 2,
+    eDummy,
+	eInvalid,
+	eRelay ,
+	eCommand,
 
     //Event System
-    eEventSystemRequest = 3,
+    eEventSystemRequest,
 };
 BOOST_DESCRIBE_ENUM(PacketType, eInvalid, eRelay,eCommand,eEventSystemRequest)
 

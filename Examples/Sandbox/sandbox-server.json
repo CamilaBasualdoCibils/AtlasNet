@@ -4,8 +4,8 @@
     "dockerfile":"SandboxServer.dockerfile"
   },
   "run": {
-    "workdir": "/data",
-    "command": ["/image/scripts/start"],
+    "workdir": "/sandbox",
+    "command": ["/sandbox/build/server/SandboxServer"],
     "args": [],
     "env": {
       "LOG_LEVEL": "info"

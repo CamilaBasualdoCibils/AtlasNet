@@ -33,16 +33,17 @@ file(GLOB BOOST_LIBS "${BOOST_LIBRARYDIR}/*.a")
 # Link libraries
 target_link_libraries(${TARGET_NAME}
     PUBLIC
-        Boost::bimap
+        #Boost::bimap
         Boost::describe
-        Boost::dynamic_bitset
-        Boost::flyweight
-        Boost::math
-        Boost::multi_array
+        #Boost::dynamic_bitset
+        #Boost::flyweight
+        #Boost::math
+        #Boost::multi_array
         Boost::multi_index
         Boost::stacktrace_addr2line
         Boost::static_string
         Boost::uuid
+        atlasnet_defs
 )
 
 # Other dependencies

@@ -1,4 +1,6 @@
-set(ATLASNET_GLOBAL_DEFINITIONS
+add_library(atlasnet_defs INTERFACE)
+
+target_compile_definitions(atlasnet_defs INTERFACE
     _PORT_WATCHDOG=25564
     _PORT_SHARD=25565
     _PORT_GAMESERVER=25566
@@ -35,7 +37,3 @@ set(ATLASNET_GLOBAL_DEFINITIONS
     _REGISTRY_KEY_SECRET_NAME="registry_tls_key"
     _BUILDER_CONTAINER_NAME="atlasnet_builder"
 )
-
-foreach(def IN LISTS ATLASNET_GLOBAL_DEFINITIONS)
-    add_compile_definitions(${def})
-endforeach()

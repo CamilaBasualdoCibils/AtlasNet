@@ -11,13 +11,20 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(ATLASNET_ROOT "${CMAKE_CURRENT_LIST_DIR}" CACHE PATH "Root directory of AtlasNet")
 
 
-
 include (${CMAKE_CURRENT_LIST_DIR}/cmake/Definitions.cmake)
 include (${CMAKE_CURRENT_LIST_DIR}/cmake/Install.cmake)
-include (${CMAKE_CURRENT_LIST_DIR}/cmake/Deps.cmake)
+option(ATLASNET_VCPKG_MODE       "Use vcpkg for deps" ON)
 
-option(ATLASNET_DEPS_ONLY "Only dependencies" OFF)
-if (NOT ATLASNET_DEPS_ONLY)
+if(ATLASNET_VCPKG_MODE)
+message(STATUS "Atlasnet Compiling in VCPKG mode")
+  include (${CMAKE_CURRENT_LIST_DIR}/cmake/VcpkgDeps.cmake)  
+else()
+message(STATUS "Atlasnet Compiling in FetchContent mode")
+  include (${CMAKE_CURRENT_LIST_DIR}/cmake/FetchDeps.cmake)  
+
+endif()
+
+
 set(SDK_DIR "${CMAKE_CURRENT_LIST_DIR}/sdk")
 #set(DEPS_DIR "${CMAKE_CURRENT_LIST_DIR}/deps")
 
@@ -31,7 +38,7 @@ option(ATLASNET_INCLUDE_LIBS        "Include Libs" ON)
 option(ATLASNET_INCLUDE_API        "Include API"        ON)
 option(ATLASNET_INCLUDE_API_JAVA  "Include Java API"   OFF)
 option(ATLASNET_INCLUDE_WEB        "Include Web"        OFF)
-option(ATLASNET_INCLUDE_RUNTIME    "Include Runtime"    OFF)
+option(ATLASNET_INCLUDE_RUNTIME    "Include Runtime"    ON)
 option(ATLASNET_INCLUDE_BOOTSTRAP  "Include Bootstrap"  ON)
 message(STATUS "ATLASNET_INCLUDE_RUNTIME = ${ATLASNET_INCLUDE_RUNTIME}")
 
@@ -75,6 +82,4 @@ endif()
 if (ATLASNET_INCLUDE_BOOTSTRAP)
 add_subdirectory(start/AtlasNet)
 endif()
-endif()
-
 endif()

@@ -9,7 +9,7 @@
 #include "InterlinkIdentifier.hpp"
 void Proxy::Run()
 {
-	logger->Debug("Init");
+	logger->Debug("Init"); //hello
 
 	Init();
 	logger->Debug("Loop Entry");

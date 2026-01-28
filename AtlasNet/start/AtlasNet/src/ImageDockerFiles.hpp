@@ -132,11 +132,20 @@ DOCKER_FILE_DEF Generic_Run_Header = R"(
 FROM ${OS_VERSION} AS runner
 WORKDIR ${WORKDIR}
 )";
-DOCKER_FILE_DEF SETUP_ATLASNET_PRJ = R"(
-# COPY --from=atlasnetsdk CMakeLists.txt ./CMakeLists.txt
-# COPY --from=atlasnetsdk cmake ./cmake
-# RUN cmake -S . -B ${WORKDIR}/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
-#  -DATLASNET_DEPS_ONLY=ON
+DOCKER_FILE_DEF SETUP_ATLASNET_DEPS = R"(
+COPY --from=atlasnetsdk ./vcpkg.json ./vcpkg.json
+
+ENV VCPKG_ROOT=/opt/vcpkg/
+# Create the directory
+RUN mkdir -p $VCPKG_ROOT
+
+# Download the compressed release, extract to /opt/vcpkg, and remove the tar to save space
+RUN curl -L https://github.com/microsoft/vcpkg/archive/refs/tags/2026.01.16.tar.gz \
+| tar -xz --strip-components=1 -C ${VCPKG_ROOT}
+RUN  /opt/vcpkg/bootstrap-vcpkg.sh 
+RUN apt-get update && apt-get install binutils build-essential -y
+RUN ${VCPKG_ROOT}/vcpkg install \
+       --x-install-root=${WORKDIR}/build/vcpkg_installed
 )";
 DOCKER_FILE_DEF COPY_ATLASNET_SRC = R"(
 
@@ -149,14 +158,16 @@ ENV CXX=clang++
 #--mount=type=cache,target=${WORKDIR}/build
 
 
-RUN  cmake -S . -B ${WORKDIR}/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
- -DATLASNET_INCLUDE_RUNTIME=ON -DATLASNET_INCLUDE_LIBS=ON ${CMAKE_ARGS}
-RUN  cmake --build ${WORKDIR}/build --parallel --target BuiltInDB Database Debug Docker Entity Events Heuristic Interlink InternalDB
+RUN --mount=type=cache,target=${WORKDIR}/build cmake -S . -B ${WORKDIR}/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+ -DATLASNET_INCLUDE_RUNTIME=ON -DATLASNET_INCLUDE_LIBS=ON \
+  -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
+  -DVCPKG_INSTALLED_DIR=${WORKDIR}/build/vcpkg_installed -DATLASNET_INCLUDE_WEB=OFF ${CMAKE_ARGS}
+RUN --mount=type=cache,target=${WORKDIR}/build cmake --build ${WORKDIR}/build --parallel --target BuiltInDB Database Debug Docker Entity Events Heuristic Interlink InternalDB
 
-RUN  ls -a runtime/cartograph/web && cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
+RUN --mount=type=cache,target=${WORKDIR}/build  cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
 
 
-RUN cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
+RUN --mount=type=cache,target=${WORKDIR}/build cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
 
 
 # 8RUN mkdir -p /usr/local/lib && \
@@ -169,26 +180,39 @@ RUN cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WOR
 )DOCKER";
 
 DOCKER_FILE_DEF WatchDogDockerFile = MacroParse(
-	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps +SETUP_ATLASNET_PRJ+ COPY_ATLASNET_SRC +
-		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + CopyBuild_StripLib +
-		R"(ENTRYPOINT ["${WORKDIR}/bin/watchdog"])",
-	{{"OS_VERSION", _DOCKER_OS_}, {"WORKDIR", _DOCKER_WORKDIR_}, {"BUILD_PROJECT", "watchdog"},{"CMAKE_ARGS",""}});
+	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps + SETUP_ATLASNET_DEPS +
+		COPY_ATLASNET_SRC + BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS +
+		CopyBuild_StripLib + R"(ENTRYPOINT ["${WORKDIR}/bin/watchdog"])",
+	{{"OS_VERSION", _DOCKER_OS_},
+	 {"WORKDIR", _DOCKER_WORKDIR_},
+	 {"BUILD_PROJECT", "watchdog"},
+	 {"CMAKE_ARGS", ""}});
 
 DOCKER_FILE_DEF ProxyDockerFile = MacroParse(
-	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps +SETUP_ATLASNET_PRJ+ COPY_ATLASNET_SRC +
-		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + CopyBuild_StripLib +
-		R"(ENTRYPOINT ["${WORKDIR}/bin/proxy"])",
-	{{"OS_VERSION", _DOCKER_OS_}, {"WORKDIR", _DOCKER_WORKDIR_}, {"BUILD_PROJECT", "proxy"},{"CMAKE_ARGS",""}});
+	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps + SETUP_ATLASNET_DEPS +
+		COPY_ATLASNET_SRC + BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS +
+		CopyBuild_StripLib + R"(ENTRYPOINT ["${WORKDIR}/bin/proxy"])",
+	{{"OS_VERSION", _DOCKER_OS_},
+	 {"WORKDIR", _DOCKER_WORKDIR_},
+	 {"BUILD_PROJECT", "proxy"},
+	 {"CMAKE_ARGS", ""}});
 
-
-DOCKER_FILE_DEF ShardDockerFile = MacroParse(
-	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps +SETUP_ATLASNET_PRJ+ COPY_ATLASNET_SRC +
-		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + CopyBuild_StripLib,
-	{{"OS_VERSION", _DOCKER_OS_}, {"WORKDIR", _DOCKER_WORKDIR_}, {"BUILD_PROJECT", "shard"},{"CMAKE_ARGS",""}});
+DOCKER_FILE_DEF ShardDockerFile =
+	MacroParse(Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps + SETUP_ATLASNET_DEPS +
+				   COPY_ATLASNET_SRC + BUILD_ATLASNET_SRC + Generic_Run_Header +
+				   GET_REQUIRED_RUN_PKGS + CopyBuild_StripLib,
+			   {{"OS_VERSION", _DOCKER_OS_},
+				{"WORKDIR", _DOCKER_WORKDIR_},
+				{"BUILD_PROJECT", "shard"},
+				{"CMAKE_ARGS", ""}});
 
 DOCKER_FILE_DEF CartographDockerFile = MacroParse(
-	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS + InstallDeps +SETUP_ATLASNET_PRJ+COPY_ATLASNET_SRC +
-		BUILD_ATLASNET_SRC + Generic_Run_Header + GET_REQUIRED_RUN_PKGS + R"(WORKDIR ${WORKDIR}/web
+	Generic_Builder_Header + GET_REQUIRED_BUILD_PKGS  +
+		InstallDeps + SETUP_ATLASNET_DEPS +
+		R"(RUN apt-get update && apt-get install -y --no-install-recommends \
+    swig npm nodejs libnode-dev \
+    && rm -rf /var/lib/apt/lists/*)"+ COPY_ATLASNET_SRC + BUILD_ATLASNET_SRC +
+		Generic_Run_Header + GET_REQUIRED_RUN_PKGS + R"(WORKDIR ${WORKDIR}/web
 ENV NODE_ENV=development
 RUN apt update \
  && apt install -y curl ca-certificates \
@@ -213,14 +237,15 @@ CMD ["npm", "run", "dev:all"]
 )",
 	{{"OS_VERSION", _DOCKER_OS_},
 	 {"WORKDIR", _DOCKER_WORKDIR_},
-	 {"BUILD_PROJECT", "cartograph_web_native_deps"},{"CMAKE_ARGS","-DATLASNET_INCLUDE_WEB=ON -DENABLE_NODE=ON -DATLASNET_INCLUDE_RUNTIME=ON"}});
+	 {"BUILD_PROJECT", "cartograph_web_native_deps"},
+	 {"CMAKE_ARGS", "-DATLASNET_INCLUDE_WEB=ON -DENABLE_NODE=ON -DATLASNET_INCLUDE_RUNTIME=ON"}});
 
 DOCKER_FILE_DEF ShardSuperVisordConf = R"(
 [supervisord]
 nodaemon=true
 
 [program:shard]
-command=${WORKDIR}/bin/Shard
+command=${WORKDIR}/bin/shard
 directory=${WORKDIR}
 autorestart=true
 stdout_logfile=/dev/stdout
@@ -252,6 +277,6 @@ ${SUPERVISORD_CONF}
 EOF
 )"},
 	 {"SHARD_INSTALL_RUNTIME_DEPS", GET_REQUIRED_RUN_PKGS},
-	 {"SHARD_IMAGE", "" +std::string(_SHARD_IMAGE_NAME) + ""},
+	 {"SHARD_IMAGE", "" + std::string(_SHARD_IMAGE_NAME) + ""},
 	 {"WORKDIR", _DOCKER_WORKDIR_},
 	 {"SUPERVISORD_CONF", ShardSuperVisordConf}});
