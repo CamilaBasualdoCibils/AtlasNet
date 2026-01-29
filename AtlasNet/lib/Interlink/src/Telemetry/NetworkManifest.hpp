@@ -44,6 +44,12 @@ void TelemetryUpdate(const InterLinkIdentifier& identifier)
     std::vector<ConnectionTelemetry> connections;
     Interlink::Get().GetConnectionTelemetry(connections);
 
+    if (connections.empty())
+    {
+        //std::cout << "No connections found" << std::endl;
+        return;
+    }
+
     // ============================
     // Serialize VALUE (connections)
     // ============================
@@ -52,6 +58,9 @@ void TelemetryUpdate(const InterLinkIdentifier& identifier)
     for (const auto& t : connections)
     {
         t.Serialize(valueBW);
+
+        // For debugging
+        //t.DebugLogs();
     }
 
     // ============================
@@ -115,7 +124,6 @@ void NetworkManifest::GetAllTelemetry(
             std::vector<std::string> row;
             row.reserve(13);
 
-            //row.push_back(shardId);
             row.push_back(t.IdentityId);
             row.push_back(t.targetId);
             row.push_back(std::to_string(t.pingMs));

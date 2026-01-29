@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from 'react';
 import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
+import { CircularNodeGraphPanel } from '../components/CircularNodeGraphPanel';
 import { ShardTelemetryRow } from '../components/ShardTelemetryRow';
 import { TelemetryPanel } from '../components/TelemetryPanel';
 
@@ -97,6 +98,9 @@ export default function NetworkTelemetryPage() {
   return (
     <div style={{ padding: 16 }}>
       <h2>Network Telemetry</h2>
+      <div style={{ margin: '12px 0 16px' }}>
+        <CircularNodeGraphPanel telemetry={latestTelemetry} />
+      </div>
 
       <table
         style={{

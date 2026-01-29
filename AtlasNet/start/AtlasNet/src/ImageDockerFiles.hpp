@@ -158,16 +158,16 @@ ENV CXX=clang++
 #--mount=type=cache,target=${WORKDIR}/build
 
 
-RUN --mount=type=cache,target=${WORKDIR}/build cmake -S . -B ${WORKDIR}/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
+RUN  cmake -S . -B ${WORKDIR}/build -G Ninja -DCMAKE_BUILD_TYPE=Debug -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++ \
  -DATLASNET_INCLUDE_RUNTIME=ON -DATLASNET_INCLUDE_LIBS=ON \
   -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
   -DVCPKG_INSTALLED_DIR=${WORKDIR}/build/vcpkg_installed -DATLASNET_INCLUDE_WEB=OFF ${CMAKE_ARGS}
-RUN --mount=type=cache,target=${WORKDIR}/build cmake --build ${WORKDIR}/build --parallel --target BuiltInDB Database Debug Docker Entity Events Heuristic Interlink InternalDB
+RUN  cmake --build ${WORKDIR}/build --parallel --target BuiltInDB Database Debug Docker Entity Events Heuristic Interlink InternalDB
 
-RUN --mount=type=cache,target=${WORKDIR}/build  cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
+RUN   cmake --build ${WORKDIR}/build --parallel --target ${BUILD_PROJECT}
 
 
-RUN --mount=type=cache,target=${WORKDIR}/build cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
+RUN  cmake --install ${WORKDIR}/build --component ${BUILD_PROJECT} --prefix ${WORKDIR}/bin
 
 
 # 8RUN mkdir -p /usr/local/lib && \

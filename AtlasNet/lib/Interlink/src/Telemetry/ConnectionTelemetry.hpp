@@ -1,4 +1,5 @@
 #pragma once
+#include <iostream>
 #include <string>
 #include "Serialize/ByteReader.hpp"
 #include "Serialize/ByteWriter.hpp"
@@ -58,4 +59,22 @@ struct ConnectionTelemetry
         qualityRemote = br.f32();
         state = br.i32();
 	}
+
+        void DebugLogs() const
+        {
+                std::cerr << "ConnectionTelemetry:" << std::endl;
+                std::cerr << "  IdentityId: " << IdentityId << std::endl;
+                std::cerr << "  targetId: " << targetId << std::endl;
+                std::cerr << "  pingMs: " << pingMs << std::endl;
+                std::cerr << "  inBytesPerSec: " << inBytesPerSec << std::endl;
+                std::cerr << "  outBytesPerSec: " << outBytesPerSec << std::endl;
+                std::cerr << "  inPacketsPerSec: " << inPacketsPerSec << std::endl;
+                std::cerr << "  pendingReliableBytes: " << pendingReliableBytes << std::endl;
+                std::cerr << "  pendingUnreliableBytes: " << pendingUnreliableBytes << std::endl;
+                std::cerr << "  sentUnackedReliableBytes: " << sentUnackedReliableBytes << std::endl;
+                std::cerr << "  queueTimeUsec: " << queueTimeUsec << std::endl;
+                std::cerr << "  qualityLocal: " << qualityLocal << std::endl;
+                std::cerr << "  qualityRemote: " << qualityRemote << std::endl;
+                std::cerr << "  state: " << state << std::endl;
+        }
 };
