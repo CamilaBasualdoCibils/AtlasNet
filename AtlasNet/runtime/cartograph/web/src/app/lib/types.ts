@@ -6,4 +6,5 @@ export interface ShapeJS {
     radius?: number;          // for circles
     size?: Vec2;              // for rectangles
     points?: Vec2[];          // for polygons
+    color?: string;
 }

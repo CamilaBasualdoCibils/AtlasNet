@@ -188,8 +188,8 @@ void HeuristicManifest::GetAllClaimedBounds(std::unordered_map<KeyType, BoundTyp
 
 	for (const auto& [key, boundsString] : BoundsTable)
 	{
-		const auto in = out_bounds.emplace(key, BoundType());
-		const BoundType& b = out_bounds.at(in);
+		auto [it, inserted] = out_bounds.emplace(key, BoundType());
+		BoundType& b = it->second;
 		ByteReader br(boundsString);
 		b.Deserialize(br);
 	}

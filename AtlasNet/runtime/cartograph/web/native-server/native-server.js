@@ -163,6 +163,7 @@ app.get('/heuristic', (req, res) => {
                 position: { x: shape.pos_x, y: shape.pos_y },
                 radius: shape.radius,
                 size: { x: shape.size_x, y: shape.size_y },
+                color: shape.color,
                 vertices, // converted array of {x,y}
             });
         }

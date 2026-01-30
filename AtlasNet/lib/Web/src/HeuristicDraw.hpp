@@ -2,6 +2,7 @@
 #include "Heuristic/IBounds.hpp"
 #include <vector>
 #include <array>
+#include <string>
 /*
 SWIG cannot use glm stuff or any complex containers
 */
@@ -19,6 +20,7 @@ struct IBoundsDrawShape
 	IBounds::BoundsID id;
 	Type type = Type::eInvalid;	 // "circle", "rectangle", "line", "polygon", etc.
 	float pos_x,pos_y;				 // Position
+	std::string color;				 // Stroke color override (optional)
 
 	/*Type specific */
 

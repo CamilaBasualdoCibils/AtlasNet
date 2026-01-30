@@ -31,6 +31,7 @@ function convertShape(shape: any): ShapeJS {
   const sjs: ShapeJS = {
     type: 'circle', // temporary default, will be overwritten
     position: { x: shape.position?.x ?? 0, y: shape.position?.y ?? 0 },
+    color: shape.color ?? undefined,
   };
 
   switch (shape.type) {

@@ -154,12 +154,12 @@ export function createMapRenderer({ container, shapes = [] }: DrawOptions) {
                 case 'circle':
                     ctx.beginPath();
                     ctx.arc(0, 0, shape.radius ?? 10, 0, Math.PI * 2);
-                    ctx.strokeStyle = 'rgba(100, 149, 255, 1)';
+                    ctx.strokeStyle = shape.color ?? 'rgba(100, 149, 255, 1)';
                     //ctx.fill();
                     ctx.stroke();
                     break;
                 case 'rectangle':
-                    ctx.strokeStyle = 'rgba(255, 149, 100, 1)';
+                    ctx.strokeStyle = shape.color ?? 'rgba(255, 149, 100, 1)';
                     //ctx.fillRect(-(shape.size?.x ?? 10)/2, -(shape.size?.y ?? 10)/2, shape.size?.x ?? 10, shape.size?.y ?? 10);
                     ctx.strokeRect(-(shape.size?.x ?? 10) / 2, -(shape.size?.y ?? 10) / 2, shape.size?.x ?? 10, shape.size?.y ?? 10);
                     break;
@@ -170,7 +170,7 @@ export function createMapRenderer({ container, shapes = [] }: DrawOptions) {
                         ctx.moveTo(pts[0].x, pts[0].y);
                         for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i].x, pts[i].y);
                         ctx.closePath();
-                        ctx.strokeStyle = 'rgba(100, 255, 149, 1)';
+                        ctx.strokeStyle = shape.color ?? 'rgba(100, 255, 149, 1)';
                         //ctx.fill();
                         ctx.stroke();
                     }

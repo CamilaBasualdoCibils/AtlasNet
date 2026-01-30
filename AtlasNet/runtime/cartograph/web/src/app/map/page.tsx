@@ -21,10 +21,12 @@ export default function MapPage() {
 
     // Render the map whenever shapes update
     useEffect(() => {
-        if (!containerRef.current || shapes.length === 0) return;
-        const renderer = createMapRenderer({ container: containerRef.current, shapes });
+        if (shapes.length === 0) return;
+        const container = containerRef.current;
+        if (!container) return;
+        const renderer = createMapRenderer({ container, shapes });
         return () => {
-            containerRef.current!.innerHTML = ''; // cleanup
+            container.innerHTML = ''; // cleanup
         };
     }, [shapes]);
 
