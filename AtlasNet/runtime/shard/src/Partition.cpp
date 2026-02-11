@@ -1,8 +1,12 @@
 #include "Partition.hpp"
 
 #include <chrono>
+#include <iostream>
 #include <thread>
 
+#include "Packet/CommandPacket.hpp"
+#include "Serialize/ByteWriter.hpp"
+#include "pch.hpp"
 #include "Database/HealthManifest.hpp"
 #include "Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
@@ -11,6 +15,7 @@
 #include "Packet/CommandPacket.hpp"
 #include "Telemetry/NetworkManifest.hpp"
 #include "pch.hpp"
+#include "EntityAtBoundsManager.hpp"
 Partition::Partition() {}
 Partition::~Partition() {}
 
