@@ -3,7 +3,7 @@
 
 #include "Misc/Singleton.hpp"
 #include "Log.hpp"
-#include "Connection.hpp"
+#include "Network/Connection.hpp"
 
 
 class Partition : public Singleton<Partition>
@@ -16,7 +16,6 @@ class Partition : public Singleton<Partition>
 	~Partition();
 	void Init();
 	void Shutdown() {ShouldShutdown = true;}
-	void MessageArrived(const Connection &fromWhom, std::span<const std::byte> data);
 
 private:
  
