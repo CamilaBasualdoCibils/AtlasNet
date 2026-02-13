@@ -136,12 +136,25 @@ void EntityHandoff::updateConnectionsForCurrentOob(std::span<const AtlasEntity> 
 				logger->DebugFormatted("EntityHandoff: target {} not in registry yet, skipping connect", target);
 				continue;
 			}
-			if (!Interlink::Get().EstablishConnectionTo(targetId))
+			try
 			{
-				logger->WarningFormatted("EntityHandoff: failed to open connection to {}", target);
+				if (!Interlink::Get().EstablishConnectionTo(targetId))
+				{
+					logger->WarningFormatted("EntityHandoff: failed to open connection to {}", target);
+					continue;
+				}
+				logger->DebugFormatted("EntityHandoff: opened connection to {} (entity out of bounds)", target);
+			}
+			catch (const std::bad_optional_access&)
+			{
+				logger->WarningFormatted("EntityHandoff: target {} not in registry (lookup failed), skipping", target);
 				continue;
 			}
-			logger->DebugFormatted("EntityHandoff: opened connection to {} (entity out of bounds)", target);
+			catch (const std::exception& e)
+			{
+				logger->WarningFormatted("EntityHandoff: failed to connect to {}: {}", target, e.what());
+				continue;
+			}
 		}
 		newOpenHandoffs[target] = entityIds;
 	}
