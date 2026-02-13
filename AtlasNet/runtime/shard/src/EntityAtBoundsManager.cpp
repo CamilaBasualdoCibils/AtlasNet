@@ -1,5 +1,6 @@
 #include "EntityAtBoundsManager.hpp"
 
+#include <random>
 #include <unordered_map>
 
 #include "DockerIO.hpp"
@@ -108,8 +109,12 @@ void EntityAtBoundsManager::InitCircularTestEntity(const glm::vec3& center, floa
 	circularRadius = radius;
 	circularAngle = 0.0f;
 
+	std::random_device rd;
+	std::mt19937_64 gen(rd());
+	std::uniform_int_distribution<AtlasEntityMinimal::EntityID> dist(1, UINT64_MAX);
+
 	circularTestEntity = AtlasEntity{};
-	circularTestEntity.Entity_ID = 1;
+	circularTestEntity.Entity_ID = dist(gen);
 	circularTestEntity.transform.position = center + glm::vec3(radius, 0.0f, 0.0f);
 	circularTestEntity.IsClient = false;
 	circularTestEntity.Client_ID = 0;
@@ -118,7 +123,8 @@ void EntityAtBoundsManager::InitCircularTestEntity(const glm::vec3& center, floa
 	hasCircularTestEntity = true;
 
 	logger->DebugFormatted(
-		"[EntityAtBoundsManager] Initialized circular test entity at center ({}, {}, {}), radius {}",
+		"[EntityAtBoundsManager] Initialized circular test entity id={} at center ({}, {}, {}), radius {}",
+		circularTestEntity.Entity_ID,
 		center.x,
 		center.y,
 		center.z,
