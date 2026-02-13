@@ -31,6 +31,8 @@ class EntityHandoff : public Singleton<EntityHandoff>
 	std::optional<std::string> resolveTargetPartition(const AtlasEntity& entity) const;
 	/// Partition key from HeuristicManifest is full ToString() e.g. "eShard 37d8dbb86abc". Parse so ID matches registry.
 	static InterLinkIdentifier partitionKeyToIdentifier(const std::string& partitionKey);
+	/// Only we open/close to target when we are the canonical initiator (self < target by container id). Avoids both sides opening.
+	static bool shouldInitiateConnectionTo(const std::string& selfPartitionKey, const std::string& targetPartitionKey);
 	// Build map entity_id -> target for entities that are OOB (and have a valid target != self).
 	std::unordered_map<EntityID, std::string> buildOobEntityToTarget(std::span<const AtlasEntity> entities) const;
 	static bool oobMapsEqual(const std::unordered_map<EntityID, std::string>& a,

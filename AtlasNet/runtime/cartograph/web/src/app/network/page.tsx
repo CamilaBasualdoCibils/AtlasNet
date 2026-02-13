@@ -87,7 +87,7 @@ export default function NetworkTelemetryPage() {
 
     // initial + interval
     poll();
-    const id = setInterval(poll, 1000);
+    const id = setInterval(poll, 500);
 
     return () => {
       alive = false;

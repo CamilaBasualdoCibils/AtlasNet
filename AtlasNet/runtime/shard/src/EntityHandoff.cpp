@@ -59,6 +59,16 @@ InterLinkIdentifier EntityHandoff::partitionKeyToIdentifier(const std::string& p
 	return InterLinkIdentifier::MakeIDShard(partitionKey);
 }
 
+bool EntityHandoff::shouldInitiateConnectionTo(const std::string& selfPartitionKey,
+                                              const std::string& targetPartitionKey)
+{
+	auto targetParsed = InterLinkIdentifier::FromString(targetPartitionKey);
+	std::string targetId = targetParsed.has_value() ? std::string(targetParsed->ID.data()) : targetPartitionKey;
+	// Only we open (and thus close) when our container id is lexicographically less than target's.
+	// Then the other shard never opens to us for this pair, so only one connection and we own it.
+	return selfPartitionKey < targetId;
+}
+
 bool EntityHandoff::oobMapsEqual(const std::unordered_map<EntityID, std::string>& a,
                                  const std::unordered_map<EntityID, std::string>& b)
 {
@@ -105,8 +115,8 @@ void EntityHandoff::updateConnectionsForCurrentOob(std::span<const AtlasEntity> 
 			++it;
 	}
 
-	// Open connection for any target we have OOB entities for that we didn't have before.
-	// Only add to openHandoffsByTarget_ when we actually have a connection (or had one).
+	// Open connection only when we are the canonical initiator (self < target) so only one side opens/closes per pair.
+	// Only add to openHandoffsByTarget_ when we actually initiate (so only we close later).
 	std::unordered_map<std::string, std::unordered_set<EntityID>> newOpenHandoffs;
 	for (const auto& [target, entityIds] : currentByTarget)
 	{
@@ -115,6 +125,11 @@ void EntityHandoff::updateConnectionsForCurrentOob(std::span<const AtlasEntity> 
 		bool alreadyHad = (openHandoffsByTarget_.find(target) != openHandoffsByTarget_.end());
 		if (!alreadyHad)
 		{
+			if (!shouldInitiateConnectionTo(self, target))
+			{
+				// Other shard will open to us; we don't add to openHandoffsByTarget_ so we won't close it.
+				continue;
+			}
 			InterLinkIdentifier targetId = partitionKeyToIdentifier(target);
 			if (!ServerRegistry::Get().ExistsInRegistry(targetId))
 			{
