@@ -5,9 +5,11 @@
 #include <span>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "Entity.hpp"
+#include "EntityHandoff.hpp"
 #include "Log.hpp"
 #include "Misc/Singleton.hpp"
 #include "Serialize/ByteWriter.hpp"
@@ -22,20 +24,29 @@ class EntityAtBoundsManager : public Singleton<EntityAtBoundsManager>
 	// Cache: entity id -> target partition key. Used to only trigger handoff when OOB set changes.
 	std::unordered_map<EntityID, std::string> previousOobEntityToTarget_;
 
+	// Entities we own (in our bounds).
+	std::unordered_set<EntityID> authoritativeEntities_;
+	// Entities currently in handoff: entity id -> target partition key. Handoff notifies via callback.
+	std::unordered_map<EntityID, std::string> entitiesInHandoff_;
+
 public:
 	EntityAtBoundsManager() = default;
 	~EntityAtBoundsManager() = default;
 	void Init() {}
 	void Shutdown() { ShouldShutdown = true; }
 
-	// Returns entities that are out of our bounds (owner is another partition or none).
-	std::vector<AtlasEntity> DetectEntitiesOutOfBounds(ByteWriter& bw);
+	// Returns entities that are out of our bounds. Optionally fills inBoundsIds with entity ids that are in our bounds.
+	std::vector<AtlasEntity> DetectEntitiesOutOfBounds(ByteWriter& bw,
+	                                                   std::unordered_set<EntityID>* inBoundsIds = nullptr);
 
 	// Returns true if the OOB set (entity id -> target) changed; updates internal cache. Call before handoff.
 	bool HasOobSetChanged(std::span<const AtlasEntity> oobEntities);
 
-	// Initiates handoff of the given OOB entities (call after HasOobSetChanged returns true).
-	void InitiateEntityHandoff(ByteWriter& bw);
+	// Builds handoff requests from current OOB set and calls Handoff; updates authoritative / in-handoff maps.
+	void TickHandoff(ByteWriter& bw);
+
+	// Called by Handoff when a handoff completes (success or failure). Success: remove from in-handoff; failure: keep for retry.
+	void OnHandoffResult(EntityID entityId, bool success);
 
 	// Test helpers
 	void InitCircularTestEntity(const glm::vec3& center, float radius);

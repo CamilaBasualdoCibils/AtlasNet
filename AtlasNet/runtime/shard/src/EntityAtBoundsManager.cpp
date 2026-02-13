@@ -11,7 +11,8 @@
 #include "Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 
-std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWriter& bw)
+std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWriter& bw,
+                                                                          std::unordered_set<EntityID>* inBoundsIds)
 {
 	std::vector<AtlasEntity> out_of_bounds_entities;
 	ByteReader br(bw.bytes());
@@ -27,6 +28,8 @@ std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWr
 			!ownerPartition.has_value() || (ownerPartition.has_value() && !IsPartitionKeySelf(*ownerPartition));
 		if (outOfOurBounds)
 			out_of_bounds_entities.push_back(entity);
+		else if (inBoundsIds)
+			inBoundsIds->insert(entity.Entity_ID);
 	}
 
 	return out_of_bounds_entities;
@@ -112,10 +115,36 @@ std::string EntityAtBoundsManager::GetSelfPartitionKey()
 	return DockerIO::Get().GetSelfContainerName();
 }
 
-void EntityAtBoundsManager::InitiateEntityHandoff(ByteWriter& bw)
+void EntityAtBoundsManager::OnHandoffResult(EntityID entityId, bool success)
 {
-	// Deserialize and hand off; caller is responsible for only calling when HasOobSetChanged returned true.
-	EntityHandoff::Get().InitiateHandoffFromSerialized(bw);
+	if (success)
+		entitiesInHandoff_.erase(entityId);
+	// On failure we keep the entity in entitiesInHandoff_ so we retry on next tick.
+}
+
+void EntityAtBoundsManager::TickHandoff(ByteWriter& bw)
+{
+	authoritativeEntities_.clear();
+	std::vector<AtlasEntity> oobEntities =
+	    DetectEntitiesOutOfBounds(bw, &authoritativeEntities_);
+
+	std::unordered_map<EntityID, std::string> currentOobMap = BuildOobEntityToTargetMap(oobEntities);
+	if (!HasOobSetChanged(oobEntities))
+		return;
+
+	entitiesInHandoff_ = currentOobMap;
+
+	std::vector<EntityHandoffRequest> requests;
+	requests.reserve(oobEntities.size());
+	for (const AtlasEntity& e : oobEntities)
+	{
+		auto it = entitiesInHandoff_.find(e.Entity_ID);
+		if (it == entitiesInHandoff_.end())
+			continue;
+		requests.push_back(EntityHandoffRequest{ e, it->second });
+	}
+	if (!requests.empty())
+		EntityHandoff::Get().RequestHandoff(requests);
 }
 
 void EntityAtBoundsManager::DebugPrintClaimedBounds()
