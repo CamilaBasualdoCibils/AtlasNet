@@ -36,6 +36,8 @@ public:
   void DebugPrintClaimedBounds();
 
 private:
+  // Returns this shard's partition key (container id).
+  static std::string GetSelfPartitionKey();
   // Returns the partition key (e.g. shard/container id) that owns this entity's position, if any.
   std::optional<std::string> FindBoundsForEntity(const AtlasEntity& entity);
 

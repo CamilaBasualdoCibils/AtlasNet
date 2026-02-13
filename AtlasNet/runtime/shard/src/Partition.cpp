@@ -16,7 +16,11 @@
 #include "Telemetry/NetworkManifest.hpp"
 #include "pch.hpp"
 #include "EntityAtBoundsManager.hpp"
-Partition::Partition() {}
+#include "EntityHandoff.hpp"
+Partition::Partition()
+{
+
+}
 Partition::~Partition() {}
 
 void Partition::Init()
@@ -48,9 +52,18 @@ void Partition::Init()
 	}
 	// Clear any existing partition entity data to prevent stale data
 	while (!ShouldShutdown)
-	{
-		std::this_thread::sleep_for(
-			std::chrono::milliseconds(32));	 // ~30 updates per second
+	{			
+		Interlink::Get().Tick();
+
+		//std::this_thread::sleep_for(std::chrono::milliseconds(32));    // ~30 updates per second
+		const float dtSeconds = 0.1f;  // update interval for test entity
+		std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+		// Update the single circular test entity and serialize it into bw.
+		//EntityAtBoundsManager::Get().UpdateAndSerializeCircularTestEntity(bw, dtSeconds);
+
+		//out_of_bounds_entities = EntityAtBoundsManager::Get().DetectEntitiesOutOfBounds(bw);
+		//EntityHandoff::Get().InitiateHandoff(out_of_bounds_entities);
 	}
 
 	logger->Debug("Shutting Down");

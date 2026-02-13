@@ -1,6 +1,8 @@
 #include "ServerRegistry.hpp"
 
 #include "Network/NetworkIdentity.hpp"
+#include <optional>
+
 #include "InternalDB.hpp"
 #include "Misc/String_utils.hpp"
 #include "Serialize/ByteReader.hpp"
@@ -57,9 +59,6 @@ std::optional<IPAddress> ServerRegistry::GetIPOfID(const NetworkIdentity &ID)
 	{
 		return std::nullopt;
 	}
-	IPAddress ip;
-	ip.Parse(ret);
-	return ip;
 }
 
 std::optional<IPAddress> ServerRegistry::GetPublicAddress(const NetworkIdentity &ID)
@@ -71,9 +70,6 @@ std::optional<IPAddress> ServerRegistry::GetPublicAddress(const NetworkIdentity 
 	{
 		return std::nullopt;
 	}
-	IPAddress ip;
-	ip.Parse(ret);
-	return ip;
 }
 
 bool ServerRegistry::ExistsInRegistry(const NetworkIdentity &ID) const

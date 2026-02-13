@@ -2,6 +2,8 @@
 
 #include <unordered_map>
 
+#include "DockerIO.hpp"
+#include "EntityHandoff.hpp"
 #include "Log.hpp"
 #include "Serialize/ByteReader.hpp"
 #include "Database/HeuristicManifest.hpp"
@@ -11,16 +13,21 @@ std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWr
 {
 	std::vector<AtlasEntity> out_of_bounds_entities;
 	ByteReader br(bw.bytes());
+	const std::string selfPartitionKey = GetSelfPartitionKey();
 
 	while (br.remaining() > 0)
 	{
 		AtlasEntity entity;
 		entity.Deserialize(br);
 
-		// Determine which partition (if any) owns this entity's current position.
 		auto ownerPartition = FindBoundsForEntity(entity);
+		//PrintEntityToBoundsInfo(entity, ownerPartition);
 
-		PrintEntityToBoundsInfo(entity, ownerPartition);
+		// Out of our bounds: owner is another partition or none (entity left our region).
+		const bool outOfOurBounds =
+			!ownerPartition.has_value() || (ownerPartition.has_value() && *ownerPartition != selfPartitionKey);
+		if (outOfOurBounds)
+			out_of_bounds_entities.push_back(entity);
 	}
 
 	return out_of_bounds_entities;
@@ -55,9 +62,14 @@ std::optional<std::string> EntityAtBoundsManager::FindBoundsForEntity(const Atla
 	return std::nullopt;
 }
 
+std::string EntityAtBoundsManager::GetSelfPartitionKey()
+{
+	return DockerIO::Get().GetSelfContainerName();
+}
+
 void EntityAtBoundsManager::InitiateEntityHandoff(ByteWriter& bw)
 {
-
+	EntityHandoff::Get().InitiateHandoffFromSerialized(bw);
 }
 
 void EntityAtBoundsManager::DebugPrintClaimedBounds()

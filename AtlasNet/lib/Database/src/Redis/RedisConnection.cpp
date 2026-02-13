@@ -3,6 +3,7 @@
 #include <hiredis/read.h>
 
 #include <iostream>
+#include <optional>
 #include <string_view>
 
 long long RedisConnection::HSet(const std::string_view& key, const std::string_view& field,
@@ -21,7 +22,19 @@ std::future<long long> RedisConnection::HSetAsync(const std::string_view& key,
 std::optional<std::string> RedisConnection::HGet(const std::string_view& key,
 												 const std::string_view& field) const
 {
-	return WithSync([&](auto& r) -> std::optional<std::string> { return r.hget(key, field); });
+	return WithSync([&](auto& r) -> std::optional<std::string> {
+		try
+		{
+			auto result = r.hget(key, field);
+			if (!result)
+				return std::nullopt;
+			return std::optional<std::string>(*result);
+		}
+		catch (const std::bad_optional_access&)
+		{
+			return std::nullopt;
+		}
+	});
 }
 
 std::future<std::optional<std::string>> RedisConnection::HGetAsync(
