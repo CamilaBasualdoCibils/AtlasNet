@@ -5,6 +5,7 @@
 
 #include "DockerIO.hpp"
 #include "EntityHandoff.hpp"
+#include "InterlinkIdentifier.hpp"
 #include "Log.hpp"
 #include "Serialize/ByteReader.hpp"
 #include "Database/HeuristicManifest.hpp"
@@ -14,7 +15,6 @@ std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWr
 {
 	std::vector<AtlasEntity> out_of_bounds_entities;
 	ByteReader br(bw.bytes());
-	const std::string selfPartitionKey = GetSelfPartitionKey();
 
 	while (br.remaining() > 0)
 	{
@@ -22,11 +22,9 @@ std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWr
 		entity.Deserialize(br);
 
 		auto ownerPartition = FindBoundsForEntity(entity);
-		//PrintEntityToBoundsInfo(entity, ownerPartition);
-
-		// Out of our bounds: owner is another partition or none (entity left our region).
+		// Out of our bounds: no owner or owner is another partition (not us).
 		const bool outOfOurBounds =
-			!ownerPartition.has_value() || (ownerPartition.has_value() && *ownerPartition != selfPartitionKey);
+			!ownerPartition.has_value() || (ownerPartition.has_value() && !IsPartitionKeySelf(*ownerPartition));
 		if (outOfOurBounds)
 			out_of_bounds_entities.push_back(entity);
 	}
@@ -34,7 +32,53 @@ std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWr
 	return out_of_bounds_entities;
 }
 
-std::optional<std::string> EntityAtBoundsManager::FindBoundsForEntity(const AtlasEntity& entity)
+bool EntityAtBoundsManager::IsPartitionKeySelf(const std::string& partitionKey)
+{
+	auto parsed = InterLinkIdentifier::FromString(partitionKey);
+	if (!parsed.has_value())
+		return false;
+	return std::string(parsed->ID.data()) == GetSelfPartitionKey();
+}
+
+std::unordered_map<EntityAtBoundsManager::EntityID, std::string>
+EntityAtBoundsManager::BuildOobEntityToTargetMap(std::span<const AtlasEntity> entities) const
+{
+	const std::string self = GetSelfPartitionKey();
+	std::unordered_map<EntityID, std::string> out;
+	for (const AtlasEntity& e : entities)
+	{
+		auto target = FindBoundsForEntity(e);
+		if (!target.has_value() || IsPartitionKeySelf(*target))
+			continue;
+		out[e.Entity_ID] = *target;
+	}
+	return out;
+}
+
+bool EntityAtBoundsManager::OobMapsEqual(const std::unordered_map<EntityID, std::string>& a,
+                                         const std::unordered_map<EntityID, std::string>& b)
+{
+	if (a.size() != b.size())
+		return false;
+	for (const auto& [eid, target] : a)
+	{
+		auto it = b.find(eid);
+		if (it == b.end() || it->second != target)
+			return false;
+	}
+	return true;
+}
+
+bool EntityAtBoundsManager::HasOobSetChanged(std::span<const AtlasEntity> oobEntities)
+{
+	std::unordered_map<EntityID, std::string> current = BuildOobEntityToTargetMap(oobEntities);
+	if (OobMapsEqual(current, previousOobEntityToTarget_))
+		return false;
+	previousOobEntityToTarget_ = std::move(current);
+	return true;
+}
+
+std::optional<std::string> EntityAtBoundsManager::FindBoundsForEntity(const AtlasEntity& entity) const
 {
 	using BoundsMap = std::unordered_map<std::string, GridShape>;
 
@@ -70,6 +114,7 @@ std::string EntityAtBoundsManager::GetSelfPartitionKey()
 
 void EntityAtBoundsManager::InitiateEntityHandoff(ByteWriter& bw)
 {
+	// Deserialize and hand off; caller is responsible for only calling when HasOobSetChanged returned true.
 	EntityHandoff::Get().InitiateHandoffFromSerialized(bw);
 }
 

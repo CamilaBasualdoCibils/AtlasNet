@@ -22,21 +22,13 @@ class EntityHandoff : public Singleton<EntityHandoff>
 	std::shared_ptr<Log> logger = std::make_shared<Log>("EntityHandoff");
 
 	using EntityID = AtlasEntityMinimal::EntityID;
-	// Target partition id (shard container name) -> entity IDs we have an open handoff for.
+	// Target partition id -> entity IDs we have an open handoff for (we initiated the connection).
 	std::unordered_map<std::string, std::unordered_set<EntityID>> openHandoffsByTarget_;
-	// Last OOB set (entity id -> target): only run open/close when this changes.
-	std::unordered_map<EntityID, std::string> previousOobEntityToTarget_;
 
 	std::string getSelfPartitionKey() const;
 	std::optional<std::string> resolveTargetPartition(const AtlasEntity& entity) const;
-	/// Partition key from HeuristicManifest is full ToString() e.g. "eShard 37d8dbb86abc". Parse so ID matches registry.
 	static InterLinkIdentifier partitionKeyToIdentifier(const std::string& partitionKey);
-	/// Only we open/close to target when we are the canonical initiator (self < target by container id). Avoids both sides opening.
 	static bool shouldInitiateConnectionTo(const std::string& selfPartitionKey, const std::string& targetPartitionKey);
-	// Build map entity_id -> target for entities that are OOB (and have a valid target != self).
-	std::unordered_map<EntityID, std::string> buildOobEntityToTarget(std::span<const AtlasEntity> entities) const;
-	static bool oobMapsEqual(const std::unordered_map<EntityID, std::string>& a,
-	                         const std::unordered_map<EntityID, std::string>& b);
 
 public:
 	EntityHandoff() = default;
@@ -46,9 +38,8 @@ public:
 	void Shutdown() {}
 
 	/**
-	 * Update handoff state from the current list of entities that are out of our bounds.
-	 * Opens an Interlink connection to each target shard when an entity goes OOB;
-	 * closes the connection when no entity is OOB for that target anymore.
+	 * Perform handoff for the given OOB entities: open/close connections to target shards as needed.
+	 * Call only when the OOB set has changed (EntityAtBoundsManager::HasOobSetChanged).
 	 */
 	void InitiateHandoff(std::span<const AtlasEntity> entities);
 

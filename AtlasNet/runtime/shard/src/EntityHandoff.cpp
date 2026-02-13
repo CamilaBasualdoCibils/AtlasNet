@@ -29,25 +29,6 @@ std::optional<std::string> EntityHandoff::resolveTargetPartition(const AtlasEnti
 	return std::nullopt;
 }
 
-std::unordered_map<EntityHandoff::EntityID, std::string> EntityHandoff::buildOobEntityToTarget(
-	std::span<const AtlasEntity> entities) const
-{
-	const std::string self = getSelfPartitionKey();
-	std::unordered_map<EntityID, std::string> out;
-	for (const AtlasEntity& e : entities)
-	{
-		auto target = resolveTargetPartition(e);
-		if (!target.has_value())
-			continue;
-		// Partition key is "eShard <container_id>"; self is container id. Skip when target is us.
-		auto parsed = InterLinkIdentifier::FromString(*target);
-		if (parsed.has_value() && std::string(parsed->ID.data()) == self)
-			continue;
-		out[e.Entity_ID] = *target;
-	}
-	return out;
-}
-
 InterLinkIdentifier EntityHandoff::partitionKeyToIdentifier(const std::string& partitionKey)
 {
 	// Partition keys from HeuristicManifest are full ToString() e.g. "eShard 37d8dbb86abc".
@@ -67,20 +48,6 @@ bool EntityHandoff::shouldInitiateConnectionTo(const std::string& selfPartitionK
 	// Only we open (and thus close) when our container id is lexicographically less than target's.
 	// Then the other shard never opens to us for this pair, so only one connection and we own it.
 	return selfPartitionKey < targetId;
-}
-
-bool EntityHandoff::oobMapsEqual(const std::unordered_map<EntityID, std::string>& a,
-                                 const std::unordered_map<EntityID, std::string>& b)
-{
-	if (a.size() != b.size())
-		return false;
-	for (const auto& [eid, target] : a)
-	{
-		auto it = b.find(eid);
-		if (it == b.end() || it->second != target)
-			return false;
-	}
-	return true;
 }
 
 void EntityHandoff::updateConnectionsForCurrentOob(std::span<const AtlasEntity> entities)
@@ -163,11 +130,6 @@ void EntityHandoff::updateConnectionsForCurrentOob(std::span<const AtlasEntity> 
 
 void EntityHandoff::InitiateHandoff(std::span<const AtlasEntity> entities)
 {
-	std::unordered_map<EntityID, std::string> current = buildOobEntityToTarget(entities);
-	// Only run open/close when the OOB set changed (entity just left or just came back).
-	if (oobMapsEqual(current, previousOobEntityToTarget_))
-		return;
-	previousOobEntityToTarget_ = std::move(current);
 	updateConnectionsForCurrentOob(entities);
 }
 
