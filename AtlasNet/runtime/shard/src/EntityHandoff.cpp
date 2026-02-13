@@ -25,7 +25,19 @@ bool EntityHandoff::shouldInitiateConnectionTo(const std::string& selfPartitionK
 	return selfPartitionKey < targetId;
 }
 
-void EntityHandoff::ensureConnectionsAndNotify(std::span<const EntityHandoffRequest> requests)
+void EntityHandoff::CompletePendingSuccessPromises()
+{
+	for (auto& [prom, entityId] : pendingSuccessPromises_)
+	{
+		if (prom)
+			prom->set_value(HandoffResult{ entityId, true });
+	}
+	pendingSuccessPromises_.clear();
+}
+
+void EntityHandoff::ensureConnectionsAndNotify(
+    std::span<const EntityHandoffRequest> requests,
+    std::span<std::shared_ptr<std::promise<HandoffResult>>> resultPromises)
 {
 	const std::string self = getSelfPartitionKey();
 	std::unordered_map<std::string, std::unordered_set<EntityID>> currentByTarget;
@@ -98,21 +110,39 @@ void EntityHandoff::ensureConnectionsAndNotify(std::span<const EntityHandoffRequ
 			openConnectionsByTarget_[target] = entityIds;
 	}
 
-	// Notify per-entity result. Success if we have the connection (we own it or other shard initiates).
-	if (!resultCallback_)
-		return;
-	for (const auto& r : requests)
+	// Complete each request's future: failure immediately, success stubbed (completed at end via CompletePendingSuccessPromises).
+	pendingSuccessPromises_.clear();
+	const size_t n = std::min(requests.size(), resultPromises.size());
+	for (size_t i = 0; i < n; ++i)
 	{
-		if (r.targetPartitionKey.empty())
+		const auto& r = requests[i];
+		auto& prom = resultPromises[i];
+		if (!prom || r.targetPartitionKey.empty())
 			continue;
 		const std::string& target = r.targetPartitionKey;
 		bool success = (openConnectionsByTarget_.count(target) != 0) ||
 		               !shouldInitiateConnectionTo(self, target);
-		resultCallback_(r.entity.Entity_ID, success);
+		if (!success)
+			prom->set_value(HandoffResult{ r.entity.Entity_ID, false });
+		else
+			pendingSuccessPromises_.emplace_back(prom, r.entity.Entity_ID);
 	}
+
+	// Stub: complete success futures now; in production, complete when connection reaches eConnected.
+	CompletePendingSuccessPromises();
 }
 
-void EntityHandoff::RequestHandoff(std::span<const EntityHandoffRequest> requests)
+std::vector<std::future<HandoffResult>> EntityHandoff::RequestHandoff(std::span<const EntityHandoffRequest> requests)
 {
-	ensureConnectionsAndNotify(requests);
+	const size_t n = requests.size();
+	std::vector<std::shared_ptr<std::promise<HandoffResult>>> promises(n);
+	std::vector<std::future<HandoffResult>> futures;
+	futures.reserve(n);
+	for (size_t i = 0; i < n; ++i)
+	{
+		promises[i] = std::make_shared<std::promise<HandoffResult>>();
+		futures.push_back(promises[i]->get_future());
+	}
+	ensureConnectionsAndNotify(requests, promises);
+	return futures;
 }

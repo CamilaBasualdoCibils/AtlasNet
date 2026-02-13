@@ -1,5 +1,6 @@
 #include "EntityAtBoundsManager.hpp"
 
+#include <chrono>
 #include <random>
 #include <unordered_map>
 
@@ -124,6 +125,27 @@ void EntityAtBoundsManager::OnHandoffResult(EntityID entityId, bool success)
 
 void EntityAtBoundsManager::TickHandoff(ByteWriter& bw)
 {
+	// Drain handoff futures that completed (immediately or in the future).
+	for (auto it = pendingHandoffFutures_.begin(); it != pendingHandoffFutures_.end();)
+	{
+		if (it->valid() &&
+		    it->wait_for(std::chrono::seconds(0)) == std::future_status::ready)
+		{
+			try
+			{
+				HandoffResult r = it->get();
+				OnHandoffResult(r.entityId, r.success);
+			}
+			catch (...)
+			{
+				logger->Warning("[EntityAtBoundsManager] Handoff future exception; entity stays in handoff for retry");
+			}
+			it = pendingHandoffFutures_.erase(it);
+		}
+		else
+			++it;
+	}
+
 	authoritativeEntities_.clear();
 	std::vector<AtlasEntity> oobEntities =
 	    DetectEntitiesOutOfBounds(bw, &authoritativeEntities_);
@@ -144,7 +166,12 @@ void EntityAtBoundsManager::TickHandoff(ByteWriter& bw)
 		requests.push_back(EntityHandoffRequest{ e, it->second });
 	}
 	if (!requests.empty())
-		EntityHandoff::Get().RequestHandoff(requests);
+	{
+		std::vector<std::future<HandoffResult>> newFutures =
+		    EntityHandoff::Get().RequestHandoff(requests);
+		for (auto& f : newFutures)
+			pendingHandoffFutures_.push_back(std::move(f));
+	}
 }
 
 void EntityAtBoundsManager::DebugPrintClaimedBounds()

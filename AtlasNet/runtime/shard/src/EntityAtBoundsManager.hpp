@@ -1,6 +1,7 @@
 #pragma once
 
 #include <atomic>
+#include <future>
 #include <optional>
 #include <span>
 #include <string>
@@ -26,8 +27,10 @@ class EntityAtBoundsManager : public Singleton<EntityAtBoundsManager>
 
 	// Entities we own (in our bounds).
 	std::unordered_set<EntityID> authoritativeEntities_;
-	// Entities currently in handoff: entity id -> target partition key. Handoff notifies via callback.
+	// Entities currently in handoff: entity id -> target partition key. Handoff notifies via futures.
 	std::unordered_map<EntityID, std::string> entitiesInHandoff_;
+	// Pending handoff futures; drained each tick to call OnHandoffResult when ready.
+	std::vector<std::future<HandoffResult>> pendingHandoffFutures_;
 
 public:
 	EntityAtBoundsManager() = default;
