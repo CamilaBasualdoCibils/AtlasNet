@@ -17,8 +17,6 @@ git clone --branch Development https://github.com/CamilaBasualdoCibils/AtlasNet.
 - **Cartograph** — Next.js dashboard that visualizes connection telemetry, shard topology, and heuristic state from InternalDB.
 
 **Deprecated / in progress:**
-
-- **Game Coordinator** — Deprecated. A new solution is being implemented (separate from this repo’s current runtime).
 - Code under **`exc/`** directories is **deprecated** and should not be used or referenced; only non-`exc` sources are current.
 
 ## Architecture (high level)
