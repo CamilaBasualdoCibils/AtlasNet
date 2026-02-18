@@ -25,14 +25,46 @@ bool EntityHandoff::shouldInitiateConnectionTo(const std::string& selfPartitionK
 	return selfPartitionKey < targetId;
 }
 
-void EntityHandoff::CompletePendingSuccessPromises()
+void EntityHandoff::CompletePromisesForTarget(const std::string& targetPartitionKey)
 {
-	for (auto& [prom, entityId] : pendingSuccessPromises_)
+	auto it = pendingPromisesByTarget_.find(targetPartitionKey);
+	if (it == pendingPromisesByTarget_.end())
+		return;
+
+	for (auto& [prom, entityId] : it->second)
 	{
 		if (prom)
 			prom->set_value(HandoffResult{ entityId, true });
 	}
-	pendingSuccessPromises_.clear();
+	pendingPromisesByTarget_.erase(it);
+}
+
+void EntityHandoff::OnConnectionEstablished(const InterLinkIdentifier& targetId)
+{
+	// Find the partition key that corresponds to this targetId by checking pending promises
+	// (we might not have added it to openConnectionsByTarget_ yet)
+	std::string targetPartitionKey;
+	for (const auto& [partitionKey, _] : pendingPromisesByTarget_)
+	{
+		InterLinkIdentifier parsed = partitionKeyToIdentifier(partitionKey);
+		if (parsed.ToString() == targetId.ToString() || 
+		    (parsed.Type == targetId.Type && std::string(parsed.ID.data()) == std::string(targetId.ID.data())))
+		{
+			targetPartitionKey = partitionKey;
+			break;
+		}
+	}
+
+	if (!targetPartitionKey.empty())
+	{
+		logger->DebugFormatted("EntityHandoff: connection established to {}, completing {} promises",
+		                     targetPartitionKey, pendingPromisesByTarget_[targetPartitionKey].size());
+		CompletePromisesForTarget(targetPartitionKey);
+		// Mark connection as open now that it's established
+		// Note: entityIds will be updated on next TickHandoff when entities are still OOB
+		if (openConnectionsByTarget_.find(targetPartitionKey) == openConnectionsByTarget_.end())
+			openConnectionsByTarget_[targetPartitionKey] = {};
+	}
 }
 
 void EntityHandoff::ensureConnectionsAndNotify(
@@ -68,13 +100,12 @@ void EntityHandoff::ensureConnectionsAndNotify(
 			++it;
 	}
 
-	// Ensure connection for each target we're responsible for; update openConnectionsByTarget_.
+	// Ensure connection for each target we're responsible for; update openConnectionsByTarget_ when actually connected.
 	for (const auto& [target, entityIds] : currentByTarget)
 	{
 		if (entityIds.empty())
 			continue;
 		bool alreadyHad = (openConnectionsByTarget_.find(target) != openConnectionsByTarget_.end());
-		bool connected = alreadyHad;
 		if (!alreadyHad && shouldInitiateConnectionTo(self, target))
 		{
 			InterLinkIdentifier targetId = partitionKeyToIdentifier(target);
@@ -88,12 +119,12 @@ void EntityHandoff::ensureConnectionsAndNotify(
 				{
 					if (Interlink::Get().EstablishConnectionTo(targetId))
 					{
-						logger->DebugFormatted("EntityHandoff: opened connection to {} (entity out of bounds)",
+						logger->DebugFormatted("EntityHandoff: queued connection to {} (entity out of bounds)",
 						                      target);
-						connected = true;
+						// Don't add to openConnectionsByTarget_ yet - wait for OnConnectionEstablished
 					}
 					else
-						logger->WarningFormatted("EntityHandoff: failed to open connection to {}", target);
+						logger->WarningFormatted("EntityHandoff: failed to queue connection to {}", target);
 				}
 				catch (const std::bad_optional_access&)
 				{
@@ -106,12 +137,12 @@ void EntityHandoff::ensureConnectionsAndNotify(
 				}
 			}
 		}
-		if (connected)
+		// If already had connection, keep it; otherwise it will be added in OnConnectionEstablished
+		if (alreadyHad)
 			openConnectionsByTarget_[target] = entityIds;
 	}
 
-	// Complete each request's future: failure immediately, success stubbed (completed at end via CompletePendingSuccessPromises).
-	pendingSuccessPromises_.clear();
+	// Complete each request's future: failure immediately, success when connection is established.
 	const size_t n = std::min(requests.size(), resultPromises.size());
 	for (size_t i = 0; i < n; ++i)
 	{
@@ -120,16 +151,25 @@ void EntityHandoff::ensureConnectionsAndNotify(
 		if (!prom || r.targetPartitionKey.empty())
 			continue;
 		const std::string& target = r.targetPartitionKey;
-		bool success = (openConnectionsByTarget_.count(target) != 0) ||
-		               !shouldInitiateConnectionTo(self, target);
-		if (!success)
-			prom->set_value(HandoffResult{ r.entity.Entity_ID, false });
+		bool alreadyConnected = (openConnectionsByTarget_.count(target) != 0);
+		bool weAreInitiator = shouldInitiateConnectionTo(self, target);
+		
+		if (!alreadyConnected && weAreInitiator)
+		{
+			// Connection is being established asynchronously; store promise to complete when OnConnectionEstablished fires.
+			pendingPromisesByTarget_[target].emplace_back(prom, r.entity.Entity_ID);
+		}
+		else if (alreadyConnected || !weAreInitiator)
+		{
+			// Already connected or other shard initiates; complete immediately.
+			prom->set_value(HandoffResult{ r.entity.Entity_ID, true });
+		}
 		else
-			pendingSuccessPromises_.emplace_back(prom, r.entity.Entity_ID);
+		{
+			// Connection failed; complete with failure.
+			prom->set_value(HandoffResult{ r.entity.Entity_ID, false });
+		}
 	}
-
-	// Stub: complete success futures now; in production, complete when connection reaches eConnected.
-	CompletePendingSuccessPromises();
 }
 
 std::vector<std::future<HandoffResult>> EntityHandoff::RequestHandoff(std::span<const EntityHandoffRequest> requests)

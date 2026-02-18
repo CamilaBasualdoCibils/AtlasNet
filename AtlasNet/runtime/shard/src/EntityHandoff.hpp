@@ -37,16 +37,16 @@ class EntityHandoff : public Singleton<EntityHandoff>
 
 	std::shared_ptr<Log> logger = std::make_shared<Log>("EntityHandoff");
 	std::unordered_map<std::string, std::unordered_set<EntityID>> openConnectionsByTarget_;
-	// Stub: (promise, entityId) to complete when connection is established (for now completed at end of RequestHandoff).
-	using PendingSuccess = std::pair<std::shared_ptr<std::promise<HandoffResult>>, EntityID>;
-	std::vector<PendingSuccess> pendingSuccessPromises_;
+	// Pending promises keyed by target partition key: (promise, entityId) pairs to complete when connection is established.
+	using PendingPromise = std::pair<std::shared_ptr<std::promise<HandoffResult>>, EntityID>;
+	std::unordered_map<std::string, std::vector<PendingPromise>> pendingPromisesByTarget_;
 
 	static InterLinkIdentifier partitionKeyToIdentifier(const std::string& partitionKey);
 	static bool shouldInitiateConnectionTo(const std::string& selfPartitionKey,
 	                                       const std::string& targetPartitionKey);
 	std::string getSelfPartitionKey() const;
-	// Stub: in production, call when connection reaches eConnected instead of at end of ensureConnectionsAndNotify.
-	void CompletePendingSuccessPromises();
+	// Complete promises for entities waiting on this connection target.
+	void CompletePromisesForTarget(const std::string& targetPartitionKey);
 
 public:
 	EntityHandoff() = default;
@@ -57,9 +57,14 @@ public:
 
 	/**
 	 * Request handoff for the given (entity, target) pairs. Returns one future per request; each
-	 * future is set immediately on failure, or in the future on success (stubbed for now).
+	 * future is set immediately on failure, or when connection is established on success.
 	 */
 	std::vector<std::future<HandoffResult>> RequestHandoff(std::span<const EntityHandoffRequest> requests);
+
+	/**
+	 * Called when a connection to a target shard is established. Completes pending handoff promises for that target.
+	 */
+	void OnConnectionEstablished(const InterLinkIdentifier& targetId);
 
 private:
 	void ensureConnectionsAndNotify(

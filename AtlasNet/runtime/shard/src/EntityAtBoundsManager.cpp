@@ -8,33 +8,9 @@
 #include "EntityHandoff.hpp"
 #include "InterlinkIdentifier.hpp"
 #include "Log.hpp"
-#include "Serialize/ByteReader.hpp"
 #include "Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 
-std::vector<AtlasEntity> EntityAtBoundsManager::DetectEntitiesOutOfBounds(ByteWriter& bw,
-                                                                          std::unordered_set<EntityID>* inBoundsIds)
-{
-	std::vector<AtlasEntity> out_of_bounds_entities;
-	ByteReader br(bw.bytes());
-
-	while (br.remaining() > 0)
-	{
-		AtlasEntity entity;
-		entity.Deserialize(br);
-
-		auto ownerPartition = FindBoundsForEntity(entity);
-		// Out of our bounds: no owner or owner is another partition (not us).
-		const bool outOfOurBounds =
-			!ownerPartition.has_value() || (ownerPartition.has_value() && !IsPartitionKeySelf(*ownerPartition));
-		if (outOfOurBounds)
-			out_of_bounds_entities.push_back(entity);
-		else if (inBoundsIds)
-			inBoundsIds->insert(entity.Entity_ID);
-	}
-
-	return out_of_bounds_entities;
-}
 
 bool EntityAtBoundsManager::IsPartitionKeySelf(const std::string& partitionKey)
 {
@@ -44,43 +20,6 @@ bool EntityAtBoundsManager::IsPartitionKeySelf(const std::string& partitionKey)
 	return std::string(parsed->ID.data()) == GetSelfPartitionKey();
 }
 
-std::unordered_map<EntityAtBoundsManager::EntityID, std::string>
-EntityAtBoundsManager::BuildOobEntityToTargetMap(std::span<const AtlasEntity> entities) const
-{
-	const std::string self = GetSelfPartitionKey();
-	std::unordered_map<EntityID, std::string> out;
-	for (const AtlasEntity& e : entities)
-	{
-		auto target = FindBoundsForEntity(e);
-		if (!target.has_value() || IsPartitionKeySelf(*target))
-			continue;
-		out[e.Entity_ID] = *target;
-	}
-	return out;
-}
-
-bool EntityAtBoundsManager::OobMapsEqual(const std::unordered_map<EntityID, std::string>& a,
-                                         const std::unordered_map<EntityID, std::string>& b)
-{
-	if (a.size() != b.size())
-		return false;
-	for (const auto& [eid, target] : a)
-	{
-		auto it = b.find(eid);
-		if (it == b.end() || it->second != target)
-			return false;
-	}
-	return true;
-}
-
-bool EntityAtBoundsManager::HasOobSetChanged(std::span<const AtlasEntity> oobEntities)
-{
-	std::unordered_map<EntityID, std::string> current = BuildOobEntityToTargetMap(oobEntities);
-	if (OobMapsEqual(current, previousOobEntityToTarget_))
-		return false;
-	previousOobEntityToTarget_ = std::move(current);
-	return true;
-}
 
 std::optional<std::string> EntityAtBoundsManager::FindBoundsForEntity(const AtlasEntity& entity) const
 {
@@ -118,12 +57,24 @@ std::string EntityAtBoundsManager::GetSelfPartitionKey()
 
 void EntityAtBoundsManager::OnHandoffResult(EntityID entityId, bool success)
 {
+	auto it = entitiesInHandoff_.find(entityId);
+	if (it == entitiesInHandoff_.end())
+		return;
+
 	if (success)
-		entitiesInHandoff_.erase(entityId);
-	// On failure we keep the entity in entitiesInHandoff_ so we retry on next tick.
+	{
+		// Handoff succeeded: remove from in-handoff (entity is now owned by target shard).
+		entitiesInHandoff_.erase(it);
+	}
+	else
+	{
+		// Handoff failed: move back to authoritative (we still own it, will retry later).
+		authoritativeEntities_[entityId] = it->second.entity;
+		entitiesInHandoff_.erase(it);
+	}
 }
 
-void EntityAtBoundsManager::TickHandoff(ByteWriter& bw)
+void EntityAtBoundsManager::TickHandoff()
 {
 	// Drain handoff futures that completed (immediately or in the future).
 	for (auto it = pendingHandoffFutures_.begin(); it != pendingHandoffFutures_.end();)
@@ -146,25 +97,46 @@ void EntityAtBoundsManager::TickHandoff(ByteWriter& bw)
 			++it;
 	}
 
-	authoritativeEntities_.clear();
-	std::vector<AtlasEntity> oobEntities =
-	    DetectEntitiesOutOfBounds(bw, &authoritativeEntities_);
-
-	std::unordered_map<EntityID, std::string> currentOobMap = BuildOobEntityToTargetMap(oobEntities);
-	if (!HasOobSetChanged(oobEntities))
-		return;
-
-	entitiesInHandoff_ = currentOobMap;
-
+	// Process all authoritative entities: determine which are OOB and need handoff.
 	std::vector<EntityHandoffRequest> requests;
-	requests.reserve(oobEntities.size());
-	for (const AtlasEntity& e : oobEntities)
+	
+	for (auto it = authoritativeEntities_.begin(); it != authoritativeEntities_.end();)
 	{
-		auto it = entitiesInHandoff_.find(e.Entity_ID);
-		if (it == entitiesInHandoff_.end())
-			continue;
-		requests.push_back(EntityHandoffRequest{ e, it->second });
+		const AtlasEntity& entity = it->second;
+		auto ownerPartition = FindBoundsForEntity(entity);
+		const bool inOurBounds = ownerPartition.has_value() && IsPartitionKeySelf(*ownerPartition);
+
+		if (!inOurBounds && ownerPartition.has_value())
+		{
+			// Entity is OOB and has a target partition: move to handoff and request handoff.
+			// Only request if not already in handoff (avoid duplicate requests).
+			if (entitiesInHandoff_.find(entity.Entity_ID) == entitiesInHandoff_.end())
+			{
+				entitiesInHandoff_[entity.Entity_ID] = HandoffEntry{ entity, *ownerPartition };
+				requests.push_back(EntityHandoffRequest{ entity, *ownerPartition });
+			}
+			else
+			{
+				// Keep latest snapshot while waiting for handoff result.
+				entitiesInHandoff_[entity.Entity_ID] = HandoffEntry{ entity, *ownerPartition };
+			}
+			// Remove from authoritative since it's OOB.
+			it = authoritativeEntities_.erase(it);
+		}
+		else if (!inOurBounds)
+		{
+			// Entity is OOB but has no target (nowhere to hand off). Keep in authoritative for now.
+			++it;
+		}
+		else
+		{
+			// Entity is in our bounds: keep authoritative. Remove from handoff if it was there.
+			entitiesInHandoff_.erase(entity.Entity_ID);
+			++it;
+		}
 	}
+
+	// Request handoff for entities we just moved to handoff.
 	if (!requests.empty())
 	{
 		std::vector<std::future<HandoffResult>> newFutures =
@@ -214,64 +186,54 @@ void EntityAtBoundsManager::InitCircularTestEntity(const glm::vec3& center, floa
 	std::mt19937_64 gen(rd());
 	std::uniform_int_distribution<AtlasEntityMinimal::EntityID> dist(1, UINT64_MAX);
 
-	circularTestEntity = AtlasEntity{};
-	circularTestEntity.Entity_ID = dist(gen);
-	circularTestEntity.transform.position = center + glm::vec3(radius, 0.0f, 0.0f);
-	circularTestEntity.IsClient = false;
-	circularTestEntity.Client_ID = 0;
-	circularTestEntity.Metadata.clear();
-
-	hasCircularTestEntity = true;
+	AtlasEntity entity{};
+	entity.Entity_ID = dist(gen);
+	entity.transform.position = center + glm::vec3(radius, 0.0f, 0.0f);
+	entity.IsClient = false;
+	entity.Client_ID = 0;
+	entity.Metadata.clear();
+	authoritativeEntities_[entity.Entity_ID] = entity;
 
 	logger->DebugFormatted(
 		"[EntityAtBoundsManager] Initialized circular test entity id={} at center ({}, {}, {}), radius {}",
-		circularTestEntity.Entity_ID,
+		entity.Entity_ID,
 		center.x,
 		center.y,
 		center.z,
 		radius);
 }
 
-void EntityAtBoundsManager::UpdateAndSerializeCircularTestEntity(ByteWriter& bw, float deltaTimeSeconds)
+void EntityAtBoundsManager::UpdateCircularTestEntities(float deltaTimeSeconds)
 {
-	if (!hasCircularTestEntity)
+
+	if (authoritativeEntities_.size() > 0)
 	{
-		return;
+		logger->DebugFormatted("entities updated: {}", authoritativeEntities_.size());
 	}
 
-	// Advance along the circle.
+	if (entitiesInHandoff_.size() > 0)
+	{
+		logger->DebugFormatted("entities handing off: {}", entitiesInHandoff_.size());
+	}
+
+
+	if (authoritativeEntities_.empty())
+		return;
+
+	// Advance all authoritative test entities along a circular path.
 	circularAngle += circularAngularSpeed * deltaTimeSeconds;
 
-	const float x = circularCenter.x + circularRadius * std::cos(circularAngle);
-	const float y = circularCenter.y + circularRadius * std::sin(circularAngle);
-	const float z = circularCenter.z;
-
-	circularTestEntity.transform.position = glm::vec3(x, y, z);
-
-	// Serialize the single moving entity into the provided writer.
-	bw.clear();
-	circularTestEntity.Serialize(bw);
-}
-
-void EntityAtBoundsManager::PrintEntityToBoundsInfo(const AtlasEntity& entity, const std::optional<std::string>& ownerPartition)
-{
-	if (ownerPartition.has_value())
+	const size_t count = authoritativeEntities_.size();
+	size_t idx = 0;
+	for (auto& [entityId, entity] : authoritativeEntities_)
 	{
-		logger->DebugFormatted(
-			"Entity {} at ({}, {}, {}) belongs to partition \"{}\"",
-			entity.Entity_ID,
-			entity.transform.position.x,
-			entity.transform.position.y,
-			entity.transform.position.z,
-			*ownerPartition);
-	}
-	else
-	{
-		logger->DebugFormatted(
-			"Entity {} at ({}, {}, {}) is OUT of all bounds",
-			entity.Entity_ID,
-			entity.transform.position.x,
-			entity.transform.position.y,
-			entity.transform.position.z);
+		(void)entityId;
+		const float phase = circularAngle + (static_cast<float>(idx) * 6.28318530718f / static_cast<float>(count));
+		const float x = circularCenter.x + circularRadius * std::cos(phase);
+		const float y = circularCenter.y + circularRadius * std::sin(phase);
+		const float z = circularCenter.z;
+		entity.transform.position = glm::vec3(x, y, z);
+		++idx;
+
 	}
 }
