@@ -5,14 +5,18 @@
 
 #include "Database/HealthManifest.hpp"
 #include "Database/HeuristicManifest.hpp"
+#include "EntityHandoff/EntityAuthorityManager.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink.hpp"
 #include "Misc/UUID.hpp"
-#include "Packet/CommandPacket.hpp"
 #include "Telemetry/NetworkManifest.hpp"
-#include "pch.hpp"
 Partition::Partition() {}
 Partition::~Partition() {}
+
+namespace
+{
+constexpr std::chrono::milliseconds kPartitionTickInterval(32);
+}
 
 void Partition::Init()
 {
@@ -25,6 +29,7 @@ void Partition::Init()
 	NetworkManifest::Get().ScheduleNetworkPings(partitionIdentifier);
 	Interlink::Get().Init(
 		InterlinkProperties{.ThisID = partitionIdentifier, .logger = logger});
+	EntityAuthorityManager::Get().Init(partitionIdentifier, logger);
 
 	{
 		GridShape claimedBounds;
@@ -44,10 +49,11 @@ void Partition::Init()
 	// Clear any existing partition entity data to prevent stale data
 	while (!ShouldShutdown)
 	{
-		std::this_thread::sleep_for(
-			std::chrono::milliseconds(32));	 // ~30 updates per second
+		std::this_thread::sleep_for(kPartitionTickInterval);	// ~30 updates/sec
+		EntityAuthorityManager::Get().Tick();
 	}
 
 	logger->Debug("Shutting Down");
+	EntityAuthorityManager::Get().Shutdown();
 	Interlink::Get().Shutdown();
 }
