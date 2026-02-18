@@ -25,12 +25,7 @@ endif()
 #    ENV ATLASNET_ROOT=${ATLASNET_ROOT}
 #)
 add_custom_target(run_atlasnet_sandbox
-        COMMAND
-            ${CMAKE_COMMAND} -E env
-            ATLASNET_ROOT=${ATLASNET_ROOT}
-            $<TARGET_FILE:AtlasNet>
-            -f ${CMAKE_CURRENT_SOURCE_DIR}/AtlasNetSettings.json
-        DEPENDS AtlasNet
-        #WORKING_DIRECTORY ${RUN_WORKING_DIR}
-        USES_TERMINAL
+     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/AtlasNet ${CMAKE_SOURCE_DIR}/AtlasNet/scripts/BuildDockerImages.sh
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh
+    USES_TERMINAL
     )
