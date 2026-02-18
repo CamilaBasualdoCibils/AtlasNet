@@ -199,6 +199,7 @@ app.get('/heuristic', (req, res) => {
 
             shapes.push({
                 id: shape.id,
+                ownerId: shape.owner_id,
                 type: shape.type,
                 position: { x: shape.pos_x, y: shape.pos_y },
                 radius: shape.radius,

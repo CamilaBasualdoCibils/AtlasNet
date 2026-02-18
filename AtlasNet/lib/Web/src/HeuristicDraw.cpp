@@ -20,6 +20,7 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 		rect.size_x = grid.halfExtents().x*2;
 		rect.size_y = grid.halfExtents().y*2;
 		rect.id = grid.ID;
+		rect.owner_id = "";
 		rect.color = "rgba(255, 149, 100, 1)";
 		shapes.emplace_back(rect);
 	}
@@ -34,6 +35,7 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 		rect.size_x = grid.halfExtents().x*2;
 		rect.size_y = grid.halfExtents().y*2;
 		rect.id = grid.ID;
+		rect.owner_id = claim_key;
 		rect.color = "rgba(100, 255, 149, 1)";
 		shapes.emplace_back(rect);
 	}

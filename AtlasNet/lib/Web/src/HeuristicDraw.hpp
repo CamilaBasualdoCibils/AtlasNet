@@ -18,6 +18,7 @@ struct IBoundsDrawShape
 		eRectImage = 4
 	};
 	IBounds::BoundsID id;
+	std::string owner_id;			 // Claimed shard identity (if claimed)
 	Type type = Type::eInvalid;	 // "circle", "rectangle", "line", "polygon", etc.
 	float pos_x,pos_y;				 // Position
 	std::string color;				 // Stroke color override (optional)
