@@ -4,7 +4,6 @@
 #include <memory>
 #include <optional>
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 
 #include "Entity.hpp"
@@ -27,12 +26,23 @@ class EntityAuthorityTracker
 		std::optional<NetworkIdentity> passingTo;
 	};
 
+	struct AuthorityTelemetryRow
+	{
+		AtlasEntity::EntityID entityId = 0;
+		NetworkIdentity owner;
+		AtlasEntity entitySnapshot;
+		uint16_t world = 0;
+		vec3 position = vec3(0.0F, 0.0F, 0.0F);
+		bool isClient = false;
+		AtlasEntity::ClientID clientId = 0;
+	};
+
 	EntityAuthorityTracker(const NetworkIdentity& self,
 						   std::shared_ptr<Log> inLogger);
 
 	void Reset();
 	void SetOwnedEntities(const std::vector<AtlasEntity>& ownedEntities);
-	void StoreAuthorityStateSnapshots(std::string_view hashKey);
+	void CollectTelemetryRows(std::vector<AuthorityTelemetryRow>& outRows) const;
 	void DebugLogTrackedEntities() const;
 	[[nodiscard]] std::vector<AtlasEntity> GetOwnedEntitySnapshots() const;
 	bool MarkPassing(AtlasEntity::EntityID entityId,
@@ -49,5 +59,4 @@ class EntityAuthorityTracker
 	NetworkIdentity selfIdentity;
 	std::shared_ptr<Log> logger;
 	std::unordered_map<AtlasEntity::EntityID, AuthorityEntry> authorityByEntityId;
-	std::unordered_set<std::string> lastPublishedFields;
 };

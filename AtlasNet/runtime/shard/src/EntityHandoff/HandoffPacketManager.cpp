@@ -5,7 +5,7 @@
 
 #include "EntityHandoff/EntityAuthorityManager.hpp"
 #include "EntityHandoff/HandoffConnectionManager.hpp"
-#include "EntityHandoff/Packet/HandoffEntityPacket.hpp"
+#include "EntityHandoff/Packet/GenericEntityPacket.hpp"
 #include "Interlink.hpp"
 #include "Serialize/ByteReader.hpp"
 #include "Serialize/ByteWriter.hpp"
@@ -17,16 +17,16 @@ void HandoffPacketManager::Init(const NetworkIdentity& self,
 	logger = std::move(inLogger);
 	initialized = true;
 	handoffEntitySub =
-		Interlink::Get().GetPacketManager().Subscribe<HandoffEntityPacket>(
-			[this](const HandoffEntityPacket& packet)
-			{ OnHandoffEntityPacket(packet); });
+		Interlink::Get().GetPacketManager().Subscribe<GenericEntityPacket>(
+			[this](const GenericEntityPacket& packet)
+			{ OnGenericEntityPacket(packet); });
 
 	if (logger)
 	{
 		logger->DebugFormatted(
 			"[EntityHandoff] HandoffPacketManager initialized for {}",
 			selfIdentity.ToString());
-		logger->Debug("[EntityHandoff] Subscribed to HandoffEntityPacket");
+		logger->Debug("[EntityHandoff] Subscribed to GenericEntityPacket");
 	}
 }
 
@@ -57,7 +57,7 @@ void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
 						 .time_since_epoch()
 						 .count();
 
-	HandoffEntityPacket packet;
+	GenericEntityPacket packet;
 	packet.sender = selfIdentity;
 	packet.entity.Entity_ID = static_cast<AtlasEntity::EntityID>(now);
 	packet.entity.transform.world = 0;
@@ -79,7 +79,7 @@ void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
 	if (logger)
 	{
 		logger->DebugFormatted(
-			"[EntityHandoff] Sent HandoffEntityPacket to {} (entity_id={} "
+			"[EntityHandoff] Sent GenericEntityPacket to {} (entity_id={} "
 			"metadata_bytes={})",
 			target.ToString(), packet.entity.Entity_ID, packet.entity.Metadata.size());
 	}
@@ -98,7 +98,7 @@ void HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 						 .time_since_epoch()
 						 .count();
 
-	HandoffEntityPacket packet;
+	GenericEntityPacket packet;
 	packet.sender = selfIdentity;
 	packet.entity = entity;
 	packet.sentAtMs = static_cast<uint64_t>(now);
@@ -113,8 +113,8 @@ void HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 	}
 }
 
-void HandoffPacketManager::OnHandoffEntityPacket(
-	const HandoffEntityPacket& packet) const
+void HandoffPacketManager::OnGenericEntityPacket(
+	const GenericEntityPacket& packet) const
 {
 	if (!initialized || !logger)
 	{
@@ -130,7 +130,7 @@ void HandoffPacketManager::OnHandoffEntityPacket(
 		receiveMs >= packet.sentAtMs ? (receiveMs - packet.sentAtMs) : 0;
 
 	logger->DebugFormatted(
-		"[EntityHandoff] Received HandoffEntityPacket from {} "
+		"[EntityHandoff] Received GenericEntityPacket from {} "
 		"(entity_id={} metadata_bytes={}) latency={}ms sentAt={} recvAt={}",
 		packet.sender.ToString(), packet.entity.Entity_ID, latencyMs,
 		packet.entity.Metadata.size(), packet.sentAtMs, receiveMs);

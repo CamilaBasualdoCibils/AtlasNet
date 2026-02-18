@@ -6,8 +6,8 @@
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/Packet.hpp"
 
-class HandoffEntityPacket
-	: public TPacket<HandoffEntityPacket, "HandoffEntityPacket">
+class GenericEntityPacket
+	: public TPacket<GenericEntityPacket, "GenericEntityPacket">
 {
   public:
 	NetworkIdentity sender;
@@ -35,4 +35,4 @@ class HandoffEntityPacket
 	}
 };
 
-ATLASNET_REGISTER_PACKET(HandoffEntityPacket, "HandoffEntityPacket");
+ATLASNET_REGISTER_PACKET(GenericEntityPacket, "GenericEntityPacket");

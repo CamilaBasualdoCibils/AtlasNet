@@ -1,4 +1,4 @@
-
+*** notes for protocol inspiration
 
 entity handoff notes:
 shards only know what it owns, is passing on, and ghosts

@@ -1,9 +1,6 @@
 #include "EntityHandoff/EntityAuthorityTracker.hpp"
 
-#include <format>
 #include <unordered_set>
-
-#include "InternalDB.hpp"
 
 EntityAuthorityTracker::EntityAuthorityTracker(const NetworkIdentity& self,
 											   std::shared_ptr<Log> inLogger)
@@ -14,7 +11,6 @@ EntityAuthorityTracker::EntityAuthorityTracker(const NetworkIdentity& self,
 void EntityAuthorityTracker::Reset()
 {
 	authorityByEntityId.clear();
-	lastPublishedFields.clear();
 }
 
 void EntityAuthorityTracker::SetOwnedEntities(
@@ -49,49 +45,22 @@ void EntityAuthorityTracker::SetOwnedEntities(
 	}
 }
 
-void EntityAuthorityTracker::StoreAuthorityStateSnapshots(std::string_view hashKey)
+void EntityAuthorityTracker::CollectTelemetryRows(
+	std::vector<AuthorityTelemetryRow>& outRows) const
 {
-	std::unordered_set<std::string> nextPublishedFields;
-	nextPublishedFields.reserve(authorityByEntityId.size());
-
+	outRows.clear();
+	outRows.reserve(authorityByEntityId.size());
 	for (const auto& [entityId, entry] : authorityByEntityId)
 	{
-		const std::string field =
-			std::format("{}|{}", selfIdentity.ToString(), entityId);
-		const char* stateString =
-			entry.authorityState == AuthorityState::eAuthoritative
-				? "authoritative"
-				: "passing";
-		const std::string passingTo =
-			entry.passingTo.has_value() ? entry.passingTo->ToString() : "";
-		const std::string value = std::format("{}\t{}", stateString, passingTo);
-		const long long wrote = InternalDB::Get()->HSet(hashKey, field, value);
-		(void)wrote;
-		nextPublishedFields.insert(field);
+		outRows.push_back(AuthorityTelemetryRow{
+			.entityId = entityId,
+			.owner = selfIdentity,
+			.entitySnapshot = entry.entitySnapshot,
+			.world = entry.entitySnapshot.transform.world,
+			.position = entry.entitySnapshot.transform.position,
+			.isClient = entry.entitySnapshot.IsClient,
+			.clientId = entry.entitySnapshot.Client_ID});
 	}
-
-	std::vector<std::string> staleFields;
-	for (const auto& oldField : lastPublishedFields)
-	{
-		if (!nextPublishedFields.contains(oldField))
-		{
-			staleFields.push_back(oldField);
-		}
-	}
-
-	if (!staleFields.empty())
-	{
-		std::vector<std::string_view> staleFieldViews;
-		staleFieldViews.reserve(staleFields.size());
-		for (const auto& field : staleFields)
-		{
-			staleFieldViews.push_back(field);
-		}
-		const long long removed = InternalDB::Get()->HDel(hashKey, staleFieldViews);
-		(void)removed;
-	}
-
-	lastPublishedFields = std::move(nextPublishedFields);
 }
 
 void EntityAuthorityTracker::SetAuthorityState(

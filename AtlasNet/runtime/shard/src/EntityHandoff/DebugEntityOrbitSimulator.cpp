@@ -6,12 +6,6 @@
 #include "InternalDB.hpp"
 #include "Serialize/ByteWriter.hpp"
 
-namespace
-{
-constexpr std::string_view kTestStatsHash = "EntityHandoff:TestStats";
-constexpr std::string_view kTestStatsFieldCreated = "created_entities";
-}
-
 DebugEntityOrbitSimulator::DebugEntityOrbitSimulator(
 	const NetworkIdentity& self, std::shared_ptr<Log> inLogger)
 	: selfIdentity(self), logger(std::move(inLogger))
@@ -49,10 +43,6 @@ void DebugEntityOrbitSimulator::SeedEntities(const SeedOptions& options)
 		tracked.phaseOffsetRad =
 			static_cast<float>(entityIndex) * options.phaseStepRad;
 		entitiesById.emplace(tracked.entity.Entity_ID, std::move(tracked));
-
-		const long long createdCount =
-			InternalDB::Get()->HIncrBy(kTestStatsHash, kTestStatsFieldCreated, 1);
-		(void)createdCount;
 	}
 }
 

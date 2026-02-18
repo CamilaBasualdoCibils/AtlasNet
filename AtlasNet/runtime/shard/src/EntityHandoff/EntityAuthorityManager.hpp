@@ -32,6 +32,8 @@ class EntityAuthorityManager : public Singleton<EntityAuthorityManager>
 	bool initialized = false;
 	bool isTestEntityOwner = false;
 	bool ownershipEvaluated = false;
+	bool hasOwnershipLogState = false;
+	bool lastOwnershipState = false;
 	std::unique_ptr<EntityAuthorityTracker> tracker;
 	std::unique_ptr<DebugEntityOrbitSimulator> debugSimulator;
 	std::optional<AtlasEntity> pendingIncomingEntity;

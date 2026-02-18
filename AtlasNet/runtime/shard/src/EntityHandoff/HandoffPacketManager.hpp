@@ -8,7 +8,7 @@
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/PacketManager.hpp"
 
-class HandoffEntityPacket;
+class GenericEntityPacket;
 
 class HandoffPacketManager : public Singleton<HandoffPacketManager>
 {
@@ -24,7 +24,7 @@ class HandoffPacketManager : public Singleton<HandoffPacketManager>
 	[[nodiscard]] bool IsInitialized() const { return initialized; }
 
   private:
-	void OnHandoffEntityPacket(const HandoffEntityPacket& packet) const;
+	void OnGenericEntityPacket(const GenericEntityPacket& packet) const;
 
 	NetworkIdentity selfIdentity;
 	std::shared_ptr<Log> logger;

@@ -5,6 +5,7 @@
 #include "Database/ServerRegistry.hpp"
 #include "EntityHandoff/HandoffPacketManager.hpp"
 #include "EntityHandoff/HandoffConnectionManager.hpp"
+#include "EntityHandoff/Telemetry/AuthorityManifest.hpp"
 #include "InternalDB.hpp"
 #include "Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
@@ -14,14 +15,12 @@ namespace
 constexpr std::chrono::seconds kOwnershipEvalInterval(2);
 constexpr std::chrono::milliseconds kStateSnapshotInterval(250);
 constexpr float kOrbitRadius = 12.0F;
-constexpr float kOrbitAngularSpeedRadPerSec = 1.2F;
+constexpr float kOrbitAngularSpeedRadPerSec = 0.35F;
 constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr uint32_t kDefaultTestEntityCount = 1;
 constexpr float kEntityPhaseStepRad = 0.7F;
 
 constexpr std::string_view kTestOwnerKey = "EntityHandoff:TestOwnerShard";
-constexpr std::string_view kTestEntityStateHash = "EntityHandoff:TestEntityState";
-constexpr std::string_view kAuthorityStateHash = "EntityHandoff:AuthorityState";
 
 std::string SelectTargetClaimKeyForPosition(
 	const std::unordered_map<std::string, GridShape>& claimedBounds,
@@ -64,6 +63,25 @@ std::optional<NetworkIdentity> ResolveIdentityFromClaimKey(
 	}
 	return std::nullopt;
 }
+
+std::optional<std::string> SelectBootstrapOwner(
+	const std::unordered_map<NetworkIdentity, ServerRegistryEntry>& servers)
+{
+	std::optional<std::string> selectedOwner;
+	for (const auto& [id, _entry] : servers)
+	{
+		if (id.Type != NetworkIdentityType::eShard)
+		{
+			continue;
+		}
+		const std::string candidate = id.ToString();
+		if (!selectedOwner.has_value() || candidate < selectedOwner.value())
+		{
+			selectedOwner = candidate;
+		}
+	}
+	return selectedOwner;
+}
 }  // namespace
 
 void EntityAuthorityManager::Init(const NetworkIdentity& self,
@@ -74,6 +92,8 @@ void EntityAuthorityManager::Init(const NetworkIdentity& self,
 	initialized = true;
 	isTestEntityOwner = false;
 	ownershipEvaluated = false;
+	hasOwnershipLogState = false;
+	lastOwnershipState = false;
 	tracker = std::make_unique<EntityAuthorityTracker>(selfIdentity, logger);
 	debugSimulator =
 		std::make_unique<DebugEntityOrbitSimulator>(selfIdentity, logger);
@@ -131,16 +151,17 @@ void EntityAuthorityManager::Tick()
 		if (now - lastSnapshotTime >= kStateSnapshotInterval)
 		{
 			lastSnapshotTime = now;
-			tracker->StoreAuthorityStateSnapshots(kAuthorityStateHash);
-			tracker->DebugLogTrackedEntities();
-			debugSimulator->StoreStateSnapshots(kTestEntityStateHash);
+			std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
+			tracker->CollectTelemetryRows(rows);
+			AuthorityManifest::Get().TelemetryUpdate(rows);
 		}
 	}
 	else if (tracker && debugSimulator)
 	{
 		tracker->SetOwnedEntities({});
-		tracker->StoreAuthorityStateSnapshots(kAuthorityStateHash);
-		tracker->DebugLogTrackedEntities();
+		std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
+		tracker->CollectTelemetryRows(rows);
+		AuthorityManifest::Get().TelemetryUpdate(rows);
 		debugSimulator->Reset();
 	}
 }
@@ -200,6 +221,19 @@ void EntityAuthorityManager::EvaluateHeuristicPositionTriggers()
 		HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity);
 		const bool ownerSwitched = InternalDB::Get()->Set(kTestOwnerKey, targetClaimKey);
 		(void)ownerSwitched;
+
+		// Sender releases immediately after dispatch to avoid dual authority.
+		if (debugSimulator && tracker)
+		{
+			debugSimulator->Reset();
+			tracker->SetOwnedEntities({});
+			std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
+			tracker->CollectTelemetryRows(rows);
+			AuthorityManifest::Get().TelemetryUpdate(rows);
+		}
+		isTestEntityOwner = false;
+		ownershipEvaluated = false;
+
 		if (logger)
 		{
 			logger->WarningFormatted(
@@ -230,7 +264,8 @@ void EntityAuthorityManager::Shutdown()
 	}
 }
 
-void EntityAuthorityManager::EvaluateTestEntityOwnership()
+// Ownership selection has explicit failover branches for test orchestration.
+void EntityAuthorityManager::EvaluateTestEntityOwnership()	// NOLINT(readability-function-cognitive-complexity)
 {
 	const auto now = std::chrono::steady_clock::now();
 	if (ownershipEvaluated &&
@@ -241,30 +276,62 @@ void EntityAuthorityManager::EvaluateTestEntityOwnership()
 	lastOwnerEvalTime = now;
 	ownershipEvaluated = true;
 
-	std::string selectedOwner = selfIdentity.ToString();
 	const auto& servers = ServerRegistry::Get().GetServers();
-	for (const auto& [id, _entry] : servers)
+	std::optional<std::string> selectedOwner = InternalDB::Get()->Get(kTestOwnerKey);
+	if (!selectedOwner.has_value() || selectedOwner->empty())
 	{
-		if (id.Type != NetworkIdentityType::eShard)
+		selectedOwner = SelectBootstrapOwner(servers);
+		if (selectedOwner.has_value())
 		{
-			continue;
-		}
-		const std::string candidate = id.ToString();
-		if (candidate < selectedOwner)
-		{
-			selectedOwner = candidate;
+			const bool ownerWritten =
+				InternalDB::Get()->Set(kTestOwnerKey, selectedOwner.value());
+			(void)ownerWritten;
 		}
 	}
 
-	isTestEntityOwner = (selectedOwner == selfIdentity.ToString());
-	const bool ownerWritten = InternalDB::Get()->Set(kTestOwnerKey, selectedOwner);
-	(void)ownerWritten;
-
-	if (logger)
+	if (selectedOwner.has_value())
 	{
+		bool ownerStillValid = false;
+		for (const auto& [id, _entry] : servers)
+		{
+			if (id.Type != NetworkIdentityType::eShard)
+			{
+				continue;
+			}
+			if (id.ToString() == selectedOwner.value())
+			{
+				ownerStillValid = true;
+				break;
+			}
+		}
+		if (!ownerStillValid)
+		{
+			selectedOwner = SelectBootstrapOwner(servers);
+			if (selectedOwner.has_value())
+			{
+				const bool ownerWritten =
+					InternalDB::Get()->Set(kTestOwnerKey, selectedOwner.value());
+				(void)ownerWritten;
+			}
+		}
+	}
+
+	if (!selectedOwner.has_value())
+	{
+		isTestEntityOwner = false;
+		return;
+	}
+
+	isTestEntityOwner = (selectedOwner.value() == selfIdentity.ToString());
+
+	if (logger &&
+		(!hasOwnershipLogState || lastOwnershipState != isTestEntityOwner))
+	{
+		hasOwnershipLogState = true;
+		lastOwnershipState = isTestEntityOwner;
 		logger->DebugFormatted(
-			"[EntityHandoff] Test owner={} self={} owning={}",
-			selectedOwner, selfIdentity.ToString(),
+			"[EntityHandoff] Ownership transition owner={} self={} owning={}",
+			selectedOwner.value(), selfIdentity.ToString(),
 			isTestEntityOwner ? "yes" : "no");
 	}
 }
