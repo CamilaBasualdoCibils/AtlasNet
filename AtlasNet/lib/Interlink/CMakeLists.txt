@@ -24,6 +24,7 @@ Docker
 
 Debug
 Network
+Client
 )
 
 install(TARGETS ${_target_name}

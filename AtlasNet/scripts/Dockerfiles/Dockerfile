@@ -222,10 +222,12 @@ RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed cmake -S . -B /atl
   -DVCPKG_INSTALLED_DIR=/atlasnet/build/vcpkg_installed -DATLASNET_INCLUDE_WEB=OFF 
 RUN  --mount=type=cache,target=/atlasnet/build/vcpkg_installed cmake --build /atlasnet/build --parallel --target BuiltInDB Database Debug Docker Entity Events Heuristic Interlink InternalDB
 
-RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed  cmake --build /atlasnet/build --parallel --target proxy
+RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed  cmake --build /atlasnet/build --parallel --target proxy shard watchdog
 
 
 RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed cmake --install /atlasnet/build --component proxy --prefix /atlasnet/bin
+RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed cmake --install /atlasnet/build --component watchdog --prefix /atlasnet/bin
+RUN --mount=type=cache,target=/atlasnet/build/vcpkg_installed cmake --install /atlasnet/build --component shard --prefix /atlasnet/bin
 
 
 # 8RUN mkdir -p /usr/local/lib && \
@@ -276,3 +278,4 @@ WORKDIR /atlasnet
 COPY --from=builder /atlasnet/bin/ .
 #COPY --from=builder /atlasnet/deps/ /atlasnet/deps/
 #ENV LD_LIBRARY_PATH="/atlasnet/deps:${LD_LIBRARY_PATH}"
+ENTRYPOINT ["/atlasnet/bin/shard"]

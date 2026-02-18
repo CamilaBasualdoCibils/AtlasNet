@@ -2,6 +2,7 @@
 
 #include <boost/describe/enum_to_string.hpp>
 #include <chrono>
+#include <cstdlib>
 #include <stop_token>
 #include <thread>
 
@@ -75,41 +76,57 @@ void WatchDog::Cleanup()
 
 void WatchDog::SetShardCount(uint32 NewCount)
 {
-	const std::string PartitionAccessName = std::string(_ATLASNET_STACK_NAME) +
-											"_" +
-											std::string(_SHARD_SERVICE_NAME);
+	  const std::string filter =
+        "%7B%22label%22%3A%5B%22atlasnet.role%3Dshard%22%5D%7D";
 
-	std::string inspectResp =
-		DockerIO::Get().request("GET", "/services/" + PartitionAccessName);
-	auto inspectJson = Json::parse(inspectResp);
+    std::string listResp =
+        DockerIO::Get().request("GET", "/services?filters=" + filter);
 
-	try
-	{
-		int version = inspectJson["Version"]["Index"];
-		auto spec = inspectJson["Spec"];
-		spec["Mode"]["Replicated"]["Replicas"] = NewCount;
-		// 2. Send the update request with the new replica count
-		std::string updatePath = "/services/" + PartitionAccessName +
-								 "/update?version=" + std::to_string(version);
-		std::string updateResp =
-			DockerIO::Get().request("POST", updatePath, &spec);
-		if (!updateResp.empty())
-		{
-			logger->DebugFormatted("Service update responded with \n{}",
-								   Json::parse(updateResp).dump(4));
-		}
-	}
-	catch (const std::exception &e)
-	{
-		std::cerr << e.what() << '\n';
-		logger->ErrorFormatted("Response from service inspect \n{}",
-							   inspectJson.dump(4));
-		throw "SHIT";
-	}
+    auto services = Json::parse(listResp);
 
-	logger->DebugFormatted("Scaled {} to {} replicas", _SHARD_SERVICE_NAME,
-						   NewCount);
-	ShardCount = NewCount;
+    if (!services.is_array() || services.empty())
+    {
+        throw std::runtime_error("No shard service found via label");
+    }
+
+    // If you expect exactly one shard service:
+    const std::string serviceId = services[0]["ID"];
+
+    // 2️⃣ Inspect service by ID
+    std::string inspectResp =
+        DockerIO::Get().request("GET", "/services/" + serviceId);
+
+    auto inspectJson = Json::parse(inspectResp);
+
+    try
+    {
+        int version = inspectJson["Version"]["Index"];
+        auto spec = inspectJson["Spec"];
+
+        spec["Mode"]["Replicated"]["Replicas"] = NewCount;
+
+        std::string updatePath =
+            "/services/" + serviceId +
+            "/update?version=" + std::to_string(version);
+
+        std::string updateResp =
+            DockerIO::Get().request("POST", updatePath, &spec);
+
+        if (!updateResp.empty())
+        {
+            logger->DebugFormatted("Service update responded with\n{}",
+                                   Json::parse(updateResp).dump(4));
+        }
+    }
+    catch (const std::exception &e)
+    {
+        logger->ErrorFormatted("Inspect response:\n{}",
+                               inspectJson.dump(4));
+        throw;
+    }
+
+    logger->DebugFormatted("Scaled shard service to {} replicas", NewCount);
+    ShardCount = NewCount;
 }
 void WatchDog::ComputeHeuristic()
 {

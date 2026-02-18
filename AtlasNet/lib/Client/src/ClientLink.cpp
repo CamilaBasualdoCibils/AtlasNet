@@ -1,12 +1,14 @@
 #include "ClientLink.hpp"
 
 #include <steam/isteamnetworkingsockets.h>
+#include <steam/isteamnetworkingutils.h>
+#include <steam/steamnetworkingsockets.h>
 
 #include <stdexcept>
 #include <stop_token>
 #include <thread>
 
-#include "InterlinkEnums.hpp"
+
 #include "Network/Connection.hpp"
 #include "Network/NetworkEnums.hpp"
 #include "Network/NetworkIdentity.hpp"

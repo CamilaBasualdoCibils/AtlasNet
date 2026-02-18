@@ -9,6 +9,8 @@
 #include <thread>
 
 // #include "Database/ProxyRegistry.hpp"
+#include "Client.hpp"
+#include "ClientManifest.hpp"
 #include "Database/ServerRegistry.hpp"
 #include "DockerIO.hpp"
 #include "GameNetworkingSockets.hpp"
@@ -825,5 +827,10 @@ void Interlink::OnClientConnected(const Connection &c)
 
 		SendMessage(newIdentity, IDAssignPacket,
 					NetworkMessageSendFlag::eReliableNow);
+		Client client;
+		client.ID = newIdentity.ID;
+		client.ip = c.address;
+		ClientManifest::Get().RegisterClient(client);
+		ClientManifest::Get().AssignProxyClient(client.ID, MyIdentity);
 	}
 }

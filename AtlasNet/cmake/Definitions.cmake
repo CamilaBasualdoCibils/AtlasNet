@@ -25,7 +25,7 @@ target_compile_definitions(atlasnet_defs INTERFACE
     _BUILTINDB_REDIS_PORT=2380
     _BUILTINDB_POSTGRES_SERVICE_NAME="BuiltInDB_PostGres"
     _BUILTINDB_POSTGRES_PORT=5432
-    _SHARD_SERVICE_NAME="Shard"
+    _SHARD_SERVICE_NAME="atlasnet_dev_Shard"
     _SHARD_IMAGE_NAME="shard"
     _WATCHDOG_IMAGE_NAME="watchdog"
     _WATCHDOG_SERVICE_NAME="WatchDog"

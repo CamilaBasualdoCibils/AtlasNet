@@ -1,4 +1,5 @@
 #pragma once
+#include <boost/container/small_vector.hpp>
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
@@ -216,7 +217,8 @@ class ByteWriter
 		for (int i = sizeof(T) - 1; i >= 0; --i) buf.push_back(uint8_t(v >> (i * 8)));
 	}
 
-	std::vector<uint8_t> buf;
+	boost::container::small_vector<uint8_t, 128> buf;
+	//std::vector<uint8_t> buf;
 
 	uint64_t bitBuffer = 0;
 	uint8_t bitPos = 0;

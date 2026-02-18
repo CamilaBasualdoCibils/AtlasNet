@@ -1,17 +1,31 @@
 #pragma once
-#include "Network/IPAddress.hpp"
 #include "Misc/UUID.hpp"
-class Client{
+#include "Network/IPAddress.hpp"
+#include "Serialize/ByteReader.hpp"
+#include "Serialize/ByteWriter.hpp"
+using ClientID = UUID;
+struct Client
+{
+	IPAddress ip;
+	ClientID ID;
 
-    IPAddress ip;
-    UUID ID;
+   public:
+	static Client MakeNewClient(UUID id, IPAddress ip)
+	{
+		Client c;
+		c.ID = UUIDGen::Gen();
+		c.ip = ip;
+		return c;
+	}
 
-    public:
-    static Client MakeNewClient(UUID id, IPAddress ip)
-    {
-        Client c;
-        c.ID = UUIDGen::Gen();
-        c.ip = ip;
-        return c;
-    }
+	void Serialize(ByteWriter& bw)
+	{
+		ip.Serialize(bw);
+		bw.uuid(ID);
+	}
+	void Deserialize(ByteReader& br)
+	{
+		ip.Deserialize(br);
+		ID = br.uuid();
+	}
 };

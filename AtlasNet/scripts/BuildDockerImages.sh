@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Default platforms
-PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64,linux/riscv64}"
+PLATFORMS="${PLATFORMS:-linux/amd64,linux/arm64}"
 
 # Default bake file location
 BAKE_FILE="${BAKE_FILE:-$(dirname "$0")/Dockerfiles/docker-bake.json}"
@@ -55,7 +55,7 @@ docker buildx inspect --bootstrap
 
 echo "==> Building images in parallel with BuildKit..."
 
-docker buildx bake -f ./scripts/Dockerfiles/docker-bake.json --load --set "*.platform=$PLATFORMS"
+docker buildx bake -f ./scripts/Dockerfiles/docker-bake.json --set "*.platform=$PLATFORMS" --load
 
 
 echo "==> Done."
