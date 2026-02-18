@@ -13,7 +13,7 @@
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/Client/ClientIDAssignPacket.hpp"
 #include "Network/Packet/PacketManager.hpp"
-#include "Packet/CommandPacket.hpp"
+
 class ClientLink : public Singleton<ClientLink>
 {
    public:

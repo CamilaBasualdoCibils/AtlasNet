@@ -19,5 +19,5 @@ target_include_directories(${_target_name}
 )
 
 target_link_libraries(${_target_name}
-AtlasNetGlobal InternalDB Interlink 
+AtlasNetGlobal InternalDB Network 
 )

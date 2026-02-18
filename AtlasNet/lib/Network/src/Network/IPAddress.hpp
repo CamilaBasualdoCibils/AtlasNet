@@ -1,5 +1,7 @@
 #pragma once
 #include <pch.hpp>
+#include "Serialize/ByteReader.hpp"
+#include "Serialize/ByteWriter.hpp"
 #include <steam/steamnetworkingtypes.h>
 using PortType = uint16;
 using IPv4_Type = uint32;
@@ -22,4 +24,34 @@ public:
 	std::string ToString(bool IncludePort = true) const;
 	void Parse(const std::string &AddrStr);
 	SteamNetworkingIPAddr ToSteamIPAddr() const;
+
+	void Serialize(ByteWriter& bw) const
+	{
+		bool isIPv4 = SteamAddress.IsIPv4();
+		bw.u8(isIPv4);
+		bw.u16(SteamAddress.m_port);
+
+		if (isIPv4)
+		{
+			bw.u32(SteamAddress.GetIPv4());
+		}
+		else
+		{
+			ASSERT(false, "not implemented");
+		}
+
+	}
+	void Deserialize(ByteReader& br)
+	{
+		bool isIPv4 = br.u8();
+		uint16 port = br.u16();
+		if (isIPv4)
+		{
+			SteamAddress.SetIPv4(br.u32(), port);
+		}
+		else {
+			ASSERT(false, "not implemented");
+		
+		}
+	}
 };
