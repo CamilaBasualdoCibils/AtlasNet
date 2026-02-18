@@ -11,6 +11,7 @@
     "boost-stacktrace",
     "boost-static-string",
     "gamenetworkingsockets",
+    "node-addon-api",
     "curl",
     "zlib",
     {
