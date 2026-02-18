@@ -51,14 +51,14 @@ const decltype(ServerRegistry::servers) &ServerRegistry::GetServers()
 
 std::optional<IPAddress> ServerRegistry::GetIPOfID(const NetworkIdentity &ID)
 {
-	std::string ret =
-		InternalDB::Get()->HGet(HashTableNameID_IP, GetKeyOfIdentifier(ID)).value();
-	if (ret.empty())
+	auto ret =
+		InternalDB::Get()->HGet(HashTableNameID_IP, GetKeyOfIdentifier(ID));
+	if (ret.has_value() || ret.value().empty())
 	{
 		return std::nullopt;
 	}
 	IPAddress ip;
-	ip.Parse(ret);
+	ip.Parse(ret.value());
 	return ip;
 }
 
