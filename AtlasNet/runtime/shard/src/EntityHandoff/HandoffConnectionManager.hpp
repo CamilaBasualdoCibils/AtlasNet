@@ -4,6 +4,7 @@
 #include <memory>
 #include <optional>
 
+#include "EntityHandoff/HandoffConnectionLeaseCoordinator.hpp"
 #include "Log.hpp"
 #include "Misc/Singleton.hpp"
 #include "Network/NetworkIdentity.hpp"
@@ -16,6 +17,8 @@ class HandoffConnectionManager : public Singleton<HandoffConnectionManager>
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Tick();
 	void Shutdown();
+	void MarkConnectionActivity(const NetworkIdentity& peer);
+	void SetLeaseModeEnabled(bool enabled);
 
 	[[nodiscard]] bool IsInitialized() const { return initialized; }
 
@@ -27,5 +30,7 @@ class HandoffConnectionManager : public Singleton<HandoffConnectionManager>
 	bool initialized = false;
 	std::optional<NetworkIdentity> testTargetIdentity;
 	bool testConnectionActive = false;
-	std::chrono::steady_clock::time_point lastToggleTime;
+	bool leaseModeEnabled = true;
+	std::chrono::steady_clock::time_point lastProbeTime;
+	std::unique_ptr<HandoffConnectionLeaseCoordinator> leaseCoordinator;
 };

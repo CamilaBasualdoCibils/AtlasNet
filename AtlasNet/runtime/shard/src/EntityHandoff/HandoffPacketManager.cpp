@@ -2,6 +2,7 @@
 
 #include <chrono>
 
+#include "EntityHandoff/HandoffConnectionManager.hpp"
 #include "EntityHandoff/Packet/HandoffPingPacket.hpp"
 #include "Interlink.hpp"
 
@@ -85,4 +86,6 @@ void HandoffPacketManager::OnHandoffPingPacket(
 		"[EntityHandoff] Received HandoffPingPacket from {} latency={}ms "
 		"sentAt={} recvAt={}",
 		packet.sender.ToString(), latencyMs, packet.sentAtMs, receiveMs);
+
+	HandoffConnectionManager::Get().MarkConnectionActivity(packet.sender);
 }

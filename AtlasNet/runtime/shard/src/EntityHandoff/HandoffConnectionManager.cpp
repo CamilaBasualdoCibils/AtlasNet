@@ -6,7 +6,7 @@
 
 namespace
 {
-constexpr auto kConnectionFlapInterval = std::chrono::seconds(5);
+constexpr auto kProbeInterval = std::chrono::seconds(5);
 }
 
 void HandoffConnectionManager::SelectTestTargetShard()
@@ -26,7 +26,7 @@ void HandoffConnectionManager::SelectTestTargetShard()
 		if (logger)
 		{
 			logger->DebugFormatted(
-				"[EntityHandoff] Connection flap test target selected shard: {}",
+				"[EntityHandoff] Selected shard target: {}",
 				testTargetIdentity->ToString());
 		}
 		return;
@@ -36,7 +36,7 @@ void HandoffConnectionManager::SelectTestTargetShard()
 	if (logger)
 	{
 		logger->Warning(
-			"[EntityHandoff] No peer shard found in ServerRegistry for flap test");
+			"[EntityHandoff] No peer shard found in ServerRegistry");
 	}
 }
 
@@ -47,7 +47,12 @@ void HandoffConnectionManager::Init(const NetworkIdentity& self,
 	logger = std::move(inLogger);
 	initialized = true;
 	testConnectionActive = false;
-	lastToggleTime = std::chrono::steady_clock::now() - kConnectionFlapInterval;
+	lastProbeTime = std::chrono::steady_clock::now() - kProbeInterval;
+	leaseCoordinator = std::make_unique<HandoffConnectionLeaseCoordinator>(
+		selfIdentity, logger,
+		HandoffConnectionLeaseCoordinator::Options{
+			.leaseEnabled = leaseModeEnabled});
+
 	HandoffPacketManager::Get().Init(selfIdentity, logger);
 	SelectTestTargetShard();
 
@@ -56,6 +61,14 @@ void HandoffConnectionManager::Init(const NetworkIdentity& self,
 		logger->DebugFormatted(
 			"[EntityHandoff] HandoffConnectionManager initialized for {}",
 			selfIdentity.ToString());
+		const auto& options = leaseCoordinator->GetOptions();
+		logger->DebugFormatted(
+			"[EntityHandoff] Lease mode={} probe={}s inactivity_timeout={}s",
+			leaseModeEnabled ? "enabled" : "disabled",
+			std::chrono::duration_cast<std::chrono::seconds>(kProbeInterval).count(),
+			std::chrono::duration_cast<std::chrono::seconds>(
+				options.inactivityTimeout)
+				.count());
 	}
 }
 
@@ -67,39 +80,62 @@ void HandoffConnectionManager::Tick()
 	}
 
 	const auto now = std::chrono::steady_clock::now();
-	if (now - lastToggleTime < kConnectionFlapInterval)
+	if (leaseCoordinator)
+	{
+		leaseCoordinator->ReapInactiveConnections(
+			now,
+			[this](const NetworkIdentity& peer, std::chrono::seconds idleFor)
+			{
+				Interlink::Get().CloseConnectionTo(
+					peer, 0, "EntityHandoff inactivity timeout");
+				if (testTargetIdentity.has_value() && peer == *testTargetIdentity)
+				{
+					testConnectionActive = false;
+				}
+				if (logger)
+				{
+					logger->WarningFormatted(
+						"[EntityHandoff] Closed inactive connection to {} idle={}s",
+						peer.ToString(), idleFor.count());
+				}
+			});
+	}
+
+	if (now - lastProbeTime < kProbeInterval)
 	{
 		return;
 	}
 
-	lastToggleTime = now;
+	lastProbeTime = now;
 	if (!testTargetIdentity.has_value())
 	{
 		SelectTestTargetShard();
 		return;
 	}
 
-	if (!testConnectionActive)
+	if (leaseCoordinator &&
+		!leaseCoordinator->TryAcquireOrRefreshLease(*testTargetIdentity))
 	{
-		Interlink::Get().EstablishConnectionTo(*testTargetIdentity);
-		HandoffPacketManager::Get().SendPing(*testTargetIdentity);
-		testConnectionActive = true;
 		if (logger)
 		{
 			logger->DebugFormatted(
-				"[EntityHandoff] Flap test: connect -> {}",
+				"[EntityHandoff] Lease held by peer, skipping connect to {}",
 				testTargetIdentity->ToString());
 		}
 		return;
 	}
 
-	Interlink::Get().CloseConnectionTo(*testTargetIdentity, 0,
-									   "EntityHandoff flap test");
-	testConnectionActive = false;
+	Interlink::Get().EstablishConnectionTo(*testTargetIdentity);
+	HandoffPacketManager::Get().SendPing(*testTargetIdentity);
+	testConnectionActive = true;
+	if (leaseCoordinator)
+	{
+		leaseCoordinator->MarkConnectionActivity(*testTargetIdentity);
+	}
 	if (logger)
 	{
 		logger->DebugFormatted(
-			"[EntityHandoff] Flap test: disconnect -> {}",
+			"[EntityHandoff] Probe ping sent to {}",
 			testTargetIdentity->ToString());
 	}
 }
@@ -115,14 +151,45 @@ void HandoffConnectionManager::Shutdown()
 	{
 		Interlink::Get().CloseConnectionTo(*testTargetIdentity, 0,
 										   "EntityHandoff shutdown");
+		if (leaseCoordinator)
+		{
+			leaseCoordinator->ReleaseLeaseIfOwned(*testTargetIdentity);
+		}
 	}
 
 	testConnectionActive = false;
 	testTargetIdentity.reset();
+	if (leaseCoordinator)
+	{
+		leaseCoordinator->Clear();
+		leaseCoordinator.reset();
+	}
 	HandoffPacketManager::Get().Shutdown();
 	initialized = false;
 	if (logger)
 	{
 		logger->Debug("[EntityHandoff] HandoffConnectionManager shutdown");
+	}
+}
+
+void HandoffConnectionManager::MarkConnectionActivity(const NetworkIdentity& peer)
+{
+	if (!initialized)
+	{
+		return;
+	}
+
+	if (leaseCoordinator)
+	{
+		leaseCoordinator->MarkConnectionActivity(peer);
+	}
+}
+
+void HandoffConnectionManager::SetLeaseModeEnabled(bool enabled)
+{
+	leaseModeEnabled = enabled;
+	if (leaseCoordinator)
+	{
+		leaseCoordinator->SetLeaseEnabled(enabled);
 	}
 }
