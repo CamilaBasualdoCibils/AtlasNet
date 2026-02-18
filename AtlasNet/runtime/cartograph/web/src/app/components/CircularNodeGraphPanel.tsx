@@ -66,12 +66,12 @@ export function CircularNodeGraphPanel({
   const { nodeIds, edges } = useMemo(() => {
     const nodeIdsLocal: string[] = telemetry.map((shard) => shard.shardId);
     const nodePositions = new Set(nodeIdsLocal);
-    const edgesLocal: Array<{
+    const edgeMap = new Map<string, {
       from: string;
       to: string;
       inBytesPerSec: number;
       outBytesPerSec: number;
-    }> = [];
+    }>();
 
     for (const shard of telemetry) {
       for (const rawConnection of shard.connections as ConnectionLike[]) {
@@ -83,16 +83,26 @@ export function CircularNodeGraphPanel({
         if (sourceId === targetId) continue;
 
         const rates = getConnectionRates(rawConnection);
-        edgesLocal.push({
-          from: sourceId,
-          to: targetId,
-          inBytesPerSec: rates?.inBytesPerSec ?? 0,
-          outBytesPerSec: rates?.outBytesPerSec ?? 0,
-        });
+        const edgeKey = `${sourceId}->${targetId}`;
+        const existing = edgeMap.get(edgeKey);
+        const inRate = rates?.inBytesPerSec ?? 0;
+        const outRate = rates?.outBytesPerSec ?? 0;
+        if (existing) {
+          // Merge duplicate directed edges from telemetry rows.
+          existing.inBytesPerSec += inRate;
+          existing.outBytesPerSec += outRate;
+        } else {
+          edgeMap.set(edgeKey, {
+            from: sourceId,
+            to: targetId,
+            inBytesPerSec: inRate,
+            outBytesPerSec: outRate,
+          });
+        }
       }
     }
 
-    return { nodeIds: nodeIdsLocal, edges: edgesLocal };
+    return { nodeIds: nodeIdsLocal, edges: Array.from(edgeMap.values()) };
   }, [telemetry]);
 
   const focusedNodeId = selectedNodeId ?? hoveredNodeId;
