@@ -59,6 +59,9 @@ const app = express();
 app.use(cors()); // allow your frontend to call it
 
 const nt = new addon.NetworkTelemetry();
+const authorityTelemetry = addon.AuthorityTelemetry
+  ? new addon.AuthorityTelemetry()
+  : null;
 app.get('/networktelemetry', (req, res) => {
   try {
     const { NetworkTelemetry, std_vector_std_string_, std_vector_std_vector_std_string__ } = addon;
@@ -136,6 +139,35 @@ app.get('/networktelemetry', (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Native addon failed' });
+  }
+});
+
+app.get('/authoritytelemetry', (req, res) => {
+  try {
+    if (!authorityTelemetry || !addon.std_vector_std_vector_std_string__) {
+      res.json([]);
+      return;
+    }
+
+    const telemetryVec = new addon.std_vector_std_vector_std_string__();
+    authorityTelemetry.GetAllTelemetry(telemetryVec);
+
+    const rows = [];
+    for (let i = 0; i < telemetryVec.size(); i++) {
+      const rowVec = telemetryVec.get(i);
+      const row = [];
+      for (let j = 0; j < rowVec.size(); j++) {
+        row.push(String(rowVec.get(j)));
+      }
+      rows.push(row);
+    }
+
+    // Expected row schema:
+    // [entityId, ownerId, world, x, y, z, isClient, clientId]
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Authority telemetry fetch failed' });
   }
 });
 

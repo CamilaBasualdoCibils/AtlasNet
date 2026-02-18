@@ -29,6 +29,7 @@ function convertPoints(points: any): { x: number; y: number }[] {
 function convertShape(shape: any): ShapeJS {
   // start with a default ShapeJS object
   const sjs: ShapeJS = {
+    id: shape.id != null ? String(shape.id) : undefined,
     type: 'circle', // temporary default, will be overwritten
     position: { x: shape.position?.x ?? 0, y: shape.position?.y ?? 0 },
     color: shape.color ?? undefined,

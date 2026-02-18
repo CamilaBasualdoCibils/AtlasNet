@@ -175,6 +175,29 @@ export function createMapRenderer({ container, shapes = [] }: DrawOptions) {
                         ctx.stroke();
                     }
                     break;
+                case 'line':
+                    {
+                        const pts = shape.points ?? [];
+                        if (pts.length >= 2) {
+                            // For line overlays, points are in world-space coordinates.
+                            ctx.restore();
+                            ctx.beginPath();
+                            ctx.moveTo(
+                                pts[0].x * scale + offsetX,
+                                pts[0].y * scale + offsetY
+                            );
+                            for (let i = 1; i < pts.length; i++) {
+                                ctx.lineTo(
+                                    pts[i].x * scale + offsetX,
+                                    pts[i].y * scale + offsetY
+                                );
+                            }
+                            ctx.strokeStyle = shape.color ?? 'rgba(255,255,255,0.65)';
+                            ctx.stroke();
+                            return;
+                        }
+                    }
+                    break;
             }
             ctx.restore();
         });

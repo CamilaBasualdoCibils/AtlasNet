@@ -1,6 +1,7 @@
 export interface Vec2 { x: number; y: number }
 
 export interface ShapeJS {
+    id?: string;
     type: 'circle' | 'rectangle' | 'polygon' | 'line' | 'rectImage';
     position: Vec2;
     radius?: number;          // for circles
