@@ -3,13 +3,13 @@
 #include <chrono>
 #include <thread>
 
-#include "Database/HealthManifest.hpp"
-#include "Database/HeuristicManifest.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
 #include "EntityHandoff/EntityAuthorityManager.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
-#include "Interlink.hpp"
-#include "Misc/UUID.hpp"
-#include "Telemetry/NetworkManifest.hpp"
+#include "Interlink/Interlink.hpp"
+#include "Global/Misc/UUID.hpp"
+#include "Interlink/Telemetry/NetworkManifest.hpp"
 Partition::Partition() {}
 Partition::~Partition() {}
 

@@ -1,8 +1,8 @@
 #pragma once
 #include <atomic>
 
-#include "Misc/Singleton.hpp"
-#include "Log.hpp"
+#include "Global/Misc/Singleton.hpp"
+#include "Debug/Log.hpp"
 #include "Network/Connection.hpp"
 
 

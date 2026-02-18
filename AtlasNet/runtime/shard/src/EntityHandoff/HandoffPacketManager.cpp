@@ -7,7 +7,7 @@
 #include "EntityHandoff/EntityAuthorityManager.hpp"
 #include "EntityHandoff/HandoffConnectionManager.hpp"
 #include "EntityHandoff/Packet/GenericEntityPacket.hpp"
-#include "Interlink.hpp"
+#include "Interlink/Interlink.hpp"
 
 namespace
 {
@@ -48,7 +48,7 @@ void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
 	packet.entity.transform.world = 0;
 	packet.entity.transform.position = vec3(0.0F, 0.0F, 0.0F);
 	packet.entity.IsClient = false;
-	packet.entity.Client_ID = 0;
+	packet.entity.Client_ID = UUID();
 	packet.sentAtMs = NowMs();
 	Interlink::Get().SendMessage(target, packet, NetworkMessageSendFlag::eReliableBatched);
 }

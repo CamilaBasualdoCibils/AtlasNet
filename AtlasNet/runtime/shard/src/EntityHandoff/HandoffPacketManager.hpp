@@ -5,9 +5,9 @@
 
 #include <memory>
 
-#include "Log.hpp"
-#include "Misc/Singleton.hpp"
-#include "Entity.hpp"
+#include "Debug/Log.hpp"
+#include "Global/Misc/Singleton.hpp"
+#include "Entity/Entity.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/PacketManager.hpp"
 

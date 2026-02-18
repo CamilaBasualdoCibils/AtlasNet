@@ -5,12 +5,12 @@
 
 #include <optional>
 
-#include "Database/ServerRegistry.hpp"
+#include "Interlink/Database/ServerRegistry.hpp"
 #include "EntityHandoff/HandoffPacketManager.hpp"
 #include "EntityHandoff/HandoffConnectionManager.hpp"
 #include "EntityHandoff/Telemetry/AuthorityManifest.hpp"
-#include "InternalDB.hpp"
-#include "Database/HeuristicManifest.hpp"
+#include "InternalDB/InternalDB.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 
 namespace

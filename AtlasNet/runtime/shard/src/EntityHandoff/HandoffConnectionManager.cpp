@@ -3,7 +3,7 @@
 #include "EntityHandoff/HandoffConnectionManager.hpp"
 
 #include "EntityHandoff/HandoffPacketManager.hpp"
-#include "Interlink.hpp"
+#include "Interlink/Interlink.hpp"
 
 void HandoffConnectionManager::Init(const NetworkIdentity& self,
 									std::shared_ptr<Log> inLogger)

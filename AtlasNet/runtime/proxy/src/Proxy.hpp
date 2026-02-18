@@ -4,10 +4,10 @@
 #include <optional>
 
 #include "Network/NetworkIdentity.hpp"
-#include "Log.hpp"
-#include "Misc/Singleton.hpp"
+#include "Debug/Log.hpp"
+#include "Global/Misc/Singleton.hpp"
 #include "Network/Connection.hpp"
-#include "Interlink.hpp"
+#include "Interlink/Interlink.hpp"
 class Proxy : public Singleton<Proxy>
 {
 	std::shared_ptr<Log> logger = std::make_shared<Log>("Proxy");

@@ -3,14 +3,15 @@
 #include "EntityHandoff/DebugEntityOrbitSimulator.hpp"
 
 #include <cmath>
+#include "Entity/Entity.hpp"
 
 namespace
 {
-AtlasEntity::EntityID MakeEntityId(const NetworkIdentity& self, uint32_t index)
+AtlasEntityID MakeEntityId(const NetworkIdentity& self, uint32_t index)
 {
-	const auto base = static_cast<AtlasEntity::EntityID>(
+	const auto base = static_cast<AtlasEntityID>(
 		std::hash<std::string>{}(self.ToString()));
-	return base ^ (static_cast<AtlasEntity::EntityID>(index + 1U) << 1U);
+	return base ^ (static_cast<AtlasEntityID>(index + 1U) << 1U);
 }
 }  // namespace
 
@@ -44,7 +45,7 @@ void DebugEntityOrbitSimulator::SeedEntities(const SeedOptions& options)
 			entity.transform.position,
 			vec3(options.halfExtent, options.halfExtent, options.halfExtent));
 		entity.IsClient = false;
-		entity.Client_ID = 0;
+		entity.Client_ID = UUID();
 		entity.Metadata.clear();
 
 		OrbitEntity orbitEntity;

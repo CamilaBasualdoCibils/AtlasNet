@@ -5,7 +5,7 @@
 #include <string>
 #include <vector>
 
-#include "InternalDB.hpp"
+#include "InternalDB/InternalDB.hpp"
 
 HandoffConnectionLeaseCoordinator::HandoffConnectionLeaseCoordinator(
 	const NetworkIdentity& self, std::shared_ptr<Log> inLogger, Options inOptions)

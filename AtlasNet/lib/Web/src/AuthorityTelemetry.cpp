@@ -5,7 +5,7 @@
 #include <string_view>
 #include <vector>
 
-#include "../../InternalDB/src/InternalDB.hpp"
+#include "InternalDB/InternalDB.hpp"
 
 namespace
 {

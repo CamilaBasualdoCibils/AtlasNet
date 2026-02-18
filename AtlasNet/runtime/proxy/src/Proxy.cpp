@@ -2,11 +2,11 @@
 
 #include <thread>
 
-#include "Crash/CrashHandler.hpp"
-#include "Database/HealthManifest.hpp"
-#include "Interlink.hpp"
-#include "Misc/UUID.hpp"
-#include "Telemetry/NetworkManifest.hpp"
+#include "Debug/Crash/CrashHandler.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Interlink/Interlink.hpp"
+#include "Global/Misc/UUID.hpp"
+#include "Interlink/Telemetry/NetworkManifest.hpp"
 void Proxy::Run()
 {
 	logger->Debug("Init");	// hello

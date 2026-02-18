@@ -12,10 +12,11 @@
 #include <vector>
 
 #include "EntityHandoff/EntityAuthorityTracker.hpp"
-#include "InternalDB.hpp"
-#include "Misc/Singleton.hpp"
+#include "Global/Misc/UUID.hpp"
+#include "InternalDB/InternalDB.hpp"
+#include "Global/Misc/Singleton.hpp"
 #include "Network/NetworkIdentity.hpp"
-#include "Serialize/ByteWriter.hpp"
+#include "Global/Serialize/ByteWriter.hpp"
 
 class AuthorityManifest : public Singleton<AuthorityManifest>
 {
@@ -44,7 +45,7 @@ class AuthorityManifest : public Singleton<AuthorityManifest>
 			const std::string value = std::format(
 				"{}\t{}\t{}\t{}\t{}\t{}\t{}", row.owner.ToString(), row.world,
 				row.position[0], row.position[1], row.position[2],
-				row.isClient ? 1 : 0, row.clientId);
+				row.isClient ? 1 : 0,  UUIDGen::encode_base20(row.clientId) );
 			const long long wrote =
 				InternalDB::Get()->HSet(kAuthorityTelemetryTable, field, value);
 			(void)wrote;

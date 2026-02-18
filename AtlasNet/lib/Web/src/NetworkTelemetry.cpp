@@ -1,10 +1,10 @@
 #include "NetworkTelemetry.hpp"
 #include <iostream>
 #include <unordered_map>
-#include "Database/HealthManifest.hpp"
-#include "Telemetry/NetworkManifest.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Interlink/Telemetry/NetworkManifest.hpp"
 #include "Network/ConnectionTelemetry.hpp"
-#include "Serialize/ByteReader.hpp"
+#include "Global/Serialize/ByteReader.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids, std::vector<std::string>& out_health) {

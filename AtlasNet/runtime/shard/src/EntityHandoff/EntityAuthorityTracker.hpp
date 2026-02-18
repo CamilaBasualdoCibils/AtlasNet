@@ -9,8 +9,10 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Entity.hpp"
-#include "Log.hpp"
+#include "Client/Client.hpp"
+#include "Entity/Entity.hpp"
+#include "Global/Misc/UUID.hpp"
+#include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class EntityAuthorityTracker
@@ -31,13 +33,13 @@ class EntityAuthorityTracker
 
 	struct AuthorityTelemetryRow
 	{
-		AtlasEntity::EntityID entityId = 0;
+		AtlasEntityID entityId = 0;
 		NetworkIdentity owner;
 		AtlasEntity entitySnapshot;
 		uint16_t world = 0;
 		vec3 position = vec3(0.0F, 0.0F, 0.0F);
 		bool isClient = false;
-		AtlasEntity::ClientID clientId = 0;
+		ClientID clientId = UUID();
 	};
 
 	EntityAuthorityTracker(const NetworkIdentity& self,
@@ -48,18 +50,18 @@ class EntityAuthorityTracker
 	void CollectTelemetryRows(std::vector<AuthorityTelemetryRow>& outRows) const;
 	void DebugLogTrackedEntities() const;
 	[[nodiscard]] std::vector<AtlasEntity> GetOwnedEntitySnapshots() const;
-	bool MarkPassing(AtlasEntity::EntityID entityId,
+	bool MarkPassing(AtlasEntityID entityId,
 					 const NetworkIdentity& passingTarget);
-	void MarkAuthoritative(AtlasEntity::EntityID entityId);
+	void MarkAuthoritative(AtlasEntityID entityId);
 
-	void SetAuthorityState(AtlasEntity::EntityID entityId, AuthorityState state,
+	void SetAuthorityState(AtlasEntityID entityId, AuthorityState state,
 						   const std::optional<NetworkIdentity>& passingTo = std::nullopt);
-	void RemoveEntity(AtlasEntity::EntityID entityId);
+	void RemoveEntity(AtlasEntityID entityId);
 
 	[[nodiscard]] size_t Count() const { return authorityByEntityId.size(); }
 
   private:
 	NetworkIdentity selfIdentity;
 	std::shared_ptr<Log> logger;
-	std::unordered_map<AtlasEntity::EntityID, AuthorityEntry> authorityByEntityId;
+	std::unordered_map<AtlasEntityID, AuthorityEntry> authorityByEntityId;
 };

@@ -6,20 +6,19 @@
 #include <stop_token>
 #include <thread>
 
-#include "Database/HealthManifest.hpp"
-#include "Database/HeuristicManifest.hpp"
-#include "DockerIO.hpp"
-#include "Entity.hpp"
-#include "EntityList.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
+#include "Docker/DockerIO.hpp"
+#include "Entity/Entity.hpp"
+#include "Entity/EntityList.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Heuristic/IHeuristic.hpp"
-#include "Interlink.hpp"
-#include "InterlinkEnums.hpp"
+#include "Interlink/Interlink.hpp"
+#include "Interlink/InterlinkEnums.hpp"
 #include "Network/NetworkIdentity.hpp"
-#include "Packet/CommandPacket.hpp"
-#include "Packet/RelayPacket.hpp"
-#include "Telemetry/NetworkManifest.hpp"
-#include "Transform.hpp"
+
+#include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Entity/Transform.hpp"
 WatchDog::WatchDog() {}
 
 WatchDog::~WatchDog() {}

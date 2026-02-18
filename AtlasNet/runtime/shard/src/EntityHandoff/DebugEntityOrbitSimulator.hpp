@@ -9,8 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
-#include "Entity.hpp"
-#include "Log.hpp"
+#include "Entity/Entity.hpp"
+#include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class DebugEntityOrbitSimulator
@@ -56,5 +56,5 @@ class DebugEntityOrbitSimulator
 	NetworkIdentity selfIdentity;
 	std::shared_ptr<Log> logger;
 	float orbitAngleRad = 0.0F;
-	std::unordered_map<AtlasEntity::EntityID, OrbitEntity> entitiesById;
+	std::unordered_map<AtlasEntityID, OrbitEntity> entitiesById;
 };

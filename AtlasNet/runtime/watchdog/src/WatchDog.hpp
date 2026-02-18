@@ -5,9 +5,9 @@
 #include <thread>
 #include "Heuristic/IHeuristic.hpp"
 #include "Network/NetworkIdentity.hpp"
-#include "pch.hpp"
-#include "Misc/Singleton.hpp"
-#include "Log.hpp"
+#include "Global/pch.hpp"
+#include "Global/Misc/Singleton.hpp"
+#include "Debug/Log.hpp"
 class WatchDog : public Singleton<WatchDog>
 {
     public:

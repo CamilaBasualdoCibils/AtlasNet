@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-#include "Entity.hpp"
+#include "Entity/Entity.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/Packet.hpp"
 

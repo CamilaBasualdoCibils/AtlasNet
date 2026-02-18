@@ -1,0 +1,28 @@
+#pragma once
+#include "Global/AtlasObject.hpp"
+#include "Global/Serialize/ByteReader.hpp"
+#include "Global/Serialize/ByteWriter.hpp"
+#include "Transform.hpp"
+#include "Global/Types/AABB.hpp"
+#include "Global/pch.hpp"
+
+struct Transform : AtlasObject
+{
+	using WorldIndex = uint16_t;
+	WorldIndex world;
+	vec3 position;
+	AABB3f boundingBox;	 // In Model Space
+
+	void Serialize(ByteWriter& bw) const override
+	{
+		bw.u16(world);
+		bw.vec3(position);
+		boundingBox.Serialize(bw);
+	}
+	void Deserialize(ByteReader& br) override
+	{
+		world = br.u16();
+		position = br.vec3();
+		boundingBox.Deserialize(br);
+	}
+};

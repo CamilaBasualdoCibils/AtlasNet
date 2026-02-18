@@ -9,8 +9,8 @@
 
 #include "EntityHandoff/DebugEntityOrbitSimulator.hpp"
 #include "EntityHandoff/EntityAuthorityTracker.hpp"
-#include "Log.hpp"
-#include "Misc/Singleton.hpp"
+#include "Debug/Log.hpp"
+#include "Global/Misc/Singleton.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class EntityAuthorityManager : public Singleton<EntityAuthorityManager>

@@ -19,7 +19,7 @@ void SandboxServer::Run()
     
         std::span<AtlasEntity> myspan;
         std::vector<AtlasEntity> Incoming;
-        std::vector<AtlasEntityMinimal::EntityID> Outgoing;
+        std::vector<AtlasEntityID> Outgoing;
         AtlasNetServer::Get().Update(myspan, Incoming, Outgoing);
 //
         // Print positions every second

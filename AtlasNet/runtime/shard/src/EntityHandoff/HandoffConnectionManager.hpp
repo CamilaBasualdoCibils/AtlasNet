@@ -7,8 +7,8 @@
 #include <unordered_set>
 
 #include "EntityHandoff/HandoffConnectionLeaseCoordinator.hpp"
-#include "Log.hpp"
-#include "Misc/Singleton.hpp"
+#include "Debug/Log.hpp"
+#include "Global/Misc/Singleton.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class HandoffConnectionManager : public Singleton<HandoffConnectionManager>

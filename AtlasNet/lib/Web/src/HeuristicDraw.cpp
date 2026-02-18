@@ -1,6 +1,6 @@
 #include "HeuristicDraw.hpp"
 
-#include "Database/HeuristicManifest.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include <cstdio>
 #include <iostream>

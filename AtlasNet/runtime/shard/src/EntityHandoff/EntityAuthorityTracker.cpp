@@ -18,7 +18,7 @@ void EntityAuthorityTracker::Reset()
 void EntityAuthorityTracker::SetOwnedEntities(
 	const std::vector<AtlasEntity>& ownedEntities)
 {
-	std::unordered_set<AtlasEntity::EntityID> keepIds;
+	std::unordered_set<AtlasEntityID> keepIds;
 	keepIds.reserve(ownedEntities.size());
 
 	for (const auto& entity : ownedEntities)
@@ -38,7 +38,7 @@ void EntityAuthorityTracker::SetOwnedEntities(
 		}
 	}
 
-	std::vector<AtlasEntity::EntityID> toRemove;
+	std::vector<AtlasEntityID> toRemove;
 	toRemove.reserve(authorityByEntityId.size());
 	for (const auto& [entityId, _entry] : authorityByEntityId)
 	{
@@ -105,7 +105,7 @@ std::vector<AtlasEntity> EntityAuthorityTracker::GetOwnedEntitySnapshots() const
 	return snapshots;
 }
 
-bool EntityAuthorityTracker::MarkPassing(AtlasEntity::EntityID entityId,
+bool EntityAuthorityTracker::MarkPassing(AtlasEntityID entityId,
 										 const NetworkIdentity& passingTarget)
 {
 	const auto it = authorityByEntityId.find(entityId);
@@ -126,7 +126,7 @@ bool EntityAuthorityTracker::MarkPassing(AtlasEntity::EntityID entityId,
 	return true;
 }
 
-void EntityAuthorityTracker::MarkAuthoritative(AtlasEntity::EntityID entityId)
+void EntityAuthorityTracker::MarkAuthoritative(AtlasEntityID entityId)
 {
 	const auto it = authorityByEntityId.find(entityId);
 	if (it == authorityByEntityId.end())
@@ -138,7 +138,7 @@ void EntityAuthorityTracker::MarkAuthoritative(AtlasEntity::EntityID entityId)
 }
 
 void EntityAuthorityTracker::SetAuthorityState(
-	AtlasEntity::EntityID entityId, const AuthorityState state,
+	AtlasEntityID entityId, const AuthorityState state,
 	const std::optional<NetworkIdentity>& passingTo)
 {
 	const auto it = authorityByEntityId.find(entityId);
@@ -150,7 +150,7 @@ void EntityAuthorityTracker::SetAuthorityState(
 	it->second.passingTo = passingTo;
 }
 
-void EntityAuthorityTracker::RemoveEntity(const AtlasEntity::EntityID entityId)
+void EntityAuthorityTracker::RemoveEntity(const AtlasEntityID entityId)
 {
 	authorityByEntityId.erase(entityId);
 }

@@ -9,7 +9,7 @@
 #include <string>
 #include <unordered_map>
 
-#include "Log.hpp"
+#include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class HandoffConnectionLeaseCoordinator

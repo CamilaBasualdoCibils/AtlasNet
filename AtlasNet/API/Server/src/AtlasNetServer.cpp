@@ -1,9 +1,9 @@
 #include "AtlasNetServer.hpp"
 
-#include "BuiltInDB.hpp"
-#include "Crash/CrashHandler.hpp"
-#include "DockerIO.hpp"
-#include "Misc/UUID.hpp"
+
+#include "Debug/Crash/CrashHandler.hpp"
+#include "Docker/DockerIO.hpp"
+#include "Global/Misc/UUID.hpp"
 // ============================================================================
 // Initialize server and setup Interlink callbacks
 // ============================================================================
@@ -34,6 +34,6 @@ void AtlasNetServer::Initialize(
 // ============================================================================
 void AtlasNetServer::Update(
 	std::span<AtlasEntity> entities, std::vector<AtlasEntity> &IncomingEntities,
-	std::vector<AtlasEntity::EntityID> &OutgoingEntities)
+	std::vector<AtlasEntityID> &OutgoingEntities)
 {
 }
