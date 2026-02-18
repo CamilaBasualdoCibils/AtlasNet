@@ -1,5 +1,6 @@
 #pragma once
 #include <chrono>
+#include <sstream>
 #include <thread>
 
 #include "Misc/Singleton.hpp"
@@ -9,6 +10,9 @@
 #include "Serialize/ByteReader.hpp"
 #include "Serialize/ByteWriter.hpp"
 
+#ifndef NETWORK_MANIFEST_USE_PLAIN_STRING_DB
+#define NETWORK_MANIFEST_USE_PLAIN_STRING_DB 1
+#endif
 
 
 class NetworkManifest : public Singleton<NetworkManifest> {
@@ -49,39 +53,55 @@ void TelemetryUpdate(const NetworkIdentity& identifier)
         return;
     }
 
-    // ============================
-    // Serialize VALUE (connections)
-    // ============================
-    ByteWriter valueBW;
-    valueBW.u32(static_cast<uint32_t>(connections.size()));
-    for (const auto& t : connections)
+    auto writeResult = int64_t(0);
+#if NETWORK_MANIFEST_USE_PLAIN_STRING_DB
+    // Debug-friendly mode: write both field and value as plain strings.
+    const std::string shardId = identifier.ToString();
+    std::ostringstream valueSS;
+    for (const auto& telemetry : connections)
     {
-        t.Serialize(valueBW);
-
-        // For debugging
-        //t.DebugLogs();
+        valueSS
+            << telemetry.IdentityId << '\t'
+            << telemetry.targetId << '\t'
+            << telemetry.pingMs << '\t'
+            << telemetry.inBytesPerSec << '\t'
+            << telemetry.outBytesPerSec << '\t'
+            << telemetry.inPacketsPerSec << '\t'
+            << telemetry.pendingReliableBytes << '\t'
+            << telemetry.pendingUnreliableBytes << '\t'
+            << telemetry.sentUnackedReliableBytes << '\t'
+            << telemetry.queueTimeUsec << '\t'
+            << telemetry.qualityLocal << '\t'
+            << telemetry.qualityRemote << '\t'
+            << telemetry.state
+            << '\n';
     }
 
-    // ============================
-    // Serialize FIELD (shard ID)
-    // ============================
+    writeResult = InternalDB::Get()->HSet(NetworkTelemetryTable, shardId, valueSS.str());
+#else
+    // Production mode: binary field/value for compact storage.
+    ByteWriter valueBW;
+    valueBW.u32(static_cast<uint32_t>(connections.size()));
+    for (const auto& telemetry : connections)
+    {
+        telemetry.Serialize(valueBW);
+    }
+
     ByteWriter fieldBW;
     fieldBW.uuid(identifier.ID);
 
-    // ============================
-    // Write to Redis (binary-safe)
-    // ============================
-    const auto result = InternalDB::Get()->HSet(
+    writeResult = InternalDB::Get()->HSet(
         NetworkTelemetryTable,
-        fieldBW.as_string_view(),   // binary field
-        valueBW.as_string_view()    // binary value
+        fieldBW.as_string_view(),
+        valueBW.as_string_view()
     );
+#endif
 
-    if (result != 0)
+    if (writeResult != 0)
     {
         std::printf(
             "Failed to update network telemetry. HSET result: %lli\n",
-            result
+            static_cast<long long>(writeResult)
         );
     }
 }
@@ -103,11 +123,61 @@ void NetworkManifest::GetAllTelemetry(
 
     for (const auto& pair : all)
     {
+#if NETWORK_MANIFEST_USE_PLAIN_STRING_DB
+        const std::string shardId = pair.first;
+        std::istringstream lines(pair.second);
+        std::string line;
+        while (std::getline(lines, line))
+        {
+            if (line.empty())
+            {
+                continue;
+            }
+
+            std::vector<std::string> columns;
+            columns.reserve(13);
+            std::string column;
+            std::istringstream rowStream(line);
+            while (std::getline(rowStream, column, '\t'))
+            {
+                columns.push_back(column);
+            }
+
+            if (columns.size() != 13)
+            {
+                continue;
+            }
+
+            std::vector<std::string> row;
+            row.reserve(14);
+            row.push_back(shardId);
+            row.insert(row.end(), columns.begin(), columns.end());
+            out_telemetry.push_back(std::move(row));
+        }
+#else
         // ============================
         // Deserialize FIELD (shard ID)
         // ============================
         ByteReader fieldBR(pair.first);
-        std::string shardId = fieldBR.str();
+        std::string shardId;
+        try
+        {
+            // Current format: raw UUID bytes.
+            if (fieldBR.remaining() == 16)
+            {
+                NetworkIdentity shardIdentity = NetworkIdentity::MakeIDShard(fieldBR.uuid());
+                shardId = shardIdentity.ToString();
+            }
+            else
+            {
+                // Legacy format fallback: length-prefixed string.
+                shardId = fieldBR.str();
+            }
+        }
+        catch (const std::exception&)
+        {
+            continue;
+        }
 
         // ============================
         // Deserialize VALUE (connections)
@@ -121,8 +191,9 @@ void NetworkManifest::GetAllTelemetry(
             t.Deserialize(valueBR);
 
             std::vector<std::string> row;
-            row.reserve(13);
+            row.reserve(14);
 
+            row.push_back(shardId);
             row.push_back(t.IdentityId);
             row.push_back(t.targetId);
             row.push_back(std::to_string(t.pingMs));
@@ -143,5 +214,6 @@ void NetworkManifest::GetAllTelemetry(
 
             out_telemetry.push_back(std::move(row));
         }
+#endif
     }
 }

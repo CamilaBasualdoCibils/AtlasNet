@@ -5,20 +5,24 @@ const addon = require('../nextjs/native/Web.node');
 const { HeuristicDraw, IBoundsDrawShape, std_vector_IBoundsDrawShape_ } = addon; // your .node file
 
 function decodeConnectionRow(row) {
+  const hasShardId = row.length >= 14;
+  const offset = hasShardId ? 1 : 0;
+
   return {
-    IdentityId: row[0],
-    targetId: row[1],
-    pingMs: Number(row[2]),
-    inBytesPerSec: Number(row[3]),
-    outBytesPerSec: Number(row[4]),
-    inPacketsPerSec: Number(row[5]),
-    pendingReliableBytes: Number(row[6]),
-    pendingUnreliableBytes: row[7],
-    sentUnackedReliableBytes: Number(row[8]),
-    queueTimeUsec: Number(row[9]),
-    qualityLocal: Number(row[10]),
-    qualityRemote: Number(row[11]),
-    state: row[12],
+    shardId: hasShardId ? row[0] : null,
+    IdentityId: row[offset],
+    targetId: row[offset + 1],
+    pingMs: Number(row[offset + 2]),
+    inBytesPerSec: Number(row[offset + 3]),
+    outBytesPerSec: Number(row[offset + 4]),
+    inPacketsPerSec: Number(row[offset + 5]),
+    pendingReliableBytes: Number(row[offset + 6]),
+    pendingUnreliableBytes: Number(row[offset + 7]),
+    sentUnackedReliableBytes: Number(row[offset + 8]),
+    queueTimeUsec: Number(row[offset + 9]),
+    qualityLocal: Number(row[offset + 10]),
+    qualityRemote: Number(row[offset + 11]),
+    state: row[offset + 12],
   };
 }
 function computeShardAverages(connections) {
@@ -99,8 +103,12 @@ app.get('/networktelemetry', (req, res) => {
      */
     const rowsByShard = new Map();
     for (const row of allRows) {
+    if (row.length < 13) {
+        continue;
+    }
+
     const decoded = decodeConnectionRow(row);
-    const shardId = decoded.IdentityId;
+    const shardId = decoded.shardId ?? decoded.IdentityId;
 
     if (!rowsByShard.has(shardId)) {
         rowsByShard.set(shardId, []);

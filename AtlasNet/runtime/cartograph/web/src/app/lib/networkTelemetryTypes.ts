@@ -1,4 +1,5 @@
 export interface ConnectionTelemetry {
+  shardId?: string | null;
   IdentityId: string;
   targetId: string;
   pingMs: number;
@@ -14,12 +15,10 @@ export interface ConnectionTelemetry {
   state: string;
 }
 
-export type TelemetryConnectionRow = string[];
-
 export interface ShardTelemetry {
   shardId: string;
   downloadKbps: number;
   uploadKbps: number;
 
-  connections: TelemetryConnectionRow[];
+  connections: ConnectionTelemetry[];
 }
