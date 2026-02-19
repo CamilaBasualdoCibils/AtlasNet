@@ -5,6 +5,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <random>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
@@ -25,6 +26,8 @@ class DebugEntityOrbitSimulator
 		uint32_t desiredCount = 1;
 		float halfExtent = kDefaultHalfExtent;
 		float phaseStepRad = 0.0F;
+		float initialRadius = kDefaultOrbitRadius;
+		bool randomizeInitialPhase = true;
 	};
 
 	struct OrbitOptions
@@ -57,4 +60,5 @@ class DebugEntityOrbitSimulator
 	std::shared_ptr<Log> logger;
 	float orbitAngleRad = 0.0F;
 	std::unordered_map<AtlasEntityID, OrbitEntity> entitiesById;
+	std::mt19937_64 rng;
 };

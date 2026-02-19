@@ -1,9 +1,11 @@
 // Implements deterministic debug entity spawning, orbit updates, and snapshot writes.
 
-#include "Entity/EntityHandoff/DebugEntityOrbitSimulator.hpp"
+#include "DebugEntityOrbitSimulator.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <numbers>
+#include <random>
 #include "Entity/Entity.hpp"
 
 namespace
@@ -23,6 +25,8 @@ DebugEntityOrbitSimulator::DebugEntityOrbitSimulator(const NetworkIdentity& self
 													 std::shared_ptr<Log> inLogger)
 	: selfIdentity(self), logger(std::move(inLogger))
 {
+	std::random_device rd;
+	rng.seed((static_cast<uint64_t>(rd()) << 32U) ^ static_cast<uint64_t>(rd()));
 }
 
 void DebugEntityOrbitSimulator::Reset()
@@ -41,10 +45,25 @@ void DebugEntityOrbitSimulator::SeedEntities(const SeedOptions& options)
 	for (uint32_t i = static_cast<uint32_t>(entitiesById.size());
 		 i < options.desiredCount; ++i)
 	{
+		const float phaseOffset = [&]() -> float
+		{
+			if (!options.randomizeInitialPhase)
+			{
+				return options.phaseStepRad * static_cast<float>(i);
+			}
+			std::uniform_real_distribution<float> phaseDist(
+				0.0F, static_cast<float>(2.0) * std::numbers::pi_v<float>);
+			return phaseDist(rng);
+		}();
+		const float angle = orbitAngleRad + phaseOffset;
+		const float radius = std::max(options.initialRadius, 0.0F);
+		const vec3 initialPosition =
+			vec3(std::cos(angle) * radius, std::sin(angle) * radius, 0.0F);
+
 		AtlasEntity entity;
 		entity.Entity_ID = MakeEntityId(i);
 		entity.transform.world = 0;
-		entity.transform.position = vec3(0.0F, 0.0F, 0.0F);
+		entity.transform.position = initialPosition;
 		entity.transform.boundingBox.SetCenterExtents(
 			entity.transform.position,
 			vec3(options.halfExtent, options.halfExtent, options.halfExtent));
@@ -54,7 +73,7 @@ void DebugEntityOrbitSimulator::SeedEntities(const SeedOptions& options)
 
 		OrbitEntity orbitEntity;
 		orbitEntity.entity = entity;
-		orbitEntity.phaseOffsetRad = options.phaseStepRad * static_cast<float>(i);
+		orbitEntity.phaseOffsetRad = phaseOffset;
 		entitiesById[entity.Entity_ID] = orbitEntity;
 	}
 }

@@ -9,6 +9,10 @@ import {
 import { createMapRenderer } from '../lib/mapRenderer';
 import type { ShapeJS } from '../lib/types';
 
+const DEFAULT_POLL_INTERVAL_MS = 200;
+const MIN_POLL_INTERVAL_MS = 50;
+const MAX_POLL_INTERVAL_MS = 1000;
+
 function normalizeShardId(value: string): string {
   return value.trim();
 }
@@ -75,6 +79,7 @@ export default function MapPage() {
   >([]);
   const [showGnsConnections, setShowGnsConnections] = useState(true);
   const [showAuthorityEntities, setShowAuthorityEntities] = useState(true);
+  const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
 
   // Fetch static heuristic shapes (base map)
   useEffect(() => {
@@ -107,12 +112,12 @@ export default function MapPage() {
       }
     }
     poll();
-    const id = setInterval(poll, 500);
+    const id = setInterval(poll, pollIntervalMs);
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [pollIntervalMs]);
 
   // Poll authority telemetry rows for entity overlay
   useEffect(() => {
@@ -130,12 +135,12 @@ export default function MapPage() {
       }
     }
     poll();
-    const id = setInterval(poll, 500);
+    const id = setInterval(poll, pollIntervalMs);
     return () => {
       alive = false;
       clearInterval(id);
     };
-  }, []);
+  }, [pollIntervalMs]);
 
   const ownerPositions = useMemo(() => {
     const acc = new Map<string, { sumX: number; sumY: number; count: number }>();
@@ -429,6 +434,31 @@ export default function MapPage() {
         <span style={{ opacity: 0.8 }}>
           connections: {networkEdgeCount} | claimed entities: {authorityEntities.length}
         </span>
+        <label
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+            minWidth: 220,
+          }}
+        >
+          <input
+            type="range"
+            min={MIN_POLL_INTERVAL_MS}
+            max={MAX_POLL_INTERVAL_MS}
+            step={50}
+            value={pollIntervalMs}
+            onChange={(e) =>
+              setPollIntervalMs(
+                Math.max(
+                  MIN_POLL_INTERVAL_MS,
+                  Math.min(MAX_POLL_INTERVAL_MS, Number(e.target.value))
+                )
+              )
+            }
+          />
+          poll: {pollIntervalMs}ms
+        </label>
       </div>
 
       <div

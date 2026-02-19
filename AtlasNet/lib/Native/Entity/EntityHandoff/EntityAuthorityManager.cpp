@@ -7,7 +7,7 @@
 #include <optional>
 
 #include "Debug/Log.hpp"
-#include "Entity/EntityHandoff/DebugEntityOrbitSimulator.hpp"
+#include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
 #include "Entity/EntityHandoff/EntityAuthorityTracker.hpp"
 #include "Entity/EntityHandoff/HandoffConnectionManager.hpp"
 #include "Entity/EntityHandoff/HandoffPacketManager.hpp"
@@ -21,12 +21,19 @@ namespace
 {
 constexpr std::chrono::seconds kOwnershipEvalInterval(2);
 constexpr std::chrono::milliseconds kStateSnapshotInterval(250);
-constexpr float kOrbitRadius = 12.0F;
+constexpr float kOrbitRadius = 50.0F;
 constexpr float kOrbitAngularSpeedRadPerSec = 0.35F;
 constexpr float kTestEntityHalfExtent = 0.5F;
-constexpr uint32_t kDefaultTestEntityCount = 1;
 constexpr float kEntityPhaseStepRad = 0.7F;
 constexpr uint64_t kHandoffLeadTicks = 6;
+
+#ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 1
+#endif
+constexpr uint32_t kDefaultTestEntityCount =
+	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)
+		? static_cast<uint32_t>(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT)
+		: 1U;
 
 constexpr std::string_view kTestOwnerKey = "EntityHandoff:TestOwnerShard";
 
