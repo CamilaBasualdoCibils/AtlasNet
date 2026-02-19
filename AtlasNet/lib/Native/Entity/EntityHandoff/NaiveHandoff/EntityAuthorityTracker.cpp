@@ -1,6 +1,6 @@
 // Implements in-memory entity authority state tracking and telemetry row export.
 
-#include "Entity/EntityHandoff/EntityAuthorityTracker.hpp"
+#include "EntityAuthorityTracker.hpp"
 
 #include <unordered_set>
 

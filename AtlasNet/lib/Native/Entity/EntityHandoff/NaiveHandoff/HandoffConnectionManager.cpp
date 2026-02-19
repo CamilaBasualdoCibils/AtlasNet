@@ -1,6 +1,6 @@
 // Implements handoff connection init/tick/shutdown and activity-driven pruning.
 
-#include "Entity/EntityHandoff/HandoffConnectionManager.hpp"
+#include "HandoffConnectionManager.hpp"
 
 #include "Interlink/Interlink.hpp"
 

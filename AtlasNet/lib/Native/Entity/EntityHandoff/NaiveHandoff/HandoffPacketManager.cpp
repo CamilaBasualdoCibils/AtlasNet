@@ -1,6 +1,6 @@
 // Implements entity packet send/receive handling for handoff and adoption paths.
 
-#include "Entity/EntityHandoff/HandoffPacketManager.hpp"
+#include "HandoffPacketManager.hpp"
 
 #include <chrono>
 

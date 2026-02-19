@@ -5,7 +5,7 @@
 
 #include "Debug/Crash/CrashHandler.hpp"
 #include "Docker/DockerIO.hpp"
-#include "Entity/EntityHandoff/EntityAuthorityManager.hpp"
+#include "Entity/EntityHandoff/NaiveHandoff/EntityAuthorityManager.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"

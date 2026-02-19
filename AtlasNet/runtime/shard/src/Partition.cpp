@@ -5,7 +5,7 @@
 
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
-#include "Entity/EntityHandoff/EntityAuthorityManager.hpp"
+#include "Entity/EntityHandoff/NaiveHandoff/EntityAuthorityManager.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Global/Misc/UUID.hpp"
