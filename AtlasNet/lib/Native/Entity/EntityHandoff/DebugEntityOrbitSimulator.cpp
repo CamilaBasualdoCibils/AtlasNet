@@ -2,6 +2,7 @@
 
 #include "Entity/EntityHandoff/DebugEntityOrbitSimulator.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include "Entity/Entity.hpp"
 
@@ -62,22 +63,34 @@ void DebugEntityOrbitSimulator::AdoptSingleEntity(const AtlasEntity& entity)
 {
 	OrbitEntity orbitEntity;
 	orbitEntity.entity = entity;
-	orbitEntity.phaseOffsetRad = 0.0F;
+	const vec3 position = entity.transform.position;
+	if (std::abs(position.x) > 1e-4F || std::abs(position.y) > 1e-4F)
+	{
+		const float angleRad = std::atan2(position.y, position.x);
+		orbitEntity.phaseOffsetRad = angleRad - orbitAngleRad;
+	}
+	else
+	{
+		orbitEntity.phaseOffsetRad = 0.0F;
+	}
 	entitiesById[entity.Entity_ID] = orbitEntity;
 }
 
 void DebugEntityOrbitSimulator::TickOrbit(const OrbitOptions& options)
 {
-	orbitAngleRad += options.deltaSeconds * options.angularSpeedRadPerSec;
+	const float deltaSeconds = std::clamp(options.deltaSeconds, 0.0F, 0.25F);
+	orbitAngleRad += deltaSeconds * options.angularSpeedRadPerSec;
 	for (auto& [entityId, orbitEntity] : entitiesById)
 	{
 		(void)entityId;
 		const float angle = orbitAngleRad + orbitEntity.phaseOffsetRad;
-		const vec3 position =
-			vec3(std::cos(angle) * options.radius, std::sin(angle) * options.radius, 0.0F);
+		const vec3 position = vec3(std::cos(angle) * options.radius,
+								   std::sin(angle) * options.radius,
+								   orbitEntity.entity.transform.position.z);
 		orbitEntity.entity.transform.position = position;
 		orbitEntity.entity.transform.boundingBox.SetCenterExtents(
-			position, vec3(kDefaultHalfExtent, kDefaultHalfExtent, kDefaultHalfExtent));
+			position,
+			vec3(kDefaultHalfExtent, kDefaultHalfExtent, kDefaultHalfExtent));
 	}
 }
 

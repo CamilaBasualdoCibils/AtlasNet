@@ -2,7 +2,6 @@
 
 #include "Entity/EntityHandoff/HandoffConnectionManager.hpp"
 
-#include "Entity/EntityHandoff/HandoffPacketManager.hpp"
 #include "Interlink/Interlink.hpp"
 
 void HandoffConnectionManager::Init(const NetworkIdentity& self,
@@ -14,7 +13,6 @@ void HandoffConnectionManager::Init(const NetworkIdentity& self,
 	leaseCoordinator = std::make_unique<HandoffConnectionLeaseCoordinator>(
 		selfIdentity, logger, HandoffConnectionLeaseCoordinator::Options{});
 	leaseCoordinator->SetLeaseEnabled(leaseModeEnabled);
-	HandoffPacketManager::Get().Init(selfIdentity, logger);
 	initialized = true;
 
 	if (logger)
@@ -61,8 +59,6 @@ void HandoffConnectionManager::Shutdown()
 		Interlink::Get().CloseConnectionTo(peer, 0, "EntityHandoff shutdown");
 	}
 	activeConnections.clear();
-
-	HandoffPacketManager::Get().Shutdown();
 
 	if (leaseCoordinator)
 	{

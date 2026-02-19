@@ -4,8 +4,6 @@
 
 #include <chrono>
 
-#include "Entity/EntityHandoff/EntityAuthorityManager.hpp"
-#include "Entity/EntityHandoff/HandoffConnectionManager.hpp"
 #include "Entity/EntityHandoff/Packet/GenericEntityPacket.hpp"
 #include "Interlink/Interlink.hpp"
 
@@ -32,7 +30,17 @@ void HandoffPacketManager::Init(const NetworkIdentity& self,
 void HandoffPacketManager::Shutdown()
 {
 	handoffEntitySub.Reset();
+	onIncomingHandoff = nullptr;
+	onPeerActivity = nullptr;
 	initialized = false;
+}
+
+void HandoffPacketManager::SetCallbacks(
+	OnIncomingHandoffCallback incomingCallback,
+	OnPeerActivityCallback peerActivityCallback)
+{
+	onIncomingHandoff = std::move(incomingCallback);
+	onPeerActivity = std::move(peerActivityCallback);
 }
 
 void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
@@ -94,9 +102,14 @@ void HandoffPacketManager::OnGenericEntityPacket(
 		return;
 	}
 
-	HandoffConnectionManager::Get().MarkConnectionActivity(packet.sender);
-	EntityAuthorityManager::Get().OnIncomingHandoffEntityAtTick(
-		packet.entity, packet.sender, packet.transferTick);
+	if (onPeerActivity)
+	{
+		onPeerActivity(packet.sender);
+	}
+	if (onIncomingHandoff)
+	{
+		onIncomingHandoff(packet.entity, packet.sender, packet.transferTick);
+	}
 
 	if (logger)
 	{
