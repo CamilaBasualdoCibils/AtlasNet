@@ -6,6 +6,9 @@
 #include "Debug/Crash/CrashHandler.hpp"
 #include "Docker/DockerIO.hpp"
 #include "Entity/EntityHandoff/EntityAuthorityManager.hpp"
+#include "Events/EventEnums.hpp"
+#include "Events/EventSystem.hpp"
+#include "Events/Events/Debug/LogEvent.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
@@ -20,19 +23,20 @@ void AtlasNetServer::Initialize(
 	identity = NetworkIdentity(NetworkIdentityType::eShard, UUIDGen::Gen());
 	NetworkManifest::Get().ScheduleNetworkPings(identity);
 	HealthManifest::Get().ScheduleHealthPings(identity);
-
+	EventSystem::Get().Init(identity);
 	DockerEvents::Get().Init(
 		DockerEventsInit{.OnShutdownRequest = properties.OnShutdownRequest});
-
-	logger = std::make_shared<Log>("Shard");
+	EventSystem::Get().Subscribe<LogEvent>(
+		[&](const LogEvent &e)
+		{
+			logger->DebugFormatted("Received LogEvent: {}", e.message);
+		});
 	logger->Debug("AtlasNet Initialize");
 	// --- Interlink setup ---
 	Interlink::Get().Init({
 		.ThisID = identity,
 		.logger = logger,
 	});
-
-	logger->Debug("Interlink initialized");
 
 	ShardLogicThread =
 		std::jthread([&](std::stop_token st) { ShardLogicEntry(st); });
