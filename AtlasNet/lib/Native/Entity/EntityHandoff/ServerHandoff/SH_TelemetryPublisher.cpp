@@ -6,13 +6,13 @@
 #include <utility>
 #include <vector>
 
-#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityTracker.hpp"
 #include "Entity/EntityHandoff/Telemetry/AuthorityManifest.hpp"
+#include "SH_EntityAuthorityTracker.hpp"
 
 namespace
 {
 std::vector<AuthorityManifest::TelemetryRow> ToManifestRows(
-	const std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow>& trackerRows)
+	const std::vector<SH_EntityAuthorityTracker::AuthorityTelemetryRow>& trackerRows)
 {
 	std::vector<AuthorityManifest::TelemetryRow> rows;
 	rows.reserve(trackerRows.size());
@@ -33,9 +33,9 @@ std::vector<AuthorityManifest::TelemetryRow> ToManifestRows(
 }  // namespace
 
 void SH_TelemetryPublisher::PublishFromTracker(
-	const NH_EntityAuthorityTracker& tracker) const
+	const SH_EntityAuthorityTracker& tracker) const
 {
-	std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow> trackerRows;
+	std::vector<SH_EntityAuthorityTracker::AuthorityTelemetryRow> trackerRows;
 	tracker.CollectTelemetryRows(trackerRows);
 	AuthorityManifest::Get().TelemetryUpdate(ToManifestRows(trackerRows));
 }

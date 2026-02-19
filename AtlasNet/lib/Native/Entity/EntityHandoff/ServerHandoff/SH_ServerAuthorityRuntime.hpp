@@ -9,8 +9,8 @@
 
 class DebugEntityOrbitSimulator;
 class Log;
-class NH_EntityAuthorityTracker;
 class SH_BorderHandoffPlanner;
+class SH_EntityAuthorityTracker;
 class SH_OwnershipElection;
 class SH_TelemetryPublisher;
 class SH_TransferMailbox;
@@ -51,7 +51,7 @@ class SH_ServerAuthorityRuntime
 	uint64_t localAuthorityTick = 0;
 	std::chrono::steady_clock::time_point lastTickTime;
 	std::chrono::steady_clock::time_point lastSnapshotTime;
-	std::unique_ptr<NH_EntityAuthorityTracker> tracker;
+	std::unique_ptr<SH_EntityAuthorityTracker> tracker;
 	std::unique_ptr<DebugEntityOrbitSimulator> debugSimulator;
 	std::unique_ptr<SH_OwnershipElection> ownershipElection;
 	std::unique_ptr<SH_BorderHandoffPlanner> borderPlanner;

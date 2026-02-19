@@ -8,10 +8,10 @@
 
 #include "Debug/Log.hpp"
 #include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityTracker.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_HandoffConnectionManager.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_HandoffPacketManager.hpp"
 #include "SH_BorderHandoffPlanner.hpp"
+#include "SH_EntityAuthorityTracker.hpp"
+#include "SH_HandoffConnectionManager.hpp"
+#include "SH_HandoffPacketManager.hpp"
 #include "SH_OwnershipElection.hpp"
 #include "SH_TelemetryPublisher.hpp"
 #include "SH_TransferMailbox.hpp"
@@ -25,7 +25,7 @@ constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr float kEntityPhaseStepRad = 0.7F;
 
 #ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
-#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 15
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 2000
 #endif
 constexpr uint32_t kDefaultTestEntityCount =
 	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)
@@ -54,7 +54,7 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	lastTickTime = std::chrono::steady_clock::now();
 	lastSnapshotTime = lastTickTime - kStateSnapshotInterval;
 
-	tracker = std::make_unique<NH_EntityAuthorityTracker>(selfIdentity, logger);
+	tracker = std::make_unique<SH_EntityAuthorityTracker>(selfIdentity, logger);
 	debugSimulator =
 		std::make_unique<DebugEntityOrbitSimulator>(selfIdentity, logger);
 	ownershipElection =
@@ -69,16 +69,16 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	transferMailbox->Reset();
 	ownershipElection->Reset(lastTickTime);
 
-	NH_HandoffConnectionManager::Get().Init(selfIdentity, logger);
-	NH_HandoffPacketManager::Get().Init(selfIdentity, logger);
-	NH_HandoffPacketManager::Get().SetCallbacks(
+	SH_HandoffConnectionManager::Get().Init(selfIdentity, logger);
+	SH_HandoffPacketManager::Get().Init(selfIdentity, logger);
+	SH_HandoffPacketManager::Get().SetCallbacks(
 		[this](const AtlasEntity& entity, const NetworkIdentity& sender,
 			   uint64_t transferTick)
 		{
 			OnIncomingHandoffEntityAtTick(entity, sender, transferTick);
 		},
 		[](const NetworkIdentity& peer)
-		{ NH_HandoffConnectionManager::Get().MarkConnectionActivity(peer); });
+		{ SH_HandoffConnectionManager::Get().MarkConnectionActivity(peer); });
 
 	if (logger)
 	{
@@ -97,7 +97,7 @@ void SH_ServerAuthorityRuntime::Tick()
 	}
 	++localAuthorityTick;
 
-	NH_HandoffConnectionManager::Get().Tick();
+	SH_HandoffConnectionManager::Get().Tick();
 	const auto now = std::chrono::steady_clock::now();
 	const float deltaSeconds =
 		std::chrono::duration<float>(now - lastTickTime).count();
@@ -169,9 +169,9 @@ void SH_ServerAuthorityRuntime::Shutdown()
 		return;
 	}
 
-	NH_HandoffPacketManager::Get().SetCallbacks({}, {});
-	NH_HandoffPacketManager::Get().Shutdown();
-	NH_HandoffConnectionManager::Get().Shutdown();
+	SH_HandoffPacketManager::Get().SetCallbacks({}, {});
+	SH_HandoffPacketManager::Get().Shutdown();
+	SH_HandoffConnectionManager::Get().Shutdown();
 
 	tracker.reset();
 	debugSimulator.reset();

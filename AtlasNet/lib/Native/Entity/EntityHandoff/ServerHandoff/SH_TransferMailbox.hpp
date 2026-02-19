@@ -7,7 +7,7 @@
 
 class DebugEntityOrbitSimulator;
 class Log;
-class NH_EntityAuthorityTracker;
+class SH_EntityAuthorityTracker;
 class SH_TelemetryPublisher;
 
 // Stores pending handoffs by entity id.
@@ -34,7 +34,7 @@ class SH_TransferMailbox
 	// Commits all due outgoing handoffs.
 	[[nodiscard]] size_t CommitOutgoingIfDue(
 		uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator,
-		NH_EntityAuthorityTracker& tracker,
+		SH_EntityAuthorityTracker& tracker,
 		const SH_TelemetryPublisher& telemetryPublisher);
 	void ClearPendingOutgoing();
 

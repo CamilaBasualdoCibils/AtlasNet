@@ -8,7 +8,7 @@
 
 #include "Debug/Log.hpp"
 #include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityTracker.hpp"
+#include "SH_EntityAuthorityTracker.hpp"
 #include "SH_TelemetryPublisher.hpp"
 
 SH_TransferMailbox::SH_TransferMailbox(std::shared_ptr<Log> inLogger)
@@ -72,7 +72,7 @@ void SH_TransferMailbox::AddPendingOutgoing(
 
 size_t SH_TransferMailbox::CommitOutgoingIfDue(
 	const uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator,
-	NH_EntityAuthorityTracker& tracker,
+	SH_EntityAuthorityTracker& tracker,
 	const SH_TelemetryPublisher& telemetryPublisher)
 {
 	if (pendingOutgoingByEntityId.empty())

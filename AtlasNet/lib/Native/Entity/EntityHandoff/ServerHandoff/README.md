@@ -61,8 +61,14 @@ This version still uses timed handoff
 - `SH_HandoffTypes.hpp`
   - Shared structs for pending incoming/outgoing handoff state.
 
-## External Pieces Reused Right Now
+- `SH_EntityAuthorityTracker.hpp/.cpp`
+  - Stores local authority state (`authoritative` / `passing`) and telemetry rows.
 
-- `NH_HandoffPacketManager`
-- `NH_HandoffConnectionManager`
-- `NH_EntityAuthorityTracker`
+- `SH_HandoffPacketManager.hpp/.cpp`
+  - Sends and receives handoff packets for ServerHandoff.
+
+- `SH_HandoffConnectionManager.hpp/.cpp`
+  - Tracks active handoff peer links and reaps inactive ones.
+
+- `SH_HandoffConnectionLeaseCoordinator.hpp/.cpp`
+  - Optional Redis lease helper to reduce duplicate shard links.

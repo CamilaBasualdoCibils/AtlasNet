@@ -8,11 +8,11 @@
 #include <vector>
 
 #include "Debug/Log.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityTracker.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/NH_HandoffPacketManager.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Database/ServerRegistry.hpp"
+#include "SH_EntityAuthorityTracker.hpp"
+#include "SH_HandoffPacketManager.hpp"
 
 namespace
 {
@@ -66,7 +66,7 @@ SH_BorderHandoffPlanner::SH_BorderHandoffPlanner(const NetworkIdentity& self,
 
 std::vector<SH_PendingOutgoingHandoff>
 SH_BorderHandoffPlanner::PlanAndSendAll(
-	NH_EntityAuthorityTracker& tracker, const uint64_t localAuthorityTick) const
+	SH_EntityAuthorityTracker& tracker, const uint64_t localAuthorityTick) const
 {
 	std::vector<SH_PendingOutgoingHandoff> outgoingHandoffs;
 	std::unordered_map<std::string, GridShape> claimedBounds;
@@ -118,7 +118,7 @@ SH_BorderHandoffPlanner::PlanAndSendAll(
 
 		const uint64_t transferTick =
 			localAuthorityTick + options.handoffLeadTicks;
-		NH_HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
+		SH_HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
 														 transferTick);
 
 		if (logger)

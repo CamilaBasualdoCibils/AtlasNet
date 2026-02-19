@@ -9,7 +9,7 @@
 #include "Network/NetworkIdentity.hpp"
 
 class Log;
-class NH_EntityAuthorityTracker;
+class SH_EntityAuthorityTracker;
 
 // Finds entities that crossed local bounds.
 // Sends timed handoff packets and returns pending outgoing records.
@@ -31,7 +31,7 @@ class SH_BorderHandoffPlanner
 	// Plans/sends outgoing handoffs for this tick.
 	// Returns pending outgoing records for mailbox tracking.
 	std::vector<SH_PendingOutgoingHandoff> PlanAndSendAll(
-		NH_EntityAuthorityTracker& tracker,
+		SH_EntityAuthorityTracker& tracker,
 		uint64_t localAuthorityTick) const;
 
   private:
