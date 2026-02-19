@@ -7,11 +7,14 @@
 
 namespace
 {
-AtlasEntityID MakeEntityId(const NetworkIdentity& self, uint32_t index)
+AtlasEntityID MakeEntityId(uint32_t index)
 {
-	const auto base = static_cast<AtlasEntityID>(
-		std::hash<std::string>{}(self.ToString()));
-	return base ^ (static_cast<AtlasEntityID>(index + 1U) << 1U);
+	// Keep debug entity IDs shard-agnostic so ownership transfer does not create
+	// a second synthetic entity with a different ID on the receiving shard.
+	static constexpr AtlasEntityID kDebugEntityIdNamespace =
+		static_cast<AtlasEntityID>(0xA7105EED00000000ULL);
+	return kDebugEntityIdNamespace ^
+		   (static_cast<AtlasEntityID>(index + 1U) << 1U);
 }
 }  // namespace
 
@@ -38,7 +41,7 @@ void DebugEntityOrbitSimulator::SeedEntities(const SeedOptions& options)
 		 i < options.desiredCount; ++i)
 	{
 		AtlasEntity entity;
-		entity.Entity_ID = MakeEntityId(selfIdentity, i);
+		entity.Entity_ID = MakeEntityId(i);
 		entity.transform.world = 0;
 		entity.transform.position = vec3(0.0F, 0.0F, 0.0F);
 		entity.transform.boundingBox.SetCenterExtents(
