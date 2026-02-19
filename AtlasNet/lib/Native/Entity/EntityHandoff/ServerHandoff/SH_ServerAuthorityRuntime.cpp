@@ -18,14 +18,14 @@
 
 namespace
 {
-constexpr std::chrono::milliseconds kStateSnapshotInterval(250);
-constexpr float kOrbitRadius = 50.0F;
+constexpr std::chrono::milliseconds kStateSnapshotInterval(50);
+constexpr float kOrbitRadius = 45.0F;
 constexpr float kOrbitAngularSpeedRadPerSec = 0.35F;
 constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr float kEntityPhaseStepRad = 0.7F;
 
 #ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
-#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 1000
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 15
 #endif
 constexpr uint32_t kDefaultTestEntityCount =
 	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)

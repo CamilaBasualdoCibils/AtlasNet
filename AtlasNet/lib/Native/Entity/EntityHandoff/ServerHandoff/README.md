@@ -1,42 +1,68 @@
-## implementation considerations:
-sometimes entities seem to be stuck in limbo of no entity claiming. we need to resolve this and find a server for them. perhaps consider watchdog?
+## ServerHandoff (Second Version)
 
-## Goals
+## Simple Protocol
 
-- Keep `ServerHandoff` as a separate second iteration from `NaiveHandoff`.
-- Keep files small and responsibilities isolated.
-- Avoid one central runtime class owning all cross-cutting logic.
+- sender picks a future tick: `transferTick = now + lead`
+- sender sends entity snapshot to target shard
+- target stores it as pending
+- target adopts when tick reaches `transferTick`
+- sender drops local authority when tick reaches `transferTick`
 
-## Components
+This version still uses timed handoff
 
-- `SH_ServerAuthorityManager`
-  - Public facade used by `AtlasNetServer`.
-- `SH_ServerAuthorityRuntime`
-  - Thin orchestrator for lifecycle and tick ordering.
-- `SH_OwnershipElection`
-  - Owns owner election policy/state and owner transitions.
-- `SH_BorderHandoffPlanner`
-  - Detects boundary exits and emits/sends outgoing handoff intents for all
-    crossing entities in a tick.
-- `SH_TransferMailbox`
-  - Owns per-entity pending incoming/outgoing transfer-tick state and
-    commit/adopt behavior.
-- `SH_TelemetryPublisher`
-  - Isolated tracker-to-manifest bridge.
+## Tick Flow (Runtime)
 
-## Dependency Direction
+1. Read incoming handoff packets from mailbox.
+2. Adopt due incoming handoffs.
+3. Simulate local entities.
+4. Plan/send outgoing handoffs for boundary crossings.
+5. Commit due outgoing handoffs.
+6. Push telemetry snapshots on interval.
 
-- Runtime depends on components.
-- Components do not depend on runtime.
-- Shared handoff DTOs are isolated in `SH_HandoffTypes.hpp`.
-- Pending transfer state is keyed by `entityId` to avoid single-slot overwrite
-  bugs when many entities hand off concurrently.
+## Current Limits
 
-## Notes
+- Still not perfect in all heavy-load failure cases.
+- Reliability is better handled by extra recovery work around this core flow.
+- Watchdog manages shard health and bound requeue, but handoff execution is in shard servers.
 
-- This iteration currently reuses Naive transport/tracker primitives:
-  - `NH_HandoffPacketManager`
-  - `NH_HandoffConnectionManager`
-  - `NH_EntityAuthorityTracker`
-- Next step is to replace those with ServerHandoff-native versions once protocol
-  and lifecycle settle.
+## Main Tuning Knob
+
+- `SH_BorderHandoffPlanner::Options::handoffLeadTicks`
+  - Bigger value: safer timing, slower switch.
+  - Smaller value: faster switch, less timing buffer.
+
+## File Responsibilities
+
+- `SH_ServerAuthorityManager.hpp/.cpp`
+  - Public entrypoint used by `AtlasNetServer`.
+  - Forwards lifecycle and incoming handoff calls to runtime.
+
+- `SH_ServerAuthorityRuntime.hpp/.cpp`
+  - Runs the handoff tick order.
+  - Wires election, planner, mailbox, and telemetry.
+
+- `SH_OwnershipElection.hpp/.cpp`
+  - Picks which shard owns the test stream.
+  - Re-evaluates owner from shared DB key and live servers.
+
+- `SH_BorderHandoffPlanner.hpp/.cpp`
+  - Detects border crossing.
+  - Finds target shard from claimed bounds.
+  - Sends handoff packet and returns pending outgoing records.
+
+- `SH_TransferMailbox.hpp/.cpp`
+  - Stores pending incoming/outgoing handoffs per entity.
+  - Adopts incoming when due.
+  - Commits outgoing when due.
+
+- `SH_TelemetryPublisher.hpp/.cpp`
+  - Converts tracker data into `AuthorityManifest` rows.
+
+- `SH_HandoffTypes.hpp`
+  - Shared structs for pending incoming/outgoing handoff state.
+
+## External Pieces Reused Right Now
+
+- `NH_HandoffPacketManager`
+- `NH_HandoffConnectionManager`
+- `NH_EntityAuthorityTracker`

@@ -9,15 +9,20 @@
 class Log;
 class SH_ServerAuthorityRuntime;
 
+// Public entrypoint for ServerHandoff.
+// Forwards work to SH_ServerAuthorityRuntime.
 class SH_ServerAuthorityManager : public Singleton<SH_ServerAuthorityManager>
 {
   public:
 	SH_ServerAuthorityManager();
 	~SH_ServerAuthorityManager();
 
+	// Lifecycle
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Tick();
 	void Shutdown();
+
+	// Network handoff ingress
 	void OnIncomingHandoffEntity(const AtlasEntity& entity,
 								 const NetworkIdentity& sender);
 	void OnIncomingHandoffEntityAtTick(const AtlasEntity& entity,

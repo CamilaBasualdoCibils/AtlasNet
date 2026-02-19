@@ -1,8 +1,7 @@
 #pragma once
 
-// NH naive handoff packet orchestration.
-// Subscribes to handoff packets, sends entity payloads, and forwards inbound
-// handoffs via configured callbacks.
+// Sends and receives naive handoff packets.
+// For inbound packets, it calls runtime-provided callbacks.
 
 #include <functional>
 #include <memory>
@@ -24,10 +23,15 @@ class NH_HandoffPacketManager : public Singleton<NH_HandoffPacketManager>
 
 	NH_HandoffPacketManager() = default;
 
+	// Lifecycle
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Shutdown();
+
+	// Runtime callback wiring
 	void SetCallbacks(OnIncomingHandoffCallback incomingCallback,
 					  OnPeerActivityCallback peerActivityCallback);
+
+	// Outbound sends
 	void SendEntityProbe(const NetworkIdentity& target) const;
 	void SendEntityHandoff(const NetworkIdentity& target,
 						   const AtlasEntity& entity,

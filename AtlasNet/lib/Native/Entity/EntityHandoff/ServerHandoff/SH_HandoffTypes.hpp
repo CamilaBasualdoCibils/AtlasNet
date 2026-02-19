@@ -6,6 +6,7 @@
 #include "Entity/Entity.hpp"
 #include "Network/NetworkIdentity.hpp"
 
+// Incoming handoff waiting for its transfer tick.
 struct SH_PendingIncomingHandoff
 {
 	AtlasEntity entity;
@@ -13,6 +14,7 @@ struct SH_PendingIncomingHandoff
 	uint64_t transferTick = 0;
 };
 
+// Outgoing handoff waiting for commit tick.
 struct SH_PendingOutgoingHandoff
 {
 	AtlasEntityID entityId = 0;

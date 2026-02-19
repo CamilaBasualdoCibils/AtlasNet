@@ -1,8 +1,7 @@
 #pragma once
 
-// NH naive handoff authority state container.
-// Tracks authoritative/passing state and current entity snapshots owned by
-// the local shard runtime.
+// Stores local authority state for entities.
+// Each entity is either authoritative or passing to another shard.
 
 #include <cstdint>
 #include <memory>
@@ -19,6 +18,7 @@
 class NH_EntityAuthorityTracker
 {
   public:
+	// Local authority state for one entity.
 	enum class AuthorityState : uint8_t
 	{
 		eAuthoritative = 0,
@@ -46,11 +46,16 @@ class NH_EntityAuthorityTracker
 	NH_EntityAuthorityTracker(const NetworkIdentity& self,
 						   std::shared_ptr<Log> inLogger);
 
+	// Refreshes tracked entity set from local simulation snapshots.
 	void Reset();
 	void SetOwnedEntities(const std::vector<AtlasEntity>& ownedEntities);
+
+	// Telemetry/debug helpers.
 	void CollectTelemetryRows(std::vector<AuthorityTelemetryRow>& outRows) const;
 	void DebugLogTrackedEntities() const;
 	[[nodiscard]] std::vector<AtlasEntity> GetOwnedEntitySnapshots() const;
+
+	// State transitions.
 	bool MarkPassing(AtlasEntityID entityId,
 					 const NetworkIdentity& passingTarget);
 	void MarkAuthoritative(AtlasEntityID entityId);

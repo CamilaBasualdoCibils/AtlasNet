@@ -1,7 +1,7 @@
 #pragma once
 
-// NH naive handoff Redis-backed lease coordinator.
-// Provides optional anti-dupe peer-link leasing and inactivity bookkeeping.
+// Optional Redis lease helper for handoff peer links.
+// Used to reduce duplicate connections between shards.
 
 #include <chrono>
 #include <functional>
@@ -32,6 +32,7 @@ class NH_HandoffConnectionLeaseCoordinator
 									  std::shared_ptr<Log> inLogger,
 									  Options inOptions);
 
+	// Lease and activity operations
 	void SetLeaseEnabled(bool enabled) { options.leaseEnabled = enabled; }
 	bool TryAcquireOrRefreshLease(const NetworkIdentity& peer) const;
 	void ReleaseLeaseIfOwned(const NetworkIdentity& peer) const;

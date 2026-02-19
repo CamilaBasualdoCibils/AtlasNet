@@ -1,41 +1,59 @@
-## Goals
+## NaiveHandoff (First Version)
 
-- Keep authority transfer behavior easy to reason about.
-- Use a transfer tick (`future time`) so sender and receiver can switch in sync.
-- many edge cases were not considered, in favor of being good enough for immidate single entity testing
+This is the first handoff version.
+It was made to get basic handoff working quickly.
 
-## Components
+It is simple on purpose and does not handle every edge case.
 
-- `NH_EntityAuthorityManager`
-  - Runtime orchestrator.
-  - Runs ownership election, simulation tick, boundary checks, send/adopt, and commit.
-- `NH_EntityAuthorityTracker`
-  - Holds local authority state and exports telemetry rows.
-- `NH_HandoffPacketManager`
-  - Sends/receives handoff packets and dispatches callbacks.
-- `NH_HandoffConnectionManager`
-  - Manages peer connection activity and cleanup.
-- `NH_HandoffConnectionLeaseCoordinator`
-  - Optional Redis lease coordination to reduce duplicate connection contention.
+## Simple Protocol
 
-## Runtime Flow
+- sender picks a future tick: `transferTick = now + lead`
+- sender sends full entity snapshot to target shard
+- target stores it as pending
+- when local tick reaches `transferTick`, target adopts the entity
+- when sender reaches `transferTick`, sender drops local authority
 
-1. Owner shard simulates entities and updates tracker snapshots.
-2. If an entity leaves local claimed bounds and enters another shard's claimed
-   bound, sender emits a handoff packet with `transferTick = now + lead`.
-3. Receiver stores incoming entity as pending.
-4. At/after `transferTick`, receiver adopts entity state.
-5. Sender commits outgoing transfer at/after `transferTick` and drops local authority.
+## Known Weak Spots
+
+- can only handle 1 entity
+
+## Runtime Flow (Per Tick)
+
+1. Update owner selection.
+2. Simulate local entities.
+3. Check if entities crossed a bound.
+4. Send handoff packets for crossing entities.
+5. Adopt incoming handoffs when due.
+6. Commit outgoing handoffs when due.
+7. Publish telemetry.
+
+## File Responsibilities
+
+- `NH_EntityAuthorityManager.hpp/.cpp`
+  - Main runtime loop for NaiveHandoff.
+  - Wires simulation, handoff, and commit together.
+
+- `NH_EntityAuthorityTracker.hpp/.cpp`
+  - Stores authority state for local entities.
+  - Tracks `authoritative` vs `passing`.
+
+- `NH_HandoffPacketManager.hpp/.cpp`
+  - Sends and receives handoff packets.
+  - Calls runtime callbacks for incoming handoffs.
+
+- `NH_HandoffConnectionManager.hpp/.cpp`
+  - Tracks active peer links.
+  - Cleans up inactive links.
+
+- `NH_HandoffConnectionLeaseCoordinator.hpp/.cpp`
+  - Optional Redis lease helper to reduce duplicate connections.
 
 ## Telemetry
 
-- Telemetry persistence is handled through `AuthorityManifest`.
-- `AuthorityManifest` accepts its own row DTO and does not depend directly on
-  `NH_EntityAuthorityTracker`.
+- Telemetry is written through `AuthorityManifest`.
+- Naive runtime uses tracker rows and converts them for persistence.
 
-## Current Simulation
+## Main Test Knob
 
-- Debug orbit simulator is used to generate deterministic moving entities.
-- Test entity count is controlled by compile-time macro in
-  `NH_EntityAuthorityManager.cpp`:
-  - `ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT`
+- `ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT`
+  - Compile-time entity count for debug orbit simulation.

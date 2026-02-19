@@ -1,8 +1,7 @@
 #pragma once
 
-// NH naive handoff transport connection manager.
-// Owns peer-connection lifecycle and delegates lease semantics to the lease
-// coordinator component.
+// Tracks handoff peer connections.
+// Handles peer activity and timeout cleanup.
 
 #include <memory>
 #include <unordered_set>
@@ -17,9 +16,12 @@ class NH_HandoffConnectionManager : public Singleton<NH_HandoffConnectionManager
   public:
 	NH_HandoffConnectionManager() = default;
 
+	// Lifecycle
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Tick();
 	void Shutdown();
+
+	// Peer activity + lease options
 	void MarkConnectionActivity(const NetworkIdentity& peer);
 	void SetLeaseModeEnabled(bool enabled);
 
