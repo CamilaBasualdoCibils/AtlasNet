@@ -23,7 +23,9 @@ constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr uint32_t kDefaultTestEntityCount = 1;
 constexpr float kEntityPhaseStepRad = 0.7F;
 constexpr uint64_t kHandoffLeadTicks = 6;
-constexpr uint64_t kPostAdoptHandoffCooldownTicks = 12;
+// Newly adopted entities should not be immediately re-evaluated for another
+// handoff, otherwise border/corner cases can daisy-chain authority.
+constexpr uint64_t kPostTransferScanGraceTicks = 60;
 
 constexpr std::string_view kTestOwnerKey = "EntityHandoff:TestOwnerShard";
 
@@ -130,8 +132,14 @@ void EntityAuthorityManager::Tick()
 		{
 			const AtlasEntity adopted = pendingIncomingEntity->entity;
 			debugSimulator->AdoptSingleEntity(adopted);
-			adoptionHandoffCooldownUntilTick[adopted.Entity_ID] =
-				localAuthorityTick + kPostAdoptHandoffCooldownTicks;
+			const uint64_t cooldownUntilTick =
+				localAuthorityTick + kPostTransferScanGraceTicks;
+			auto& currentCooldownUntilTick =
+				adoptionHandoffCooldownUntilTick[adopted.Entity_ID];
+			if (currentCooldownUntilTick < cooldownUntilTick)
+			{
+				currentCooldownUntilTick = cooldownUntilTick;
+			}
 			pendingIncomingEntity.reset();
 		}
 		debugSimulator->SeedEntities(
