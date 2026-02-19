@@ -14,7 +14,7 @@
 
 class Log;
 
-class EntityAuthorityManager : public Singleton<EntityAuthorityManager>
+class NH_EntityAuthorityManager : public Singleton<NH_EntityAuthorityManager>
 {
   public:
 	struct PendingIncomingHandoff
@@ -32,8 +32,8 @@ class EntityAuthorityManager : public Singleton<EntityAuthorityManager>
 		uint64_t transferTick = 0;
 	};
 
-	EntityAuthorityManager();
-	~EntityAuthorityManager();
+	NH_EntityAuthorityManager();
+	~NH_EntityAuthorityManager();
 
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Tick();

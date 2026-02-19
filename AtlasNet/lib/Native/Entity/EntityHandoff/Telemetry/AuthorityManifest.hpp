@@ -11,7 +11,7 @@
 #include <optional>
 #include <vector>
 
-#include "Entity/EntityHandoff/NaiveHandoff/EntityAuthorityTracker.hpp"
+#include "Entity/Entity.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "InternalDB/InternalDB.hpp"
 #include "Global/Misc/Singleton.hpp"
@@ -21,11 +21,21 @@
 class AuthorityManifest : public Singleton<AuthorityManifest>
 {
   public:
+	struct TelemetryRow
+	{
+		AtlasEntityID entityId = 0;
+		NetworkIdentity owner;
+		AtlasEntity entitySnapshot;
+		uint16_t world = 0;
+		vec3 position = vec3(0.0F, 0.0F, 0.0F);
+		bool isClient = false;
+		ClientID clientId = UUID();
+	};
+
 	static inline constexpr size_t kAuthorityTelemetryColumnCount = 7;
 	static inline constexpr size_t kAuthorityTelemetryRowWithEntityIdCount = 8;
 
-	void TelemetryUpdate(
-		const std::vector<EntityAuthorityTracker::AuthorityTelemetryRow>& rows)
+	void TelemetryUpdate(const std::vector<TelemetryRow>& rows)
 	{
 		for (const auto& row : rows)
 		{

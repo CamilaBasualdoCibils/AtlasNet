@@ -5,7 +5,7 @@
 
 #include "Debug/Crash/CrashHandler.hpp"
 #include "Docker/DockerIO.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/EntityAuthorityManager.hpp"
+#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityManager.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
@@ -67,11 +67,11 @@ void AtlasNetServer::ShardLogicEntry(std::stop_token st)
 		}
 	}
 
-	EntityAuthorityManager::Get().Init(identity, logger);
+	NH_EntityAuthorityManager::Get().Init(identity, logger);
 	while (!st.stop_requested())
 	{
 		// Interlink::Get().Tick();
-		EntityAuthorityManager::Get().Tick();
+		NH_EntityAuthorityManager::Get().Tick();
 		std::this_thread::sleep_for(std::chrono::milliseconds(10));
 	}
 }

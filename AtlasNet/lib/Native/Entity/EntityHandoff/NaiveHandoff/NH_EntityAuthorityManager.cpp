@@ -1,16 +1,16 @@
 // Implements authority orchestration for debug handoff flow:
 // owner election, heuristic boundary triggers, send/receive handoff transitions.
 
-#include "EntityAuthorityManager.hpp"
+#include "NH_EntityAuthorityManager.hpp"
 
 #include <chrono>
 #include <optional>
 
 #include "Debug/Log.hpp"
 #include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
-#include "HandoffConnectionManager.hpp"
-#include "EntityAuthorityTracker.hpp"
-#include "HandoffPacketManager.hpp"
+#include "NH_HandoffConnectionManager.hpp"
+#include "NH_EntityAuthorityTracker.hpp"
+#include "NH_HandoffPacketManager.hpp"
 #include "Entity/EntityHandoff/Telemetry/AuthorityManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
@@ -88,9 +88,29 @@ std::optional<std::string> SelectBootstrapOwner(
 	}
 	return selectedOwner;
 }
+
+std::vector<AuthorityManifest::TelemetryRow> ToManifestRows(
+	const std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow>& trackerRows)
+{
+	std::vector<AuthorityManifest::TelemetryRow> rows;
+	rows.reserve(trackerRows.size());
+	for (const auto& trackerRow : trackerRows)
+	{
+		AuthorityManifest::TelemetryRow row;
+		row.entityId = trackerRow.entityId;
+		row.owner = trackerRow.owner;
+		row.entitySnapshot = trackerRow.entitySnapshot;
+		row.world = trackerRow.world;
+		row.position = trackerRow.position;
+		row.isClient = trackerRow.isClient;
+		row.clientId = trackerRow.clientId;
+		rows.push_back(std::move(row));
+	}
+	return rows;
+}
 }  // namespace
 
-class EntityAuthorityManager::Runtime
+class NH_EntityAuthorityManager::Runtime
 {
   public:
 	Runtime() = default;
@@ -111,7 +131,7 @@ class EntityAuthorityManager::Runtime
 		ownershipEvaluated = false;
 		hasOwnershipLogState = false;
 		lastOwnershipState = false;
-		tracker = std::make_unique<EntityAuthorityTracker>(selfIdentity, logger);
+		tracker = std::make_unique<NH_EntityAuthorityTracker>(selfIdentity, logger);
 		debugSimulator =
 			std::make_unique<DebugEntityOrbitSimulator>(selfIdentity, logger);
 		tracker->Reset();
@@ -123,21 +143,21 @@ class EntityAuthorityManager::Runtime
 		lastOwnerEvalTime = lastTickTime - kOwnershipEvalInterval;
 		lastSnapshotTime = lastTickTime - kStateSnapshotInterval;
 
-		HandoffConnectionManager::Get().Init(selfIdentity, logger);
-		HandoffPacketManager::Get().Init(selfIdentity, logger);
-		HandoffPacketManager::Get().SetCallbacks(
+		NH_HandoffConnectionManager::Get().Init(selfIdentity, logger);
+		NH_HandoffPacketManager::Get().Init(selfIdentity, logger);
+		NH_HandoffPacketManager::Get().SetCallbacks(
 			[this](const AtlasEntity& entity, const NetworkIdentity& sender,
 				   uint64_t transferTick)
 			{
 				OnIncomingHandoffEntityAtTick(entity, sender, transferTick);
 			},
 			[](const NetworkIdentity& peer)
-			{ HandoffConnectionManager::Get().MarkConnectionActivity(peer); });
+			{ NH_HandoffConnectionManager::Get().MarkConnectionActivity(peer); });
 
 		if (logger)
 		{
 			logger->DebugFormatted(
-				"[EntityHandoff] EntityAuthorityManager runtime initialized for {}",
+				"[EntityHandoff] NH_EntityAuthorityManager runtime initialized for {}",
 				selfIdentity.ToString());
 		}
 	}
@@ -150,7 +170,7 @@ class EntityAuthorityManager::Runtime
 		}
 		++localAuthorityTick;
 
-		HandoffConnectionManager::Get().Tick();
+		NH_HandoffConnectionManager::Get().Tick();
 		EvaluateTestEntityOwnership();
 		if (isTestEntityOwner && tracker && debugSimulator)
 		{
@@ -183,17 +203,17 @@ class EntityAuthorityManager::Runtime
 			if (now - lastSnapshotTime >= kStateSnapshotInterval)
 			{
 				lastSnapshotTime = now;
-				std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
-				tracker->CollectTelemetryRows(rows);
-				AuthorityManifest::Get().TelemetryUpdate(rows);
+				std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow> trackerRows;
+				tracker->CollectTelemetryRows(trackerRows);
+				AuthorityManifest::Get().TelemetryUpdate(ToManifestRows(trackerRows));
 			}
 		}
 		else if (tracker && debugSimulator)
 		{
 			tracker->SetOwnedEntities({});
-			std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
-			tracker->CollectTelemetryRows(rows);
-			AuthorityManifest::Get().TelemetryUpdate(rows);
+			std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow> trackerRows;
+			tracker->CollectTelemetryRows(trackerRows);
+			AuthorityManifest::Get().TelemetryUpdate(ToManifestRows(trackerRows));
 			debugSimulator->Reset();
 			pendingOutgoingHandoff.reset();
 		}
@@ -206,9 +226,9 @@ class EntityAuthorityManager::Runtime
 			return;
 		}
 
-		HandoffPacketManager::Get().SetCallbacks({}, {});
-		HandoffPacketManager::Get().Shutdown();
-		HandoffConnectionManager::Get().Shutdown();
+		NH_HandoffPacketManager::Get().SetCallbacks({}, {});
+		NH_HandoffPacketManager::Get().Shutdown();
+		NH_HandoffConnectionManager::Get().Shutdown();
 		tracker.reset();
 		debugSimulator.reset();
 		pendingIncomingEntity.reset();
@@ -217,7 +237,7 @@ class EntityAuthorityManager::Runtime
 
 		if (logger)
 		{
-			logger->Debug("[EntityHandoff] EntityAuthorityManager runtime shutdown");
+			logger->Debug("[EntityHandoff] NH_EntityAuthorityManager runtime shutdown");
 		}
 	}
 
@@ -231,7 +251,7 @@ class EntityAuthorityManager::Runtime
 								   const NetworkIdentity& sender,
 								   uint64_t transferTick)
 	{
-		pendingIncomingEntity = EntityAuthorityManager::PendingIncomingHandoff{
+		pendingIncomingEntity = NH_EntityAuthorityManager::PendingIncomingHandoff{
 			.entity = entity, .sender = sender, .transferTick = transferTick};
 		ownershipEvaluated = false;
 		if (logger)
@@ -298,12 +318,12 @@ class EntityAuthorityManager::Runtime
 				continue;
 			}
 			const uint64_t transferTick = localAuthorityTick + kHandoffLeadTicks;
-			HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
+			NH_HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
 													  transferTick);
 			const bool ownerSwitched =
 				InternalDB::Get()->Set(kTestOwnerKey, targetClaimKey);
 			(void)ownerSwitched;
-			pendingOutgoingHandoff = EntityAuthorityManager::PendingOutgoingHandoff{
+			pendingOutgoingHandoff = NH_EntityAuthorityManager::PendingOutgoingHandoff{
 				.entityId = entity.Entity_ID,
 				.targetIdentity = *targetIdentity,
 				.targetClaimKey = targetClaimKey,
@@ -405,9 +425,9 @@ class EntityAuthorityManager::Runtime
 
 		debugSimulator->Reset();
 		tracker->SetOwnedEntities({});
-		std::vector<EntityAuthorityTracker::AuthorityTelemetryRow> rows;
-		tracker->CollectTelemetryRows(rows);
-		AuthorityManifest::Get().TelemetryUpdate(rows);
+		std::vector<NH_EntityAuthorityTracker::AuthorityTelemetryRow> trackerRows;
+		tracker->CollectTelemetryRows(trackerRows);
+		AuthorityManifest::Get().TelemetryUpdate(ToManifestRows(trackerRows));
 		isTestEntityOwner = false;
 		ownershipEvaluated = false;
 
@@ -431,10 +451,10 @@ class EntityAuthorityManager::Runtime
 	bool ownershipEvaluated = false;
 	bool hasOwnershipLogState = false;
 	bool lastOwnershipState = false;
-	std::unique_ptr<EntityAuthorityTracker> tracker;
+	std::unique_ptr<NH_EntityAuthorityTracker> tracker;
 	std::unique_ptr<DebugEntityOrbitSimulator> debugSimulator;
-	std::optional<EntityAuthorityManager::PendingIncomingHandoff> pendingIncomingEntity;
-	std::optional<EntityAuthorityManager::PendingOutgoingHandoff>
+	std::optional<NH_EntityAuthorityManager::PendingIncomingHandoff> pendingIncomingEntity;
+	std::optional<NH_EntityAuthorityManager::PendingOutgoingHandoff>
 		pendingOutgoingHandoff;
 	uint64_t localAuthorityTick = 0;
 	std::chrono::steady_clock::time_point lastTickTime;
@@ -442,10 +462,10 @@ class EntityAuthorityManager::Runtime
 	std::chrono::steady_clock::time_point lastSnapshotTime;
 };
 
-EntityAuthorityManager::EntityAuthorityManager() = default;
-EntityAuthorityManager::~EntityAuthorityManager() = default;
+NH_EntityAuthorityManager::NH_EntityAuthorityManager() = default;
+NH_EntityAuthorityManager::~NH_EntityAuthorityManager() = default;
 
-void EntityAuthorityManager::Init(const NetworkIdentity& self,
+void NH_EntityAuthorityManager::Init(const NetworkIdentity& self,
 								  std::shared_ptr<Log> inLogger)
 {
 	if (!runtime)
@@ -455,7 +475,7 @@ void EntityAuthorityManager::Init(const NetworkIdentity& self,
 	runtime->Init(self, std::move(inLogger));
 }
 
-void EntityAuthorityManager::Tick()
+void NH_EntityAuthorityManager::Tick()
 {
 	if (!runtime)
 	{
@@ -464,7 +484,7 @@ void EntityAuthorityManager::Tick()
 	runtime->Tick();
 }
 
-void EntityAuthorityManager::Shutdown()
+void NH_EntityAuthorityManager::Shutdown()
 {
 	if (!runtime)
 	{
@@ -473,7 +493,7 @@ void EntityAuthorityManager::Shutdown()
 	runtime->Shutdown();
 }
 
-void EntityAuthorityManager::OnIncomingHandoffEntity(
+void NH_EntityAuthorityManager::OnIncomingHandoffEntity(
 	const AtlasEntity& entity, const NetworkIdentity& sender)
 {
 	if (!runtime)
@@ -483,7 +503,7 @@ void EntityAuthorityManager::OnIncomingHandoffEntity(
 	runtime->OnIncomingHandoffEntity(entity, sender);
 }
 
-void EntityAuthorityManager::OnIncomingHandoffEntityAtTick(
+void NH_EntityAuthorityManager::OnIncomingHandoffEntityAtTick(
 	const AtlasEntity& entity, const NetworkIdentity& sender,
 	const uint64_t transferTick)
 {
@@ -494,7 +514,7 @@ void EntityAuthorityManager::OnIncomingHandoffEntityAtTick(
 	runtime->OnIncomingHandoffEntityAtTick(entity, sender, transferTick);
 }
 
-bool EntityAuthorityManager::IsInitialized() const
+bool NH_EntityAuthorityManager::IsInitialized() const
 {
 	return runtime && runtime->IsInitialized();
 }

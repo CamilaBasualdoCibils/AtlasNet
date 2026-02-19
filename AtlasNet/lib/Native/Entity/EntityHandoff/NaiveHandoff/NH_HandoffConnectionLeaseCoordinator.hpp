@@ -12,7 +12,7 @@
 #include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class HandoffConnectionLeaseCoordinator
+class NH_HandoffConnectionLeaseCoordinator
 {
   public:
 	static inline constexpr std::chrono::seconds kDefaultInactivityTimeout =
@@ -28,7 +28,7 @@ class HandoffConnectionLeaseCoordinator
 		std::string leaseKeyPrefix = "EntityHandoff:ConnLease:";
 	};
 
-	HandoffConnectionLeaseCoordinator(const NetworkIdentity& self,
+	NH_HandoffConnectionLeaseCoordinator(const NetworkIdentity& self,
 									  std::shared_ptr<Log> inLogger,
 									  Options inOptions);
 

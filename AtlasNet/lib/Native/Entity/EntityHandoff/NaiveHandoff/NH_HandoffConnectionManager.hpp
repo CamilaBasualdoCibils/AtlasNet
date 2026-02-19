@@ -6,15 +6,15 @@
 #include <memory>
 #include <unordered_set>
 
-#include "HandoffConnectionLeaseCoordinator.hpp"
+#include "NH_HandoffConnectionLeaseCoordinator.hpp"
 #include "Debug/Log.hpp"
 #include "Global/Misc/Singleton.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class HandoffConnectionManager : public Singleton<HandoffConnectionManager>
+class NH_HandoffConnectionManager : public Singleton<NH_HandoffConnectionManager>
 {
   public:
-	HandoffConnectionManager() = default;
+	NH_HandoffConnectionManager() = default;
 
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Tick();
@@ -30,5 +30,5 @@ class HandoffConnectionManager : public Singleton<HandoffConnectionManager>
 	bool initialized = false;
 	std::unordered_set<NetworkIdentity> activeConnections;
 	bool leaseModeEnabled = true;
-	std::unique_ptr<HandoffConnectionLeaseCoordinator> leaseCoordinator;
+	std::unique_ptr<NH_HandoffConnectionLeaseCoordinator> leaseCoordinator;
 };

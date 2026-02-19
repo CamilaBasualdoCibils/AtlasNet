@@ -5,7 +5,7 @@
 
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
-#include "Entity/EntityHandoff/NaiveHandoff/EntityAuthorityManager.hpp"
+#include "Entity/EntityHandoff/NaiveHandoff/NH_EntityAuthorityManager.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Global/Misc/UUID.hpp"
@@ -50,10 +50,10 @@ void Partition::Init()
 	while (!ShouldShutdown)
 	{
 		std::this_thread::sleep_for(kPartitionTickInterval);	// ~30 updates/sec
-		EntityAuthorityManager::Get().Tick();
+		NH_EntityAuthorityManager::Get().Tick();
 	}
 
 	logger->Debug("Shutting Down");
-	EntityAuthorityManager::Get().Shutdown();
+	NH_EntityAuthorityManager::Get().Shutdown();
 	Interlink::Get().Shutdown();
 }

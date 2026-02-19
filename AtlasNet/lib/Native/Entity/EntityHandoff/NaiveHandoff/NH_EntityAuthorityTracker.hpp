@@ -15,7 +15,7 @@
 #include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class EntityAuthorityTracker
+class NH_EntityAuthorityTracker
 {
   public:
 	enum class AuthorityState : uint8_t
@@ -42,7 +42,7 @@ class EntityAuthorityTracker
 		ClientID clientId = UUID();
 	};
 
-	EntityAuthorityTracker(const NetworkIdentity& self,
+	NH_EntityAuthorityTracker(const NetworkIdentity& self,
 						   std::shared_ptr<Log> inLogger);
 
 	void Reset();

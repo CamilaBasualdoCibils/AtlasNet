@@ -1,29 +1,29 @@
 // Implements handoff connection init/tick/shutdown and activity-driven pruning.
 
-#include "HandoffConnectionManager.hpp"
+#include "NH_HandoffConnectionManager.hpp"
 
 #include "Interlink/Interlink.hpp"
 
-void HandoffConnectionManager::Init(const NetworkIdentity& self,
+void NH_HandoffConnectionManager::Init(const NetworkIdentity& self,
 									std::shared_ptr<Log> inLogger)
 {
 	selfIdentity = self;
 	logger = std::move(inLogger);
 	activeConnections.clear();
-	leaseCoordinator = std::make_unique<HandoffConnectionLeaseCoordinator>(
-		selfIdentity, logger, HandoffConnectionLeaseCoordinator::Options{});
+	leaseCoordinator = std::make_unique<NH_HandoffConnectionLeaseCoordinator>(
+		selfIdentity, logger, NH_HandoffConnectionLeaseCoordinator::Options{});
 	leaseCoordinator->SetLeaseEnabled(leaseModeEnabled);
 	initialized = true;
 
 	if (logger)
 	{
 		logger->DebugFormatted(
-			"[EntityHandoff] HandoffConnectionManager initialized for {}",
+			"[EntityHandoff] NH_HandoffConnectionManager initialized for {}",
 			selfIdentity.ToString());
 	}
 }
 
-void HandoffConnectionManager::Tick()
+void NH_HandoffConnectionManager::Tick()
 {
 	if (!initialized || !leaseCoordinator)
 	{
@@ -47,7 +47,7 @@ void HandoffConnectionManager::Tick()
 		});
 }
 
-void HandoffConnectionManager::Shutdown()
+void NH_HandoffConnectionManager::Shutdown()
 {
 	if (!initialized)
 	{
@@ -69,11 +69,11 @@ void HandoffConnectionManager::Shutdown()
 	initialized = false;
 	if (logger)
 	{
-		logger->Debug("[EntityHandoff] HandoffConnectionManager shutdown");
+		logger->Debug("[EntityHandoff] NH_HandoffConnectionManager shutdown");
 	}
 }
 
-void HandoffConnectionManager::MarkConnectionActivity(const NetworkIdentity& peer)
+void NH_HandoffConnectionManager::MarkConnectionActivity(const NetworkIdentity& peer)
 {
 	if (!initialized)
 	{
@@ -87,7 +87,7 @@ void HandoffConnectionManager::MarkConnectionActivity(const NetworkIdentity& pee
 	}
 }
 
-void HandoffConnectionManager::SetLeaseModeEnabled(bool enabled)
+void NH_HandoffConnectionManager::SetLeaseModeEnabled(bool enabled)
 {
 	leaseModeEnabled = enabled;
 	if (leaseCoordinator)

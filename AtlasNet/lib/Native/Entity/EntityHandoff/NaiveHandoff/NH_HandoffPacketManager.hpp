@@ -14,14 +14,14 @@
 
 class GenericEntityPacket;
 
-class HandoffPacketManager : public Singleton<HandoffPacketManager>
+class NH_HandoffPacketManager : public Singleton<NH_HandoffPacketManager>
 {
   public:
 	using OnIncomingHandoffCallback =
 		std::function<void(const AtlasEntity&, const NetworkIdentity&, uint64_t)>;
 	using OnPeerActivityCallback = std::function<void(const NetworkIdentity&)>;
 
-	HandoffPacketManager() = default;
+	NH_HandoffPacketManager() = default;
 
 	void Init(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 	void Shutdown();

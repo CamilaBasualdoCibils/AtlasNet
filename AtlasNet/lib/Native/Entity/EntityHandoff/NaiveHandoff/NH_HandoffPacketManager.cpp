@@ -1,6 +1,6 @@
 // Implements entity packet send/receive handling for handoff and adoption paths.
 
-#include "HandoffPacketManager.hpp"
+#include "NH_HandoffPacketManager.hpp"
 
 #include <chrono>
 
@@ -17,7 +17,7 @@ uint64_t NowMs()
 }
 }  // namespace
 
-void HandoffPacketManager::Init(const NetworkIdentity& self,
+void NH_HandoffPacketManager::Init(const NetworkIdentity& self,
 								std::shared_ptr<Log> inLogger)
 {
 	selfIdentity = self;
@@ -27,7 +27,7 @@ void HandoffPacketManager::Init(const NetworkIdentity& self,
 	initialized = true;
 }
 
-void HandoffPacketManager::Shutdown()
+void NH_HandoffPacketManager::Shutdown()
 {
 	handoffEntitySub.Reset();
 	onIncomingHandoff = nullptr;
@@ -35,7 +35,7 @@ void HandoffPacketManager::Shutdown()
 	initialized = false;
 }
 
-void HandoffPacketManager::SetCallbacks(
+void NH_HandoffPacketManager::SetCallbacks(
 	OnIncomingHandoffCallback incomingCallback,
 	OnPeerActivityCallback peerActivityCallback)
 {
@@ -43,7 +43,7 @@ void HandoffPacketManager::SetCallbacks(
 	onPeerActivity = std::move(peerActivityCallback);
 }
 
-void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
+void NH_HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
 {
 	if (!initialized)
 	{
@@ -63,7 +63,7 @@ void HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) const
 	Interlink::Get().SendMessage(target, packet, NetworkMessageSendFlag::eReliableBatched);
 }
 
-void HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
+void NH_HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 											 const AtlasEntity& entity,
 											 const uint64_t transferTick) const
 {
@@ -89,7 +89,7 @@ void HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 	}
 }
 
-void HandoffPacketManager::OnGenericEntityPacket(
+void NH_HandoffPacketManager::OnGenericEntityPacket(
 	const GenericEntityPacket& packet) const
 {
 	if (!initialized)

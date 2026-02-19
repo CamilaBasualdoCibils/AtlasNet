@@ -1,21 +1,21 @@
 // Implements in-memory entity authority state tracking and telemetry row export.
 
-#include "EntityAuthorityTracker.hpp"
+#include "NH_EntityAuthorityTracker.hpp"
 
 #include <unordered_set>
 
-EntityAuthorityTracker::EntityAuthorityTracker(const NetworkIdentity& self,
+NH_EntityAuthorityTracker::NH_EntityAuthorityTracker(const NetworkIdentity& self,
 											   std::shared_ptr<Log> inLogger)
 	: selfIdentity(self), logger(std::move(inLogger))
 {
 }
 
-void EntityAuthorityTracker::Reset()
+void NH_EntityAuthorityTracker::Reset()
 {
 	authorityByEntityId.clear();
 }
 
-void EntityAuthorityTracker::SetOwnedEntities(
+void NH_EntityAuthorityTracker::SetOwnedEntities(
 	const std::vector<AtlasEntity>& ownedEntities)
 {
 	std::unordered_set<AtlasEntityID> keepIds;
@@ -53,7 +53,7 @@ void EntityAuthorityTracker::SetOwnedEntities(
 	}
 }
 
-void EntityAuthorityTracker::CollectTelemetryRows(
+void NH_EntityAuthorityTracker::CollectTelemetryRows(
 	std::vector<AuthorityTelemetryRow>& outRows) const
 {
 	outRows.clear();
@@ -72,7 +72,7 @@ void EntityAuthorityTracker::CollectTelemetryRows(
 	}
 }
 
-void EntityAuthorityTracker::DebugLogTrackedEntities() const
+void NH_EntityAuthorityTracker::DebugLogTrackedEntities() const
 {
 	if (!logger)
 	{
@@ -94,7 +94,7 @@ void EntityAuthorityTracker::DebugLogTrackedEntities() const
 	}
 }
 
-std::vector<AtlasEntity> EntityAuthorityTracker::GetOwnedEntitySnapshots() const
+std::vector<AtlasEntity> NH_EntityAuthorityTracker::GetOwnedEntitySnapshots() const
 {
 	std::vector<AtlasEntity> snapshots;
 	snapshots.reserve(authorityByEntityId.size());
@@ -105,7 +105,7 @@ std::vector<AtlasEntity> EntityAuthorityTracker::GetOwnedEntitySnapshots() const
 	return snapshots;
 }
 
-bool EntityAuthorityTracker::MarkPassing(AtlasEntityID entityId,
+bool NH_EntityAuthorityTracker::MarkPassing(AtlasEntityID entityId,
 										 const NetworkIdentity& passingTarget)
 {
 	const auto it = authorityByEntityId.find(entityId);
@@ -126,7 +126,7 @@ bool EntityAuthorityTracker::MarkPassing(AtlasEntityID entityId,
 	return true;
 }
 
-void EntityAuthorityTracker::MarkAuthoritative(AtlasEntityID entityId)
+void NH_EntityAuthorityTracker::MarkAuthoritative(AtlasEntityID entityId)
 {
 	const auto it = authorityByEntityId.find(entityId);
 	if (it == authorityByEntityId.end())
@@ -137,7 +137,7 @@ void EntityAuthorityTracker::MarkAuthoritative(AtlasEntityID entityId)
 	it->second.passingTo.reset();
 }
 
-void EntityAuthorityTracker::SetAuthorityState(
+void NH_EntityAuthorityTracker::SetAuthorityState(
 	AtlasEntityID entityId, const AuthorityState state,
 	const std::optional<NetworkIdentity>& passingTo)
 {
@@ -150,7 +150,7 @@ void EntityAuthorityTracker::SetAuthorityState(
 	it->second.passingTo = passingTo;
 }
 
-void EntityAuthorityTracker::RemoveEntity(const AtlasEntityID entityId)
+void NH_EntityAuthorityTracker::RemoveEntity(const AtlasEntityID entityId)
 {
 	authorityByEntityId.erase(entityId);
 }

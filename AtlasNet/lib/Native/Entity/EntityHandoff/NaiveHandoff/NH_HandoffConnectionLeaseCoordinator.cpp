@@ -1,19 +1,19 @@
 // Implements lease acquire/refresh/release and stale-activity reap callbacks.
 
-#include "HandoffConnectionLeaseCoordinator.hpp"
+#include "NH_HandoffConnectionLeaseCoordinator.hpp"
 
 #include <string>
 #include <vector>
 
 #include "InternalDB/InternalDB.hpp"
 
-HandoffConnectionLeaseCoordinator::HandoffConnectionLeaseCoordinator(
+NH_HandoffConnectionLeaseCoordinator::NH_HandoffConnectionLeaseCoordinator(
 	const NetworkIdentity& self, std::shared_ptr<Log> inLogger, Options inOptions)
 	: selfIdentity(self), logger(std::move(inLogger)), options(std::move(inOptions))
 {
 }
 
-std::string HandoffConnectionLeaseCoordinator::BuildLeaseKey(
+std::string NH_HandoffConnectionLeaseCoordinator::BuildLeaseKey(
 	const NetworkIdentity& peer) const
 {
 	const std::string selfKey = selfIdentity.ToString();
@@ -25,7 +25,7 @@ std::string HandoffConnectionLeaseCoordinator::BuildLeaseKey(
 	return options.leaseKeyPrefix + peerKey + "|" + selfKey;
 }
 
-bool HandoffConnectionLeaseCoordinator::TryAcquireOrRefreshLease(
+bool NH_HandoffConnectionLeaseCoordinator::TryAcquireOrRefreshLease(
 	const NetworkIdentity& peer) const
 {
 	if (!options.leaseEnabled)
@@ -48,7 +48,7 @@ bool HandoffConnectionLeaseCoordinator::TryAcquireOrRefreshLease(
 	return true;
 }
 
-void HandoffConnectionLeaseCoordinator::ReleaseLeaseIfOwned(
+void NH_HandoffConnectionLeaseCoordinator::ReleaseLeaseIfOwned(
 	const NetworkIdentity& peer) const
 {
 	if (!options.leaseEnabled)
@@ -65,7 +65,7 @@ void HandoffConnectionLeaseCoordinator::ReleaseLeaseIfOwned(
 	}
 }
 
-void HandoffConnectionLeaseCoordinator::MarkConnectionActivity(
+void NH_HandoffConnectionLeaseCoordinator::MarkConnectionActivity(
 	const NetworkIdentity& peer)
 {
 	lastActivityByPeer[peer] = std::chrono::steady_clock::now();
@@ -73,7 +73,7 @@ void HandoffConnectionLeaseCoordinator::MarkConnectionActivity(
 	(void)acquired;
 }
 
-void HandoffConnectionLeaseCoordinator::ReapInactiveConnections(
+void NH_HandoffConnectionLeaseCoordinator::ReapInactiveConnections(
 	std::chrono::steady_clock::time_point now,
 	const std::function<void(const NetworkIdentity&, std::chrono::seconds)>&
 		onInactive)
@@ -97,7 +97,7 @@ void HandoffConnectionLeaseCoordinator::ReapInactiveConnections(
 	}
 }
 
-void HandoffConnectionLeaseCoordinator::Clear()
+void NH_HandoffConnectionLeaseCoordinator::Clear()
 {
 	for (const auto& [peer, _lastActivity] : lastActivityByPeer)
 	{
