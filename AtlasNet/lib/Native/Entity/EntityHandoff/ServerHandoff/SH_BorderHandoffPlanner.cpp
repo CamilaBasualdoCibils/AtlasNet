@@ -66,7 +66,7 @@ SH_BorderHandoffPlanner::SH_BorderHandoffPlanner(const NetworkIdentity& self,
 
 std::vector<SH_PendingOutgoingHandoff>
 SH_BorderHandoffPlanner::PlanAndSendAll(
-	SH_EntityAuthorityTracker& tracker, const uint64_t localAuthorityTick) const
+	SH_EntityAuthorityTracker& tracker, const uint64_t nowUnixTimeUs) const
 {
 	std::vector<SH_PendingOutgoingHandoff> outgoingHandoffs;
 	std::unordered_map<std::string, GridShape> claimedBounds;
@@ -116,25 +116,29 @@ SH_BorderHandoffPlanner::PlanAndSendAll(
 			continue;
 		}
 
-		const uint64_t transferTick =
-			localAuthorityTick + options.handoffLeadTicks;
+		const auto delayUsCount = options.handoffDelay.count();
+		const uint64_t delayUs =
+			delayUsCount > 0 ? static_cast<uint64_t>(delayUsCount) : 0;
+		const uint64_t transferTimeUs = nowUnixTimeUs + delayUs;
 		SH_HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
-														 transferTick);
+														 transferTimeUs);
 
 		if (logger)
 		{
 			logger->WarningFormatted(
 				"[EntityHandoff][SH] Triggered passing state entity={} pos={} "
-				"self_bound_id={} target_claim={} target_id={} transfer_tick={}",
+				"self_bound_id={} target_claim={} target_id={} transfer_time_us={} "
+				"handoff_delay_us={}",
 				entity.Entity_ID, glm::to_string(position), selfBounds.GetID(),
-				targetClaimKey, targetIdentity->ToString(), transferTick);
+				targetClaimKey, targetIdentity->ToString(), transferTimeUs,
+				delayUs);
 		}
 
 		outgoingHandoffs.push_back(SH_PendingOutgoingHandoff{
 			.entityId = entity.Entity_ID,
 			.targetIdentity = *targetIdentity,
 			.targetClaimKey = targetClaimKey,
-			.transferTick = transferTick});
+			.transferTimeUs = transferTimeUs});
 	}
 
 	return outgoingHandoffs;

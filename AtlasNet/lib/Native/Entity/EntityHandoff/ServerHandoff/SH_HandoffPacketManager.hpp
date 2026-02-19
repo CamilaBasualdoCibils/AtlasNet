@@ -35,7 +35,7 @@ class SH_HandoffPacketManager : public Singleton<SH_HandoffPacketManager>
 	void SendEntityProbe(const NetworkIdentity& target) const;
 	void SendEntityHandoff(const NetworkIdentity& target,
 						   const AtlasEntity& entity,
-						   uint64_t transferTick) const;
+						   uint64_t transferTimeUs) const;
 
 	[[nodiscard]] bool IsInitialized() const { return initialized; }
 

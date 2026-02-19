@@ -66,7 +66,7 @@ void SH_HandoffPacketManager::SendEntityProbe(const NetworkIdentity& target) con
 
 void SH_HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 											 const AtlasEntity& entity,
-											 const uint64_t transferTick) const
+											 const uint64_t transferTimeUs) const
 {
 	if (!initialized)
 	{
@@ -77,16 +77,16 @@ void SH_HandoffPacketManager::SendEntityHandoff(const NetworkIdentity& target,
 	packet.sender = selfIdentity;
 	packet.entity = entity;
 	packet.protocolVersion = GenericEntityPacket::kProtocolVersion;
-	packet.transferTick = transferTick;
+	packet.transferTick = transferTimeUs;
 	packet.sentAtMs = NowMs();
 	Interlink::Get().SendMessage(target, packet, NetworkMessageSendFlag::eReliableBatched);
 
 	if (logger)
 	{
 		logger->WarningFormatted(
-			"[EntityHandoff] HANDOFF tx entity={} from={} to={} transfer_tick={}",
+			"[EntityHandoff] HANDOFF tx entity={} from={} to={} transfer_time_us={}",
 			entity.Entity_ID, selfIdentity.ToString(), target.ToString(),
-			transferTick);
+			transferTimeUs);
 	}
 }
 
@@ -107,9 +107,10 @@ void SH_HandoffPacketManager::OnGenericEntityPacket(
 	{
 		onPeerActivity(packet.sender);
 	}
+	const uint64_t transferTimeUs = packet.transferTick;
 	if (onIncomingHandoff)
 	{
-		onIncomingHandoff(packet.entity, packet.sender, packet.transferTick);
+		onIncomingHandoff(packet.entity, packet.sender, transferTimeUs);
 	}
 
 	if (logger)
@@ -118,9 +119,9 @@ void SH_HandoffPacketManager::OnGenericEntityPacket(
 		const uint64_t latencyMs = nowMs > packet.sentAtMs ? nowMs - packet.sentAtMs : 0;
 		logger->WarningFormatted(
 			"[EntityHandoff] HANDOFF rx entity={} from={} latency={}ms metadata={}B "
-			"transfer_tick={} protocol_v={}",
+			"transfer_time_us={} protocol_v={}",
 			packet.entity.Entity_ID, packet.sender.ToString(), latencyMs,
-			packet.entity.Metadata.size(), packet.transferTick,
+			packet.entity.Metadata.size(), transferTimeUs,
 			static_cast<uint32_t>(packet.protocolVersion));
 	}
 }

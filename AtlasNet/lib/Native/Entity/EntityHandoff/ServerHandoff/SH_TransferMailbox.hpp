@@ -11,7 +11,7 @@ class SH_EntityAuthorityTracker;
 class SH_TelemetryPublisher;
 
 // Stores pending handoffs by entity id.
-// Handles "adopt incoming" and "commit outgoing" when due.
+// Handles "adopt incoming" and "commit outgoing" when transfer time is due.
 class SH_TransferMailbox
 {
   public:
@@ -22,18 +22,18 @@ class SH_TransferMailbox
 
 	// Adds incoming handoff to pending map.
 	void QueueIncoming(const AtlasEntity& entity, const NetworkIdentity& sender,
-					   uint64_t transferTick);
+					   uint64_t transferTimeUs);
 
 	// Adopts all due incoming handoffs.
 	[[nodiscard]] size_t AdoptIncomingIfDue(
-		uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator);
+		uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator);
 
 	// Adds outgoing handoff to pending map.
 	void AddPendingOutgoing(const SH_PendingOutgoingHandoff& handoff);
 
 	// Commits all due outgoing handoffs.
 	[[nodiscard]] size_t CommitOutgoingIfDue(
-		uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator,
+		uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator,
 		SH_EntityAuthorityTracker& tracker,
 		const SH_TelemetryPublisher& telemetryPublisher);
 	void ClearPendingOutgoing();

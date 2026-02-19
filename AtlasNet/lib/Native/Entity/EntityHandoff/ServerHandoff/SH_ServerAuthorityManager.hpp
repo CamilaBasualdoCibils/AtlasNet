@@ -25,9 +25,9 @@ class SH_ServerAuthorityManager : public Singleton<SH_ServerAuthorityManager>
 	// Network handoff ingress
 	void OnIncomingHandoffEntity(const AtlasEntity& entity,
 								 const NetworkIdentity& sender);
-	void OnIncomingHandoffEntityAtTick(const AtlasEntity& entity,
-									   const NetworkIdentity& sender,
-									   uint64_t transferTick);
+	void OnIncomingHandoffEntityAtTimeUs(const AtlasEntity& entity,
+										 const NetworkIdentity& sender,
+										 uint64_t transferTimeUs);
 
 	[[nodiscard]] bool IsInitialized() const;
 

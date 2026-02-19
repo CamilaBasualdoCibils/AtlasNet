@@ -37,9 +37,9 @@ class SH_ServerAuthorityRuntime
 	// Network handoff ingress
 	void OnIncomingHandoffEntity(const AtlasEntity& entity,
 								 const NetworkIdentity& sender);
-	void OnIncomingHandoffEntityAtTick(const AtlasEntity& entity,
-									   const NetworkIdentity& sender,
-									   uint64_t transferTick);
+	void OnIncomingHandoffEntityAtTimeUs(const AtlasEntity& entity,
+										 const NetworkIdentity& sender,
+										 uint64_t transferTimeUs);
 
 	[[nodiscard]] bool IsInitialized() const { return initialized; }
 
@@ -48,7 +48,6 @@ class SH_ServerAuthorityRuntime
 	std::shared_ptr<Log> logger;
 	bool initialized = false;
 	bool hasSeededInitialEntities = false;
-	uint64_t localAuthorityTick = 0;
 	std::chrono::steady_clock::time_point lastTickTime;
 	std::chrono::steady_clock::time_point lastSnapshotTime;
 	std::unique_ptr<SH_EntityAuthorityTracker> tracker;

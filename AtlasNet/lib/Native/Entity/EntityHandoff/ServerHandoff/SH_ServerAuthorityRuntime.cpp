@@ -24,8 +24,23 @@ constexpr float kOrbitAngularSpeedRadPerSec = 0.35F;
 constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr float kEntityPhaseStepRad = 0.7F;
 
+#ifndef ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US
+#define ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US 60000
+#endif
+constexpr int64_t kTransferDelayUsRaw = ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US;
+constexpr std::chrono::microseconds kTransferDelay(
+	kTransferDelayUsRaw > 0 ? kTransferDelayUsRaw : 0);
+
+uint64_t NowUnixTimeUs()
+{
+	return static_cast<uint64_t>(
+		std::chrono::duration_cast<std::chrono::microseconds>(
+			std::chrono::system_clock::now().time_since_epoch())
+			.count());
+}
+
 #ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
-#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 2000
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 1
 #endif
 constexpr uint32_t kDefaultTestEntityCount =
 	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)
@@ -50,7 +65,6 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	logger = std::move(inLogger);
 	initialized = true;
 	hasSeededInitialEntities = false;
-	localAuthorityTick = 0;
 	lastTickTime = std::chrono::steady_clock::now();
 	lastSnapshotTime = lastTickTime - kStateSnapshotInterval;
 
@@ -59,8 +73,9 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 		std::make_unique<DebugEntityOrbitSimulator>(selfIdentity, logger);
 	ownershipElection =
 		std::make_unique<SH_OwnershipElection>(selfIdentity, logger);
-	borderPlanner =
-		std::make_unique<SH_BorderHandoffPlanner>(selfIdentity, logger);
+	borderPlanner = std::make_unique<SH_BorderHandoffPlanner>(
+		selfIdentity, logger,
+		SH_BorderHandoffPlanner::Options{.handoffDelay = kTransferDelay});
 	transferMailbox = std::make_unique<SH_TransferMailbox>(logger);
 	telemetryPublisher = std::make_unique<SH_TelemetryPublisher>();
 
@@ -73,9 +88,9 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	SH_HandoffPacketManager::Get().Init(selfIdentity, logger);
 	SH_HandoffPacketManager::Get().SetCallbacks(
 		[this](const AtlasEntity& entity, const NetworkIdentity& sender,
-			   uint64_t transferTick)
+			   uint64_t transferTimeUs)
 		{
-			OnIncomingHandoffEntityAtTick(entity, sender, transferTick);
+			OnIncomingHandoffEntityAtTimeUs(entity, sender, transferTimeUs);
 		},
 		[](const NetworkIdentity& peer)
 		{ SH_HandoffConnectionManager::Get().MarkConnectionActivity(peer); });
@@ -95,10 +110,10 @@ void SH_ServerAuthorityRuntime::Tick()
 	{
 		return;
 	}
-	++localAuthorityTick;
 
 	SH_HandoffConnectionManager::Get().Tick();
 	const auto now = std::chrono::steady_clock::now();
+	const uint64_t nowUnixTimeUs = NowUnixTimeUs();
 	const float deltaSeconds =
 		std::chrono::duration<float>(now - lastTickTime).count();
 	lastTickTime = now;
@@ -106,12 +121,13 @@ void SH_ServerAuthorityRuntime::Tick()
 		ownershipElection && ownershipElection->Evaluate(now);
 
 	const size_t adoptedCount =
-		transferMailbox->AdoptIncomingIfDue(localAuthorityTick, *debugSimulator);
+		transferMailbox->AdoptIncomingIfDue(nowUnixTimeUs, *debugSimulator);
 	if (adoptedCount > 0 && logger)
 	{
 		logger->DebugFormatted(
-			"[EntityHandoff][SH] Adopted {} incoming handoff entities at tick={}",
-			adoptedCount, localAuthorityTick);
+			"[EntityHandoff][SH] Adopted {} incoming handoff entities at "
+			"now_unix_us={}",
+			adoptedCount, nowUnixTimeUs);
 	}
 
 	if (isOwner && !hasSeededInitialEntities)
@@ -135,14 +151,14 @@ void SH_ServerAuthorityRuntime::Tick()
 	tracker->SetOwnedEntities(debugSimulator->GetEntitiesSnapshot());
 
 	const auto outgoingHandoffs =
-		borderPlanner->PlanAndSendAll(*tracker, localAuthorityTick);
+		borderPlanner->PlanAndSendAll(*tracker, nowUnixTimeUs);
 	for (const auto& outgoing : outgoingHandoffs)
 	{
 		transferMailbox->AddPendingOutgoing(outgoing);
 	}
 
 	const size_t committedCount = transferMailbox->CommitOutgoingIfDue(
-		localAuthorityTick, *debugSimulator, *tracker, *telemetryPublisher);
+		nowUnixTimeUs, *debugSimulator, *tracker, *telemetryPublisher);
 	if ((adoptedCount > 0 || committedCount > 0 || !outgoingHandoffs.empty()) &&
 		ownershipElection)
 	{
@@ -190,19 +206,19 @@ void SH_ServerAuthorityRuntime::Shutdown()
 void SH_ServerAuthorityRuntime::OnIncomingHandoffEntity(
 	const AtlasEntity& entity, const NetworkIdentity& sender)
 {
-	OnIncomingHandoffEntityAtTick(entity, sender, 0);
+	OnIncomingHandoffEntityAtTimeUs(entity, sender, 0);
 }
 
-void SH_ServerAuthorityRuntime::OnIncomingHandoffEntityAtTick(
+void SH_ServerAuthorityRuntime::OnIncomingHandoffEntityAtTimeUs(
 	const AtlasEntity& entity, const NetworkIdentity& sender,
-	const uint64_t transferTick)
+	const uint64_t transferTimeUs)
 {
 	if (!transferMailbox)
 	{
 		return;
 	}
 
-	transferMailbox->QueueIncoming(entity, sender, transferTick);
+	transferMailbox->QueueIncoming(entity, sender, transferTimeUs);
 	if (ownershipElection)
 	{
 		ownershipElection->Invalidate();

@@ -1,5 +1,5 @@
 // SH transfer mailbox.
-// Stores pending incoming/outgoing handoffs and applies transfer-tick actions.
+// Stores pending incoming/outgoing handoffs and applies transfer-time actions.
 
 #include "SH_TransferMailbox.hpp"
 
@@ -24,21 +24,21 @@ void SH_TransferMailbox::Reset()
 
 void SH_TransferMailbox::QueueIncoming(const AtlasEntity& entity,
 									 const NetworkIdentity& sender,
-									 const uint64_t transferTick)
+									 const uint64_t transferTimeUs)
 {
 	pendingIncomingByEntityId[entity.Entity_ID] = SH_PendingIncomingHandoff{
-		.entity = entity, .sender = sender, .transferTick = transferTick};
+		.entity = entity, .sender = sender, .transferTimeUs = transferTimeUs};
 
 	if (logger)
 	{
 		logger->WarningFormatted(
-			"[EntityHandoff][SH] Received handoff entity={} from={} transfer_tick={}",
-			entity.Entity_ID, sender.ToString(), transferTick);
+			"[EntityHandoff][SH] Received handoff entity={} from={} transfer_time_us={}",
+			entity.Entity_ID, sender.ToString(), transferTimeUs);
 	}
 }
 
 size_t SH_TransferMailbox::AdoptIncomingIfDue(
-	const uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator)
+	const uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator)
 {
 	if (pendingIncomingByEntityId.empty())
 	{
@@ -49,7 +49,7 @@ size_t SH_TransferMailbox::AdoptIncomingIfDue(
 	adoptedIds.reserve(pendingIncomingByEntityId.size());
 	for (const auto& [entityId, handoff] : pendingIncomingByEntityId)
 	{
-		if (localAuthorityTick < handoff.transferTick)
+		if (nowUnixTimeUs < handoff.transferTimeUs)
 		{
 			continue;
 		}
@@ -71,7 +71,7 @@ void SH_TransferMailbox::AddPendingOutgoing(
 }
 
 size_t SH_TransferMailbox::CommitOutgoingIfDue(
-	const uint64_t localAuthorityTick, DebugEntityOrbitSimulator& debugSimulator,
+	const uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator,
 	SH_EntityAuthorityTracker& tracker,
 	const SH_TelemetryPublisher& telemetryPublisher)
 {
@@ -86,7 +86,7 @@ size_t SH_TransferMailbox::CommitOutgoingIfDue(
 	canceledIds.reserve(pendingOutgoingByEntityId.size());
 	for (const auto& [entityId, handoff] : pendingOutgoingByEntityId)
 	{
-		if (localAuthorityTick < handoff.transferTick)
+		if (nowUnixTimeUs < handoff.transferTimeUs)
 		{
 			continue;
 		}
@@ -104,9 +104,9 @@ size_t SH_TransferMailbox::CommitOutgoingIfDue(
 		{
 			logger->WarningFormatted(
 				"[EntityHandoff][SH] Committed outgoing handoff entity={} target={} "
-				"transfer_tick={}",
+				"transfer_time_us={}",
 				handoff.entityId, handoff.targetIdentity.ToString(),
-				handoff.transferTick);
+				handoff.transferTimeUs);
 		}
 	}
 

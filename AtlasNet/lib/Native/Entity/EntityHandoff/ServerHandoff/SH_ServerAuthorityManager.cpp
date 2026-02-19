@@ -48,15 +48,15 @@ void SH_ServerAuthorityManager::OnIncomingHandoffEntity(
 	runtime->OnIncomingHandoffEntity(entity, sender);
 }
 
-void SH_ServerAuthorityManager::OnIncomingHandoffEntityAtTick(
+void SH_ServerAuthorityManager::OnIncomingHandoffEntityAtTimeUs(
 	const AtlasEntity& entity, const NetworkIdentity& sender,
-	const uint64_t transferTick)
+	const uint64_t transferTimeUs)
 {
 	if (!runtime)
 	{
 		return;
 	}
-	runtime->OnIncomingHandoffEntityAtTick(entity, sender, transferTick);
+	runtime->OnIncomingHandoffEntityAtTimeUs(entity, sender, transferTimeUs);
 }
 
 bool SH_ServerAuthorityManager::IsInitialized() const

@@ -2,11 +2,12 @@
 
 ## Simple Protocol
 
-- sender picks a future tick: `transferTick = now + lead`
+- sender picks one agreed switch time in Unix microseconds:
+  `transferTimeUs = nowUnixUs + handoffDelayUs`
 - sender sends entity snapshot to target shard
 - target stores it as pending
-- target adopts when tick reaches `transferTick`
-- sender drops local authority when tick reaches `transferTick`
+- target adopts when local `nowUnixUs >= transferTimeUs`
+- sender drops local authority when local `nowUnixUs >= transferTimeUs`
 
 This version still uses timed handoff
 
@@ -27,9 +28,11 @@ This version still uses timed handoff
 
 ## Main Tuning Knob
 
-- `SH_BorderHandoffPlanner::Options::handoffLeadTicks`
-  - Bigger value: safer timing, slower switch.
-  - Smaller value: faster switch, less timing buffer.
+- `SH_BorderHandoffPlanner::Options::handoffDelay`
+  - Bigger value: more safety margin for network jitter.
+  - Smaller value: faster switch, less buffer.
+- Build-time override:
+  - `ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US` (default `60000` = `60ms`)
 
 ## File Responsibilities
 

@@ -7,6 +7,7 @@ import { ShardTelemetryRow } from '../components/ShardTelemetryRow';
 import { TelemetryPanel } from '../components/TelemetryPanel';
 
 const ENABLE_NETWORK_TELEMETRY = true;
+const DEFAULT_POLL_INTERVAL_MS = 200;
 
 type ShardState = {
   shardId: string;
@@ -87,7 +88,7 @@ export default function NetworkTelemetryPage() {
 
     // initial + interval
     poll();
-    const id = setInterval(poll, 500);
+    const id = setInterval(poll, DEFAULT_POLL_INTERVAL_MS);
 
     return () => {
       alive = false;
