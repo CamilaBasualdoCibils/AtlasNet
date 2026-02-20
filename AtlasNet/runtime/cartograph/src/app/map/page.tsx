@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import type { ShapeJS } from '../lib/cartographTypes';
 import {
   useAuthorityEntities,
@@ -10,12 +10,40 @@ import {
 import {
   createMapRenderer,
   type MapProjectionMode,
+  type MapViewPreset,
   type MapViewMode,
 } from '../lib/mapRenderer';
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
 const MIN_POLL_INTERVAL_MS = 50;
 const MAX_POLL_INTERVAL_MS = 1000;
+const DEFAULT_INTERACTION_SENSITIVITY = 1;
+const MIN_INTERACTION_SENSITIVITY = 0.1;
+const MAX_INTERACTION_SENSITIVITY = 6;
+const HUD_ACTIVE_BUTTON_BG = 'rgba(56, 189, 248, 0.3)';
+const HUD_IDLE_BUTTON_BG = 'rgba(15, 23, 42, 0.65)';
+const HUD_BUTTON_BASE_STYLE: CSSProperties = {
+  padding: '4px 8px',
+  borderRadius: 6,
+  border: '1px solid rgba(148, 163, 184, 0.45)',
+  color: '#e2e8f0',
+};
+const MAP_VIEW_PRESET_BUTTONS: Array<{
+  label: string;
+  title: string;
+  preset: MapViewPreset;
+}> = [
+  { label: 'Top', title: 'Top view', preset: 'top' },
+  { label: 'Front', title: 'Front view', preset: 'front' },
+  { label: 'Side', title: 'Right side view', preset: 'right' },
+];
+
+function hudButtonStyle(active = false): CSSProperties {
+  return {
+    ...HUD_BUTTON_BASE_STYLE,
+    background: active ? HUD_ACTIVE_BUTTON_BG : HUD_IDLE_BUTTON_BG,
+  };
+}
 
 function normalizeShardId(value: string): string {
   return value.trim();
@@ -81,6 +109,9 @@ export default function MapPage() {
   const [viewMode, setViewMode] = useState<MapViewMode>('2d');
   const [projectionMode, setProjectionMode] =
     useState<MapProjectionMode>('orthographic');
+  const [interactionSensitivity, setInteractionSensitivity] = useState(
+    DEFAULT_INTERACTION_SENSITIVITY
+  );
   const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
   const baseShapes = useHeuristicShapes();
   const networkTelemetry = useNetworkTelemetry({
@@ -338,6 +369,7 @@ export default function MapPage() {
       shapes: [],
       viewMode,
       projectionMode,
+      interactionSensitivity,
     });
     return () => {
       rendererRef.current?.destroy();
@@ -355,25 +387,52 @@ export default function MapPage() {
   useEffect(() => {
     rendererRef.current?.setProjectionMode(projectionMode);
   }, [projectionMode]);
+  useEffect(() => {
+    rendererRef.current?.setInteractionSensitivity(interactionSensitivity);
+  }, [interactionSensitivity]);
+
+  function snapToPreset(preset: MapViewPreset) {
+    setViewMode('3d');
+    rendererRef.current?.setViewPreset(preset);
+  }
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div
+      style={{
+        width: '100%',
+        height: '100%',
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        ref={containerRef}
+        style={{
+          width: '100%',
+          flex: '1 1 auto',
+          minHeight: 0,
+          overflow: 'hidden',
+          touchAction: 'none',
+          border: '1px solid #ccc',
+          boxSizing: 'border-box',
+        }}
+      />
+
       <div
         style={{
-          position: 'absolute',
-          top: 12,
-          left: 12,
-          zIndex: 10,
-          background: 'rgba(15, 23, 42, 0.82)',
+          flex: '0 0 auto',
+          background: 'rgba(15, 23, 42, 0.92)',
           color: '#e2e8f0',
-          border: '1px solid rgba(148, 163, 184, 0.45)',
-          borderRadius: 10,
-          padding: '8px 10px',
+          borderTop: '1px solid rgba(148, 163, 184, 0.35)',
+          padding: '10px 14px 12px',
           display: 'flex',
-          gap: 14,
+          gap: 12,
           alignItems: 'center',
+          flexWrap: 'wrap',
           fontSize: 13,
-          backdropFilter: 'blur(4px)',
+          backdropFilter: 'blur(6px)',
         }}
       >
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -398,94 +457,117 @@ export default function MapPage() {
         <span style={{ opacity: 0.8 }}>
           connections: {networkEdgeCount} | claimed entities: {authorityEntities.length}
         </span>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px',
-            borderRadius: 8,
-            border: '1px solid rgba(148, 163, 184, 0.45)',
-            background: 'rgba(2, 6, 23, 0.5)',
-          }}
-        >
-          <button
-            type="button"
-            onClick={() => setViewMode('2d')}
+        <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+          <div
             style={{
-              padding: '4px 8px',
-              borderRadius: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px',
+              borderRadius: 8,
               border: '1px solid rgba(148, 163, 184, 0.45)',
-              background:
-                viewMode === '2d'
-                  ? 'rgba(56, 189, 248, 0.3)'
-                  : 'rgba(15, 23, 42, 0.65)',
-              color: '#e2e8f0',
+              background: 'rgba(2, 6, 23, 0.5)',
             }}
-            title="2D mode: drag to pan, mouse wheel to zoom"
           >
-            2D
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('3d');
-              setProjectionMode('orthographic');
-            }}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: '1px solid rgba(148, 163, 184, 0.45)',
-              background:
+            <button
+              type="button"
+              onClick={() => setViewMode('2d')}
+              style={hudButtonStyle(viewMode === '2d')}
+              title="2D mode: drag to pan, mouse wheel to zoom"
+            >
+              2D
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('3d');
+                setProjectionMode('orthographic');
+              }}
+              style={hudButtonStyle(
                 viewMode === '3d' && projectionMode === 'orthographic'
-                  ? 'rgba(56, 189, 248, 0.3)'
-                  : 'rgba(15, 23, 42, 0.65)',
-              color: '#e2e8f0',
-            }}
-            title="3D Orthographic mode"
-          >
-            3D Ortho
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              setViewMode('3d');
-              setProjectionMode('perspective');
-            }}
-            style={{
-              padding: '4px 8px',
-              borderRadius: 6,
-              border: '1px solid rgba(148, 163, 184, 0.45)',
-              background:
+              )}
+              title="3D Orthographic mode"
+            >
+              3D Ortho
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setViewMode('3d');
+                setProjectionMode('perspective');
+              }}
+              style={hudButtonStyle(
                 viewMode === '3d' && projectionMode === 'perspective'
-                  ? 'rgba(56, 189, 248, 0.3)'
-                  : 'rgba(15, 23, 42, 0.65)',
-              color: '#e2e8f0',
-            }}
-            title="3D Perspective mode"
-          >
-            3D Persp
-          </button>
-          <button
-            type="button"
-            onClick={() => rendererRef.current?.resetCamera()}
+              )}
+              title="3D Perspective mode"
+            >
+              3D Persp
+            </button>
+          </div>
+          <div
             style={{
-              padding: '4px 8px',
-              borderRadius: 6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '4px',
+              borderRadius: 8,
               border: '1px solid rgba(148, 163, 184, 0.45)',
-              background: 'rgba(15, 23, 42, 0.65)',
-              color: '#e2e8f0',
+              background: 'rgba(2, 6, 23, 0.45)',
             }}
-            title="Frame scene (Unity-style F)"
           >
-            Frame
-          </button>
+            <span style={{ opacity: 0.72, fontSize: 11, padding: '0 4px' }}>
+              Views
+            </span>
+            {MAP_VIEW_PRESET_BUTTONS.map((button) => (
+              <button
+                key={button.preset}
+                type="button"
+                onClick={() => snapToPreset(button.preset)}
+                style={hudButtonStyle()}
+                title={button.title}
+              >
+                {button.label}
+              </button>
+            ))}
+          </div>
         </div>
         <span style={{ opacity: 0.85, fontSize: 12 }}>
           {viewMode === '2d'
-            ? '2D controls: drag pan, wheel zoom, F frame'
-            : '3D controls: RMB or Alt+LMB orbit, MMB pan, wheel zoom, F frame'}
+            ? '2D controls: LMB pan, wheel zoom, WASD map X/Y, F frame'
+            : '3D controls: RMB orbit, LMB pan, wheel zoom, WASD camera-relative, F frame'}
         </span>
+        <label
+          style={{
+            display: 'flex',
+            gap: 8,
+            alignItems: 'center',
+          }}
+        >
+          sensitivity
+          <input
+            type="number"
+            min={MIN_INTERACTION_SENSITIVITY}
+            max={MAX_INTERACTION_SENSITIVITY}
+            step={0.1}
+            value={interactionSensitivity}
+            onChange={(e) =>
+              setInteractionSensitivity(
+                Math.max(
+                  MIN_INTERACTION_SENSITIVITY,
+                  Math.min(MAX_INTERACTION_SENSITIVITY, Number(e.target.value))
+                )
+              )
+            }
+            style={{
+              width: 68,
+              borderRadius: 6,
+              border: '1px solid rgba(148, 163, 184, 0.45)',
+              background: 'rgba(2, 6, 23, 0.45)',
+              color: '#e2e8f0',
+              padding: '2px 6px',
+            }}
+          />
+        </label>
         <label
           style={{
             display: 'flex',
@@ -512,17 +594,6 @@ export default function MapPage() {
           poll: {pollIntervalMs}ms
         </label>
       </div>
-
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          overflow: 'hidden',
-          touchAction: 'none',
-          border: '1px solid #ccc',
-        }}
-      />
     </div>
   );
 }

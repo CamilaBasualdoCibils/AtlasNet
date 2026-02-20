@@ -2,12 +2,14 @@ import type { ShapeJS } from './cartographTypes';
 
 export type MapViewMode = '2d' | '3d';
 export type MapProjectionMode = 'orthographic' | 'perspective';
+export type MapViewPreset = 'iso' | 'top' | 'front' | 'right';
 
 interface DrawOptions {
   container: HTMLDivElement;
   shapes: ShapeJS[];
   viewMode?: MapViewMode;
   projectionMode?: MapProjectionMode;
+  interactionSensitivity?: number;
 }
 
 interface Vec3 {
@@ -32,8 +34,14 @@ const MIN_PITCH = -Math.PI / 2 + 0.02;
 const MAX_PITCH = Math.PI / 2 - 0.02;
 const DEFAULT_FOV_DEG = 60;
 const NEAR_PLANE = 0.1;
-const CAMERA_ORBIT_SPEED = 0.006;
+const FAR_PLANE = MAX_DISTANCE_3D * 32;
+const CAMERA_ORBIT_SPEED = 0.0035;
 const CAMERA_PAN_SCALE = 0.0022;
+const GRID_LINE_COUNT_PER_SIDE = 14;
+const CAMERA_FLY_BASE_SPEED = 90;
+const CAMERA_FLY_SHIFT_MULTIPLIER = 2.5;
+const MIN_INTERACTION_SENSITIVITY = 0.1;
+const MAX_INTERACTION_SENSITIVITY = 6;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -49,6 +57,14 @@ function vecSub(a: Vec3, b: Vec3): Vec3 {
 
 function vecScale(a: Vec3, scalar: number): Vec3 {
   return { x: a.x * scalar, y: a.y * scalar, z: a.z * scalar };
+}
+
+function vecLerp(a: Vec3, b: Vec3, t: number): Vec3 {
+  return {
+    x: a.x + (b.x - a.x) * t,
+    y: a.y + (b.y - a.y) * t,
+    z: a.z + (b.z - a.z) * t,
+  };
 }
 
 function vecDot(a: Vec3, b: Vec3): number {
@@ -137,6 +153,7 @@ export function createMapRenderer({
   shapes: initialShapes = [],
   viewMode: initialViewMode = '2d',
   projectionMode: initialProjectionMode = 'orthographic',
+  interactionSensitivity: initialInteractionSensitivity = 1,
 }: DrawOptions) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
@@ -162,6 +179,7 @@ export function createMapRenderer({
   let cameraDistance = 180;
   let cameraYaw = Math.PI / 4;
   let cameraPitch = 0.75;
+  let cameraRoll = 0;
   let orthoHeight = 120;
   const fovRad = (DEFAULT_FOV_DEG * Math.PI) / 180;
 
@@ -170,6 +188,14 @@ export function createMapRenderer({
   let lastPointerX = 0;
   let lastPointerY = 0;
   let didAutoFrame = false;
+  const flyKeys = new Set<string>();
+  let flyRafId: number | null = null;
+  let lastFlyFrameMs: number | null = null;
+  let interactionSensitivity = clamp(
+    initialInteractionSensitivity,
+    MIN_INTERACTION_SENSITIVITY,
+    MAX_INTERACTION_SENSITIVITY
+  );
 
   function canvasWidth(): number {
     return canvas.width || 1;
@@ -201,19 +227,64 @@ export function createMapRenderer({
     if (vecLength(right) < 1e-5) {
       right = { x: 1, y: 0, z: 0 };
     }
-    const up = vecNormalize(vecCross(right, forward));
+    let up = vecNormalize(vecCross(right, forward));
+    if (Math.abs(cameraRoll) > 1e-6) {
+      const rollCos = Math.cos(cameraRoll);
+      const rollSin = Math.sin(cameraRoll);
+      const rolledRight = vecNormalize(
+        vecAdd(vecScale(right, rollCos), vecScale(up, rollSin))
+      );
+      const rolledUp = vecNormalize(
+        vecSub(vecScale(up, rollCos), vecScale(right, rollSin))
+      );
+      right = rolledRight;
+      up = rolledUp;
+    }
     return { position, forward, right, up };
   }
 
-  function project3D(point: Vec3): ProjectedPoint | null {
-    const basis = getCameraBasis();
+  type CameraBasis = ReturnType<typeof getCameraBasis>;
+
+  function worldToCamera(point: Vec3, basis: CameraBasis): Vec3 {
     const rel = vecSub(point, basis.position);
+    return {
+      x: vecDot(rel, basis.right),
+      y: vecDot(rel, basis.up),
+      z: vecDot(rel, basis.forward),
+    };
+  }
 
-    const cx = vecDot(rel, basis.right);
-    const cy = vecDot(rel, basis.up);
-    const cz = vecDot(rel, basis.forward);
+  function clipLineToDepthRange(
+    a: Vec3,
+    b: Vec3,
+    minDepth: number,
+    maxDepth: number
+  ): [Vec3, Vec3] | null {
+    let t0 = 0;
+    let t1 = 1;
+    const dz = b.z - a.z;
 
-    if (cz <= NEAR_PLANE) {
+    if (Math.abs(dz) < 1e-8) {
+      if (a.z < minDepth || a.z > maxDepth) {
+        return null;
+      }
+    } else {
+      const tAtMin = (minDepth - a.z) / dz;
+      const tAtMax = (maxDepth - a.z) / dz;
+      const enter = Math.min(tAtMin, tAtMax);
+      const exit = Math.max(tAtMin, tAtMax);
+      t0 = Math.max(t0, enter);
+      t1 = Math.min(t1, exit);
+      if (t0 > t1) {
+        return null;
+      }
+    }
+
+    return [vecLerp(a, b, t0), vecLerp(a, b, t1)];
+  }
+
+  function projectCameraPoint(point: Vec3): ProjectedPoint | null {
+    if (point.z < -FAR_PLANE || point.z > FAR_PLANE) {
       return null;
     }
 
@@ -223,25 +294,49 @@ export function createMapRenderer({
 
     if (projectionMode === 'perspective') {
       const f = 1 / Math.tan(fovRad / 2);
-      ndcX = (cx * f) / (cz * aspect);
-      ndcY = (cy * f) / cz;
+      ndcX = (point.x * f) / (point.z * aspect);
+      ndcY = (point.y * f) / point.z;
     } else {
       const halfHeight = Math.max(MIN_ORTHO_HEIGHT, orthoHeight);
       const halfWidth = halfHeight * aspect;
-      ndcX = cx / halfWidth;
-      ndcY = cy / halfHeight;
+      ndcX = point.x / halfWidth;
+      ndcY = point.y / halfHeight;
+    }
+
+    if (!Number.isFinite(ndcX) || !Number.isFinite(ndcY)) {
+      return null;
+    }
+
+    // Guard against perspective blowups near the camera that can produce
+    // huge translucent "slice" artifacts on the 2D canvas.
+    if (projectionMode === 'perspective' && (Math.abs(ndcX) > 24 || Math.abs(ndcY) > 24)) {
+      return null;
     }
 
     return {
       x: (ndcX * 0.5 + 0.5) * canvasWidth(),
       y: (1 - (ndcY * 0.5 + 0.5)) * canvasHeight(),
-      depth: cz,
+      depth: point.z,
     };
   }
 
-  function drawLine3D(a: Vec3, b: Vec3, color: string, width = 1.2): void {
-    const pa = project3D(a);
-    const pb = project3D(b);
+  function drawLine3D(
+    a: Vec3,
+    b: Vec3,
+    color: string,
+    width = 1.2,
+    basisOverride?: CameraBasis
+  ): void {
+    const basis = basisOverride ?? getCameraBasis();
+    const cameraA = worldToCamera(a, basis);
+    const cameraB = worldToCamera(b, basis);
+    const minDepth = projectionMode === 'perspective' ? NEAR_PLANE : -FAR_PLANE;
+    const clipped = clipLineToDepthRange(cameraA, cameraB, minDepth, FAR_PLANE);
+    if (!clipped) {
+      return;
+    }
+    const pa = projectCameraPoint(clipped[0]);
+    const pb = projectCameraPoint(clipped[1]);
     if (!pa || !pb) {
       return;
     }
@@ -258,35 +353,13 @@ export function createMapRenderer({
       return;
     }
 
-    const projected: Array<ProjectedPoint | null> = points.map(project3D);
-    let started = false;
-
-    ctx.beginPath();
-    for (let i = 0; i < projected.length; i += 1) {
-      const p = projected[i];
-      if (!p) {
-        started = false;
-        continue;
-      }
-      if (!started) {
-        ctx.moveTo(p.x, p.y);
-        started = true;
-      } else {
-        ctx.lineTo(p.x, p.y);
-      }
+    const basis = getCameraBasis();
+    for (let i = 1; i < points.length; i += 1) {
+      drawLine3D(points[i - 1], points[i], color, width, basis);
     }
-
-    if (closed) {
-      const first = projected[0];
-      const last = projected[projected.length - 1];
-      if (first && last) {
-        ctx.lineTo(first.x, first.y);
-      }
+    if (closed && points.length > 2) {
+      drawLine3D(points[points.length - 1], points[0], color, width, basis);
     }
-
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.stroke();
   }
 
   function drawAxes2D(): void {
@@ -306,7 +379,7 @@ export function createMapRenderer({
     const endY = (canvasHeight() - offsetY) / scale2D;
 
     ctx.textAlign = 'center';
-    ctx.textBaseline = 'bottom';
+    ctx.textBaseline = 'top';
     for (let x = Math.floor(startX / step) * step; x <= endX; x += step) {
       const screenX = x * scale2D + offsetX;
       ctx.beginPath();
@@ -315,7 +388,7 @@ export function createMapRenderer({
       ctx.stroke();
       ctx.save();
       ctx.scale(1, -1);
-      ctx.fillText(x.toFixed(0), screenX, -2);
+      ctx.fillText(x.toFixed(0), screenX, -canvasHeight() + 2);
       ctx.restore();
     }
 
@@ -336,47 +409,133 @@ export function createMapRenderer({
     ctx.restore();
   }
 
+  function drawAxisGizmo2D(): void {
+    const axisOrigin = { x: 54, y: 54 };
+    const axisSize = 24;
+    const cosRoll = Math.cos(cameraRoll);
+    const sinRoll = Math.sin(cameraRoll);
+
+    // In 2D map mode, world X/Y are the visible plane axes.
+    const xEnd = {
+      x: axisOrigin.x + cosRoll * axisSize,
+      y: axisOrigin.y - sinRoll * axisSize,
+    };
+    const yEnd = {
+      x: axisOrigin.x - sinRoll * axisSize,
+      y: axisOrigin.y - cosRoll * axisSize,
+    };
+
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = 'rgba(239, 68, 68, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(axisOrigin.x, axisOrigin.y);
+    ctx.lineTo(xEnd.x, xEnd.y);
+    ctx.stroke();
+
+    ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+    ctx.beginPath();
+    ctx.moveTo(axisOrigin.x, axisOrigin.y);
+    ctx.lineTo(yEnd.x, yEnd.y);
+    ctx.stroke();
+
+    ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('X', xEnd.x + 4, xEnd.y);
+    ctx.fillText('Y', yEnd.x + 4, yEnd.y);
+  }
+
   function drawAxes3D(): void {
     const basis = getCameraBasis();
-    const gridCenter = {
-      x: cameraTarget.x,
-      y: 0,
-      z: cameraTarget.z,
-    };
     const gridScaleRef =
       projectionMode === 'perspective'
         ? cameraDistance
         : Math.max(MIN_ORTHO_HEIGHT, orthoHeight) * 1.6;
     const step = niceStep(Math.max(2, gridScaleRef / 10));
-    const halfExtent = step * 14;
+    const aspect = canvasWidth() / canvasHeight();
+    const visibleSpanRef =
+      projectionMode === 'perspective'
+        ? Math.max(180, cameraDistance * Math.max(2.4, aspect * 1.8))
+        : Math.max(MIN_ORTHO_HEIGHT, orthoHeight) * Math.max(2.2, aspect * 1.7);
+    const lineCountPerSide = Math.max(
+      GRID_LINE_COUNT_PER_SIDE,
+      Math.ceil(visibleSpanRef / Math.max(step, 1e-4))
+    );
+    const anchorX = Math.floor(cameraTarget.x / step) * step;
+    const anchorZ = Math.floor(cameraTarget.z / step) * step;
 
     ctx.lineWidth = 1;
-    for (let x = -halfExtent; x <= halfExtent; x += step) {
-      const worldX = gridCenter.x + x;
-      drawLine3D(
-        { x: worldX, y: 0, z: gridCenter.z - halfExtent },
-        { x: worldX, y: 0, z: gridCenter.z + halfExtent },
-        Math.abs(x) < 1e-6
-          ? 'rgba(239, 68, 68, 0.8)'
-          : 'rgba(148, 163, 184, 0.25)',
-        Math.abs(x) < 1e-6 ? 1.8 : 1
-      );
+    for (let xi = -lineCountPerSide; xi <= lineCountPerSide; xi += 1) {
+      const x = anchorX + xi * step;
+      for (let zi = -lineCountPerSide; zi < lineCountPerSide; zi += 1) {
+        const z0 = anchorZ + zi * step;
+        const z1 = anchorZ + (zi + 1) * step;
+        drawLine3D(
+          { x, y: 0, z: z0 },
+          { x, y: 0, z: z1 },
+          'rgba(148, 163, 184, 0.25)',
+          1,
+          basis
+        );
+      }
     }
 
-    for (let z = -halfExtent; z <= halfExtent; z += step) {
-      const worldZ = gridCenter.z + z;
+    for (let zi = -lineCountPerSide; zi <= lineCountPerSide; zi += 1) {
+      const z = anchorZ + zi * step;
+      for (let xi = -lineCountPerSide; xi < lineCountPerSide; xi += 1) {
+        const x0 = anchorX + xi * step;
+        const x1 = anchorX + (xi + 1) * step;
+        drawLine3D(
+          { x: x0, y: 0, z },
+          { x: x1, y: 0, z },
+          'rgba(148, 163, 184, 0.25)',
+          1,
+          basis
+        );
+      }
+    }
+
+    const axisSegmentCount = Math.max(lineCountPerSide, GRID_LINE_COUNT_PER_SIDE * 2);
+    const axisAnchorX = Math.floor(cameraTarget.x / step) * step;
+    const axisAnchorY = Math.floor(cameraTarget.y / step) * step;
+    const axisAnchorZ = Math.floor(cameraTarget.z / step) * step;
+    for (let i = -axisSegmentCount; i < axisSegmentCount; i += 1) {
+      const x0 = axisAnchorX + i * step;
+      const x1 = axisAnchorX + (i + 1) * step;
       drawLine3D(
-        { x: gridCenter.x - halfExtent, y: 0, z: worldZ },
-        { x: gridCenter.x + halfExtent, y: 0, z: worldZ },
-        Math.abs(z) < 1e-6
-          ? 'rgba(59, 130, 246, 0.8)'
-          : 'rgba(148, 163, 184, 0.25)',
-        Math.abs(z) < 1e-6 ? 1.8 : 1
+        { x: x0, y: 0, z: 0 },
+        { x: x1, y: 0, z: 0 },
+        'rgba(239, 68, 68, 0.95)',
+        2.2,
+        basis
+      );
+    }
+    for (let i = -axisSegmentCount; i < axisSegmentCount; i += 1) {
+      const y0 = axisAnchorY + i * step;
+      const y1 = axisAnchorY + (i + 1) * step;
+      drawLine3D(
+        { x: 0, y: y0, z: 0 },
+        { x: 0, y: y1, z: 0 },
+        'rgba(34, 197, 94, 0.95)',
+        2.2,
+        basis
+      );
+    }
+    for (let i = -axisSegmentCount; i < axisSegmentCount; i += 1) {
+      const z0 = axisAnchorZ + i * step;
+      const z1 = axisAnchorZ + (i + 1) * step;
+      drawLine3D(
+        { x: 0, y: 0, z: z0 },
+        { x: 0, y: 0, z: z1 },
+        'rgba(59, 130, 246, 0.95)',
+        2.2,
+        basis
       );
     }
 
     // Camera target indicator
-    const projectedTarget = project3D(cameraTarget);
+    const projectedTarget = projectCameraPoint(worldToCamera(cameraTarget, basis));
     if (projectedTarget) {
       ctx.beginPath();
       ctx.arc(projectedTarget.x, projectedTarget.y, 3.5, 0, Math.PI * 2);
@@ -421,10 +580,14 @@ export function createMapRenderer({
     ctx.lineTo(zEnd.x, zEnd.y);
     ctx.stroke();
 
-    const facing = axisForward.y > 0 ? 'Top' : 'Bottom';
+    const facing = axisForward.y > 0 ? 'Up' : 'Down';
     ctx.fillStyle = 'rgba(226, 232, 240, 0.9)';
     ctx.font = '11px sans-serif';
-    ctx.fillText(facing, axisOrigin.x + 16, axisOrigin.y + 22);
+    ctx.fillText(facing, axisOrigin.x - 28, axisOrigin.y - 24);
+    ctx.fillText('X', xEnd.x + 4, xEnd.y - 2);
+    // In map semantics, source Z is vertical; world Y represents that vertical axis.
+    ctx.fillText('Z', yEnd.x + 4, yEnd.y - 2);
+    ctx.fillText('Y', zEnd.x + 4, zEnd.y - 2);
   }
 
   function drawShapes2D(): void {
@@ -573,9 +736,15 @@ export function createMapRenderer({
       ctx.save();
       ctx.translate(0, canvasHeight());
       ctx.scale(1, -1);
+      const centerX = canvasWidth() / 2;
+      const centerY = canvasHeight() / 2;
+      ctx.translate(centerX, centerY);
+      ctx.rotate(cameraRoll);
+      ctx.translate(-centerX, -centerY);
       drawAxes2D();
       drawShapes2D();
       ctx.restore();
+      drawAxisGizmo2D();
       return;
     }
 
@@ -657,6 +826,7 @@ export function createMapRenderer({
       orthoHeight = 120;
       cameraYaw = Math.PI / 4;
       cameraPitch = 0.75;
+      cameraRoll = 0;
       draw();
       return;
     }
@@ -672,11 +842,31 @@ export function createMapRenderer({
     orthoHeight = clamp(extent * 0.85, 12, MAX_ORTHO_HEIGHT);
     cameraYaw = Math.PI / 4;
     cameraPitch = 0.75;
+    cameraRoll = 0;
 
     scale2D = clamp(Math.min(canvasWidth(), canvasHeight()) / (extent * 1.4), MIN_SCALE_2D, MAX_SCALE_2D);
     offsetX = canvasWidth() / 2 - centerX * scale2D;
     offsetY = canvasHeight() / 2 - centerZ * scale2D;
 
+    draw();
+  }
+
+  function setViewPreset(preset: MapViewPreset): void {
+    viewMode = '3d';
+    cameraRoll = 0;
+    if (preset === 'top') {
+      cameraYaw = 0;
+      cameraPitch = MAX_PITCH;
+    } else if (preset === 'front') {
+      cameraYaw = 0;
+      cameraPitch = 0;
+    } else if (preset === 'right') {
+      cameraYaw = Math.PI / 2;
+      cameraPitch = 0;
+    } else {
+      cameraYaw = Math.PI / 4;
+      cameraPitch = 0.75;
+    }
     draw();
   }
 
@@ -694,6 +884,119 @@ export function createMapRenderer({
     draw();
   }
 
+  function hasFlyInput(): boolean {
+    return (
+      flyKeys.has('w') ||
+      flyKeys.has('a') ||
+      flyKeys.has('s') ||
+      flyKeys.has('d')
+    );
+  }
+
+  function stopFlyLoop(): void {
+    if (flyRafId != null) {
+      cancelAnimationFrame(flyRafId);
+      flyRafId = null;
+    }
+    lastFlyFrameMs = null;
+  }
+
+  function tickFly(frameMs: number): void {
+    if (!hasFlyInput()) {
+      stopFlyLoop();
+      return;
+    }
+
+    if (lastFlyFrameMs == null) {
+      lastFlyFrameMs = frameMs;
+    }
+
+    const dtSec = clamp((frameMs - lastFlyFrameMs) / 1000, 0, 0.05);
+    lastFlyFrameMs = frameMs;
+
+    let didChange = false;
+
+    if (viewMode === '2d') {
+      const move2D = {
+        x: (flyKeys.has('a') ? 1 : 0) + (flyKeys.has('d') ? -1 : 0),
+        y: (flyKeys.has('w') ? 1 : 0) + (flyKeys.has('s') ? -1 : 0),
+      };
+      const move2DLen = Math.hypot(move2D.x, move2D.y);
+      if (move2DLen > 1e-6) {
+        const worldViewExtent = Math.max(
+          20,
+          canvasWidth() / Math.max(scale2D, 1e-4),
+          canvasHeight() / Math.max(scale2D, 1e-4)
+        );
+        let panSpeedWorld = worldViewExtent * 0.55 * interactionSensitivity;
+        if (flyKeys.has('shift')) {
+          panSpeedWorld *= CAMERA_FLY_SHIFT_MULTIPLIER;
+        }
+        const moveScale = (panSpeedWorld * dtSec) / move2DLen;
+        const cameraVecX = move2D.x;
+        const cameraVecY = -move2D.y;
+        const rollCos = Math.cos(cameraRoll);
+        const rollSin = Math.sin(cameraRoll);
+        const worldVecX = cameraVecX * rollCos + cameraVecY * rollSin;
+        const worldVecY = -cameraVecX * rollSin + cameraVecY * rollCos;
+        offsetX += worldVecX * moveScale * scale2D;
+        offsetY += worldVecY * moveScale * scale2D;
+        didChange = true;
+      }
+
+    } else {
+      const basis = getCameraBasis();
+      let planarForward = {
+        x: basis.forward.x,
+        y: 0,
+        z: basis.forward.z,
+      };
+      let planarForwardLen = vecLength(planarForward);
+      if (planarForwardLen < 1e-6) {
+        planarForward = { x: 0, y: 0, z: -1 };
+        planarForwardLen = 1;
+      }
+      planarForward = vecScale(planarForward, 1 / planarForwardLen);
+      const planarRight = vecNormalize(
+        vecCross(planarForward, { x: 0, y: 1, z: 0 })
+      );
+
+      let move = { x: 0, y: 0, z: 0 };
+
+      // Camera-relative planar movement: S is backward in 3D.
+      if (flyKeys.has('w')) move = vecAdd(move, planarForward);
+      if (flyKeys.has('s')) move = vecSub(move, planarForward);
+      if (flyKeys.has('d')) move = vecAdd(move, planarRight);
+      if (flyKeys.has('a')) move = vecSub(move, planarRight);
+
+      const moveLen = vecLength(move);
+      if (moveLen > 1e-6) {
+        const normalizedMove = vecScale(move, 1 / moveLen);
+        const speedRef =
+          projectionMode === 'perspective' ? cameraDistance * 0.55 : orthoHeight * 0.55;
+        let speed = Math.max(CAMERA_FLY_BASE_SPEED, speedRef) * interactionSensitivity;
+        if (flyKeys.has('shift')) {
+          speed *= CAMERA_FLY_SHIFT_MULTIPLIER;
+        }
+        cameraTarget = vecAdd(cameraTarget, vecScale(normalizedMove, speed * dtSec));
+        didChange = true;
+      }
+
+    }
+
+    if (didChange) {
+      draw();
+    }
+
+    flyRafId = requestAnimationFrame(tickFly);
+  }
+
+  function startFlyLoop(): void {
+    if (flyRafId == null && hasFlyInput()) {
+      flyRafId = requestAnimationFrame(tickFly);
+    }
+  }
+
   function onPointerDown(event: PointerEvent): void {
     canvas.focus();
     activePointerId = event.pointerId;
@@ -701,13 +1004,15 @@ export function createMapRenderer({
     lastPointerY = event.clientY;
 
     if (viewMode === '2d') {
-      pointerDragMode = 'pan2d';
-      canvas.setPointerCapture(event.pointerId);
+      if (event.button === 0) {
+        pointerDragMode = 'pan2d';
+        canvas.setPointerCapture(event.pointerId);
+      }
       return;
     }
 
-    const orbitRequested = event.button === 2 || (event.button === 0 && event.altKey);
-    const panRequested = event.button === 1;
+    const orbitRequested = event.button === 2;
+    const panRequested = event.button === 0;
 
     if (orbitRequested) {
       pointerDragMode = 'orbit3d';
@@ -734,15 +1039,20 @@ export function createMapRenderer({
     lastPointerY = event.clientY;
 
     if (pointerDragMode === 'pan2d') {
-      offsetX += dx;
-      offsetY -= dy;
+      const deltaViewX = dx;
+      const deltaViewY = -dy;
+      const rollCos = Math.cos(cameraRoll);
+      const rollSin = Math.sin(cameraRoll);
+      offsetX += deltaViewX * rollCos + deltaViewY * rollSin;
+      offsetY += -deltaViewX * rollSin + deltaViewY * rollCos;
       draw();
       return;
     }
 
     if (pointerDragMode === 'orbit3d') {
-      cameraYaw -= dx * CAMERA_ORBIT_SPEED;
-      cameraPitch = clamp(cameraPitch - dy * CAMERA_ORBIT_SPEED, MIN_PITCH, MAX_PITCH);
+      const orbitSpeed = CAMERA_ORBIT_SPEED * interactionSensitivity;
+      cameraYaw -= dx * orbitSpeed;
+      cameraPitch = clamp(cameraPitch - dy * orbitSpeed, MIN_PITCH, MAX_PITCH);
       draw();
       return;
     }
@@ -753,9 +1063,10 @@ export function createMapRenderer({
         projectionMode === 'perspective'
           ? cameraDistance * CAMERA_PAN_SCALE
           : Math.max(MIN_ORTHO_HEIGHT, orthoHeight) * CAMERA_PAN_SCALE;
+      const panScale = panMagnitude * interactionSensitivity;
 
-      const panRight = vecScale(basis.right, -dx * panMagnitude);
-      const panUp = vecScale(basis.up, dy * panMagnitude);
+      const panRight = vecScale(basis.right, -dx * panScale);
+      const panUp = vecScale(basis.up, dy * panScale);
       cameraTarget = vecAdd(cameraTarget, vecAdd(panRight, panUp));
       draw();
     }
@@ -779,8 +1090,16 @@ export function createMapRenderer({
     const zoomFactor = event.deltaY > 0 ? zoomOutFactor : zoomInFactor;
 
     if (viewMode === '2d') {
-      const mouseX = event.offsetX;
-      const mouseY = event.offsetY;
+      const centerX = canvasWidth() / 2;
+      const centerY = canvasHeight() / 2;
+      const mouseViewX = event.offsetX;
+      const mouseViewY = canvasHeight() - event.offsetY;
+      const rollCos = Math.cos(cameraRoll);
+      const rollSin = Math.sin(cameraRoll);
+      const dxView = mouseViewX - centerX;
+      const dyView = mouseViewY - centerY;
+      const mouseX = centerX + dxView * rollCos + dyView * rollSin;
+      const mouseY = centerY - dxView * rollSin + dyView * rollCos;
       const nextScale = clamp(scale2D / zoomFactor, MIN_SCALE_2D, MAX_SCALE_2D);
 
       offsetX = mouseX - ((mouseX - offsetX) * nextScale) / scale2D;
@@ -802,21 +1121,67 @@ export function createMapRenderer({
     event.preventDefault();
   }
 
+  const flyKeyNames = new Set(['w', 'a', 's', 'd', 'shift']);
+
+  function shouldIgnoreKeyboardInputEvent(event: KeyboardEvent): boolean {
+    if (event.metaKey || event.ctrlKey || event.altKey) {
+      return true;
+    }
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return false;
+    }
+    if (target.isContentEditable) {
+      return true;
+    }
+    const tag = target.tagName;
+    return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
+  }
+
   function onKeyDown(event: KeyboardEvent): void {
-    if (event.key.toLowerCase() === 'f') {
+    if (shouldIgnoreKeyboardInputEvent(event)) {
+      return;
+    }
+
+    const key = event.key.toLowerCase();
+    if (key === 'f') {
       resetCamera();
+      event.preventDefault();
+      return;
+    }
+
+    if (flyKeyNames.has(key)) {
+      flyKeys.add(key);
+      startFlyLoop();
       event.preventDefault();
     }
   }
 
+  function onKeyUp(event: KeyboardEvent): void {
+    const key = event.key.toLowerCase();
+    if (flyKeyNames.has(key)) {
+      flyKeys.delete(key);
+      if (!hasFlyInput()) {
+        stopFlyLoop();
+      }
+    }
+  }
+
+  function onBlur(): void {
+    flyKeys.clear();
+    stopFlyLoop();
+  }
+
   window.addEventListener('resize', resizeCanvas);
+  window.addEventListener('keydown', onKeyDown);
+  window.addEventListener('keyup', onKeyUp);
+  window.addEventListener('blur', onBlur);
   canvas.addEventListener('pointerdown', onPointerDown);
   canvas.addEventListener('pointermove', onPointerMove);
   canvas.addEventListener('pointerup', endPointerDrag);
   canvas.addEventListener('pointercancel', endPointerDrag);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   canvas.addEventListener('contextmenu', onContextMenu);
-  canvas.addEventListener('keydown', onKeyDown);
 
   resizeCanvas();
   ensureAutoFrame();
@@ -838,10 +1203,18 @@ export function createMapRenderer({
       scale2D = clamp(newScale, MIN_SCALE_2D, MAX_SCALE_2D);
       draw();
     },
+    setInteractionSensitivity(nextSensitivity: number) {
+      interactionSensitivity = clamp(
+        nextSensitivity,
+        MIN_INTERACTION_SENSITIVITY,
+        MAX_INTERACTION_SENSITIVITY
+      );
+    },
     setViewMode(nextViewMode: MapViewMode) {
       viewMode = nextViewMode;
       draw();
     },
+    setViewPreset,
     setProjectionMode(nextProjectionMode: MapProjectionMode) {
       projectionMode = nextProjectionMode;
       draw();
@@ -849,13 +1222,16 @@ export function createMapRenderer({
     resetCamera,
     destroy() {
       window.removeEventListener('resize', resizeCanvas);
+      window.removeEventListener('keydown', onKeyDown);
+      window.removeEventListener('keyup', onKeyUp);
+      window.removeEventListener('blur', onBlur);
       canvas.removeEventListener('pointerdown', onPointerDown);
       canvas.removeEventListener('pointermove', onPointerMove);
       canvas.removeEventListener('pointerup', endPointerDrag);
       canvas.removeEventListener('pointercancel', endPointerDrag);
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContextMenu);
-      canvas.removeEventListener('keydown', onKeyDown);
+      stopFlyLoop();
       if (canvas.parentElement === container) {
         container.removeChild(canvas);
       }
