@@ -5,6 +5,7 @@ import type {
   AuthorityEntityTelemetry,
   ShapeJS,
   ShardTelemetry,
+  WorkersSnapshotResponse,
 } from '../cartographTypes';
 import { parseAuthorityRows } from '../authorityTelemetryTypes';
 
@@ -26,6 +27,30 @@ function toShapeArray(raw: unknown): ShapeJS[] {
 
 function toShardTelemetryArray(raw: unknown): ShardTelemetry[] {
   return Array.isArray(raw) ? (raw as ShardTelemetry[]) : [];
+}
+
+function toWorkersSnapshot(raw: unknown): WorkersSnapshotResponse {
+  if (!raw || typeof raw !== 'object') {
+    return {
+      collectedAtMs: null,
+      dockerCliAvailable: false,
+      error: null,
+      contexts: [],
+    };
+  }
+
+  const payload = raw as Partial<WorkersSnapshotResponse>;
+  return {
+    collectedAtMs:
+      typeof payload.collectedAtMs === 'number' && Number.isFinite(payload.collectedAtMs)
+        ? payload.collectedAtMs
+        : null,
+    dockerCliAvailable: Boolean(payload.dockerCliAvailable),
+    error: typeof payload.error === 'string' && payload.error.trim().length > 0
+      ? payload.error
+      : null,
+    contexts: Array.isArray(payload.contexts) ? payload.contexts : [],
+  };
 }
 
 function usePolledResource<T>({
@@ -182,6 +207,32 @@ export function useAuthorityEntities({
     enabled,
     createInitialValue: () => [],
     mapResponse: parseAuthorityRows,
+    resetOnException,
+    resetOnHttpError,
+    onException,
+    onHttpError,
+  });
+}
+
+export function useWorkersSnapshot({
+  intervalMs,
+  enabled = true,
+  resetOnException = false,
+  resetOnHttpError = false,
+  onException,
+  onHttpError,
+}: TelemetryPollingOptions): WorkersSnapshotResponse {
+  return usePolledResource<WorkersSnapshotResponse>({
+    url: '/api/workers',
+    intervalMs,
+    enabled,
+    createInitialValue: () => ({
+      collectedAtMs: null,
+      dockerCliAvailable: false,
+      error: null,
+      contexts: [],
+    }),
+    mapResponse: toWorkersSnapshot,
     resetOnException,
     resetOnHttpError,
     onException,

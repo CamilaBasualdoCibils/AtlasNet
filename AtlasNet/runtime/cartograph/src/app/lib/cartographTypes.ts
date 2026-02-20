@@ -72,3 +72,67 @@ export interface DatabaseSnapshotResponse {
   selectedSource: string | null;
   records: DatabaseRecord[];
 }
+
+export interface WorkerDaemonTelemetry {
+  id: string;
+  name: string;
+  serverVersion: string;
+  operatingSystem: string;
+  osVersion: string;
+  kernelVersion: string;
+  architecture: string;
+  cpuCount: number;
+  memoryTotalBytes: number;
+  containersTotal: number;
+  containersRunning: number;
+  containersPaused: number;
+  containersStopped: number;
+  swarmNodeId: string;
+  swarmNodeAddress: string;
+  swarmState: string;
+  swarmControlAvailable: boolean;
+}
+
+export interface WorkerSwarmNodeTelemetry {
+  id: string;
+  hostname: string;
+  status: string;
+  availability: string;
+  managerStatus: string | null;
+  engineVersion: string;
+  tlsStatus: string | null;
+}
+
+export interface WorkerContainerTelemetry {
+  id: string;
+  name: string;
+  image: string;
+  state: string;
+  status: string;
+  command: string;
+  runningFor: string;
+  createdAt: string;
+  ports: string;
+}
+
+export interface WorkerContextTelemetry {
+  name: string;
+  description: string;
+  dockerEndpoint: string;
+  host: string | null;
+  current: boolean;
+  orchestrator: string | null;
+  source: string | null;
+  status: 'ok' | 'error';
+  error: string | null;
+  daemon: WorkerDaemonTelemetry | null;
+  nodes: WorkerSwarmNodeTelemetry[];
+  containers: WorkerContainerTelemetry[];
+}
+
+export interface WorkersSnapshotResponse {
+  collectedAtMs: number | null;
+  dockerCliAvailable: boolean;
+  error: string | null;
+  contexts: WorkerContextTelemetry[];
+}

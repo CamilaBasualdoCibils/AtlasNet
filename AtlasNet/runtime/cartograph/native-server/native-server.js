@@ -11,6 +11,7 @@ const {
 const { readNetworkTelemetry } = require('./services/networkTelemetry');
 const { readAuthorityTelemetry } = require('./services/authorityTelemetry');
 const { readHeuristicShapes } = require('./services/heuristicShapes');
+const { readWorkersSnapshot } = require('./services/workersSnapshot');
 
 const app = express();
 app.use(cors());
@@ -102,6 +103,16 @@ app.get('/databases', async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Database snapshot failed' });
+  }
+});
+
+app.get('/workers', async (_req, res) => {
+  try {
+    const snapshot = await readWorkersSnapshot();
+    res.json(snapshot);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Workers snapshot failed' });
   }
 });
 
