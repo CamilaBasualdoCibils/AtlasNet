@@ -6,7 +6,7 @@
 #include "SH_HandoffTypes.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class DebugEntityOrbitSimulator;
+class DebugEntitySimulator;
 class Log;
 class SH_EntityAuthorityTracker;
 class SH_TelemetryPublisher;
@@ -27,14 +27,14 @@ class SH_TransferMailbox
 
 	// Adopts all due incoming handoffs.
 	[[nodiscard]] size_t AdoptIncomingIfDue(
-		uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator);
+		uint64_t nowUnixTimeUs, DebugEntitySimulator& debugSimulator);
 
 	// Adds outgoing handoff to pending map.
 	void AddPendingOutgoing(const SH_PendingOutgoingHandoff& handoff);
 
 	// Commits all due outgoing handoffs.
 	[[nodiscard]] size_t CommitOutgoingIfDue(
-		uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator,
+		uint64_t nowUnixTimeUs, DebugEntitySimulator& debugSimulator,
 		SH_EntityAuthorityTracker& tracker,
 		const SH_TelemetryPublisher& telemetryPublisher);
 	void ClearPendingOutgoing();

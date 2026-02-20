@@ -7,7 +7,7 @@
 #include "Entity/Entity.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class DebugEntityOrbitSimulator;
+class DebugEntitySimulator;
 class Log;
 class SH_BorderHandoffPlanner;
 class SH_EntityAuthorityTracker;
@@ -51,7 +51,7 @@ class SH_ServerAuthorityRuntime
 	std::chrono::steady_clock::time_point lastTickTime;
 	std::chrono::steady_clock::time_point lastSnapshotTime;
 	std::unique_ptr<SH_EntityAuthorityTracker> tracker;
-	std::unique_ptr<DebugEntityOrbitSimulator> debugSimulator;
+	std::unique_ptr<DebugEntitySimulator> debugSimulator;
 	std::unique_ptr<SH_OwnershipElection> ownershipElection;
 	std::unique_ptr<SH_BorderHandoffPlanner> borderPlanner;
 	std::unique_ptr<SH_TransferMailbox> transferMailbox;

@@ -7,7 +7,9 @@
 #include <utility>
 
 #include "Debug/Log.hpp"
+#include "Entity/EntityHandoff/DebugEntities/DebugEntityLinearBounceSimulator.hpp"
 #include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
+#include "Entity/EntityHandoff/DebugEntities/DebugEntitySimulator.hpp"
 #include "SH_BorderHandoffPlanner.hpp"
 #include "SH_EntityAuthorityTracker.hpp"
 #include "SH_HandoffConnectionManager.hpp"
@@ -21,8 +23,14 @@ namespace
 constexpr std::chrono::milliseconds kStateSnapshotInterval(50);
 constexpr float kOrbitRadius = 45.0F;
 constexpr float kOrbitAngularSpeedRadPerSec = 0.35F;
+constexpr float kLinearSpeedUnitsPerSec = 18.0F;
 constexpr float kTestEntityHalfExtent = 0.5F;
 constexpr float kEntityPhaseStepRad = 0.7F;
+constexpr std::chrono::milliseconds kLinearPerimeterRefreshInterval(1000);
+
+#ifndef ATLASNET_ENTITY_HANDOFF_USE_LINEAR_DEBUG_SIM
+#define ATLASNET_ENTITY_HANDOFF_USE_LINEAR_DEBUG_SIM 1
+#endif
 
 #ifndef ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US
 #define ATLASNET_ENTITY_HANDOFF_TRANSFER_DELAY_US 60000
@@ -40,7 +48,7 @@ uint64_t NowUnixTimeUs()
 }
 
 #ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
-#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 3000
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 100
 #endif
 constexpr uint32_t kDefaultTestEntityCount =
 	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)
@@ -69,8 +77,13 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	lastSnapshotTime = lastTickTime - kStateSnapshotInterval;
 
 	tracker = std::make_unique<SH_EntityAuthorityTracker>(selfIdentity, logger);
+#if ATLASNET_ENTITY_HANDOFF_USE_LINEAR_DEBUG_SIM
+	debugSimulator =
+		std::make_unique<DebugEntityLinearBounceSimulator>(selfIdentity, logger);
+#else
 	debugSimulator =
 		std::make_unique<DebugEntityOrbitSimulator>(selfIdentity, logger);
+#endif
 	ownershipElection =
 		std::make_unique<SH_OwnershipElection>(selfIdentity, logger);
 	borderPlanner = std::make_unique<SH_BorderHandoffPlanner>(
@@ -133,20 +146,22 @@ void SH_ServerAuthorityRuntime::Tick()
 	if (isOwner && !hasSeededInitialEntities)
 	{
 		debugSimulator->SeedEntities(
-			DebugEntityOrbitSimulator::SeedOptions{
+			DebugEntitySimulator::SeedOptions{
 				.desiredCount = kDefaultTestEntityCount,
 				.halfExtent = kTestEntityHalfExtent,
-				.phaseStepRad = kEntityPhaseStepRad});
+				.phaseStepRad = kEntityPhaseStepRad,
+				.speedUnitsPerSec = kLinearSpeedUnitsPerSec});
 		hasSeededInitialEntities = true;
 	}
 
 	if (debugSimulator->Count() > 0)
 	{
-		debugSimulator->TickOrbit(
-			DebugEntityOrbitSimulator::OrbitOptions{
+		debugSimulator->Tick(
+			DebugEntitySimulator::TickOptions{
 				.deltaSeconds = deltaSeconds,
 				.radius = kOrbitRadius,
-				.angularSpeedRadPerSec = kOrbitAngularSpeedRadPerSec});
+				.angularSpeedRadPerSec = kOrbitAngularSpeedRadPerSec,
+				.perimeterRefreshInterval = kLinearPerimeterRefreshInterval});
 	}
 	tracker->SetOwnedEntities(debugSimulator->GetEntitiesSnapshot());
 

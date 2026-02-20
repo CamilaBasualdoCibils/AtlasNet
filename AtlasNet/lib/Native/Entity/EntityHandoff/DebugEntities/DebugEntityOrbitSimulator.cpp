@@ -100,7 +100,7 @@ void DebugEntityOrbitSimulator::RemoveEntity(const AtlasEntityID entityId)
 	entitiesById.erase(entityId);
 }
 
-void DebugEntityOrbitSimulator::TickOrbit(const OrbitOptions& options)
+void DebugEntityOrbitSimulator::Tick(const TickOptions& options)
 {
 	const float deltaSeconds = std::clamp(options.deltaSeconds, 0.0F, 0.25F);
 	orbitAngleRad += deltaSeconds * options.angularSpeedRadPerSec;

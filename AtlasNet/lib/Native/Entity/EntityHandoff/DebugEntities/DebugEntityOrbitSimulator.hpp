@@ -10,45 +10,31 @@
 #include <unordered_map>
 #include <vector>
 
+#include "Entity/EntityHandoff/DebugEntities/DebugEntitySimulator.hpp"
 #include "Entity/Entity.hpp"
 #include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 
-class DebugEntityOrbitSimulator
+class DebugEntityOrbitSimulator : public DebugEntitySimulator
 {
   public:
-	static inline constexpr float kDefaultHalfExtent = 0.5F;
-	static inline constexpr float kDefaultOrbitRadius = 12.0F;
-	static inline constexpr float kDefaultOrbitAngularSpeedRadPerSec = 1.2F;
-
-	struct SeedOptions
-	{
-		uint32_t desiredCount = 1;
-		float halfExtent = kDefaultHalfExtent;
-		float phaseStepRad = 0.0F;
-		float initialRadius = kDefaultOrbitRadius;
-		bool randomizeInitialPhase = true;
-	};
-
-	struct OrbitOptions
-	{
-		float deltaSeconds = 0.0F;
-		float radius = kDefaultOrbitRadius;
-		float angularSpeedRadPerSec = kDefaultOrbitAngularSpeedRadPerSec;
-	};
+	using SeedOptions = DebugEntitySimulator::SeedOptions;
+	using TickOptions = DebugEntitySimulator::TickOptions;
+	using OrbitOptions = DebugEntitySimulator::TickOptions;
 
 	DebugEntityOrbitSimulator(const NetworkIdentity& self,
 							  std::shared_ptr<Log> inLogger);
 
-	void Reset();
-	void SeedEntities(const SeedOptions& options);
-	void AdoptSingleEntity(const AtlasEntity& entity);
-	void RemoveEntity(AtlasEntityID entityId);
-	void TickOrbit(const OrbitOptions& options);
-	void StoreStateSnapshots(std::string_view hashKey) const;
+	void Reset() override;
+	void SeedEntities(const SeedOptions& options) override;
+	void AdoptSingleEntity(const AtlasEntity& entity) override;
+	void RemoveEntity(AtlasEntityID entityId) override;
+	void Tick(const TickOptions& options) override;
+	void TickOrbit(const TickOptions& options) { Tick(options); }
+	void StoreStateSnapshots(std::string_view hashKey) const override;
 
-	[[nodiscard]] std::vector<AtlasEntity> GetEntitiesSnapshot() const;
-	[[nodiscard]] size_t Count() const { return entitiesById.size(); }
+	[[nodiscard]] std::vector<AtlasEntity> GetEntitiesSnapshot() const override;
+	[[nodiscard]] size_t Count() const override { return entitiesById.size(); }
 
   private:
 	struct OrbitEntity

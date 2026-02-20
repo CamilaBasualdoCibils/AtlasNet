@@ -7,7 +7,7 @@
 #include <vector>
 
 #include "Debug/Log.hpp"
-#include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
+#include "Entity/EntityHandoff/DebugEntities/DebugEntitySimulator.hpp"
 #include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
 #include "SH_EntityAuthorityTracker.hpp"
 #include "SH_TelemetryPublisher.hpp"
@@ -40,7 +40,7 @@ void SH_TransferMailbox::QueueIncoming(const AtlasEntity& entity,
 }
 
 size_t SH_TransferMailbox::AdoptIncomingIfDue(
-	const uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator)
+	const uint64_t nowUnixTimeUs, DebugEntitySimulator& debugSimulator)
 {
 	if (pendingIncomingByEntityId.empty())
 	{
@@ -75,7 +75,7 @@ void SH_TransferMailbox::AddPendingOutgoing(
 }
 
 size_t SH_TransferMailbox::CommitOutgoingIfDue(
-	const uint64_t nowUnixTimeUs, DebugEntityOrbitSimulator& debugSimulator,
+	const uint64_t nowUnixTimeUs, DebugEntitySimulator& debugSimulator,
 	SH_EntityAuthorityTracker& tracker,
 	const SH_TelemetryPublisher& telemetryPublisher)
 {
