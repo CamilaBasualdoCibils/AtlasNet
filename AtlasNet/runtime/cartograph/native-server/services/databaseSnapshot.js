@@ -8,6 +8,7 @@ const {
 } = require('../config');
 const {
   decodeRedisDisplayValue,
+  decodeJsonPayloadForKey,
   formatHashPayloadPairs,
   hasHardcodedHashDecoder,
   readHardcodedHashPayload,
@@ -447,9 +448,14 @@ async function populateRecordPayloads(client, metadata, recordsByKey, options = 
 
       const payload = String(value);
       record.type = 'json';
+      const displayPayload = decodeJsonPayloadForKey(
+        key,
+        payload,
+        decodeSerialized
+      );
       setRecordPayload(
         record,
-        payload,
+        displayPayload,
         payload === 'null' || payload.length === 0 ? 0 : 1
       );
     }

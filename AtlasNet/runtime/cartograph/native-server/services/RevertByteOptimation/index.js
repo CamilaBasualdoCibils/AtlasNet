@@ -1,6 +1,7 @@
 const { decodeRedisDisplayValue } = require('./format');
 const {
   decodeHardcodedHashEntry,
+  decodeJsonPayloadForKey,
   decodeSetMemberForKey,
   hasHardcodedHashDecoder,
   shouldDecodeSetKey,
@@ -41,6 +42,7 @@ async function readHardcodedSetPayload(client, key, decodeEnabled) {
 
 module.exports = {
   decodeRedisDisplayValue,
+  decodeJsonPayloadForKey,
   formatHashPayloadPairs,
   hasHardcodedHashDecoder,
   readHardcodedHashPayload,

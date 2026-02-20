@@ -16,6 +16,7 @@ const HEALTH_PING_KEY = 'Health_Ping';
 const CLIENT_ID_TO_IP_KEY = 'ClientID to IP';
 const CLIENT_ID_TO_PROXY_ID_KEY = 'ClientID to ProxyID';
 const PROXY_CLIENTS_SET_KEY = 'Proxy_{}_Clients';
+const HEURISTIC_MANIFEST_KEY = 'HeuristicManifest';
 
 const NETWORK_IDENTITY_TYPE_NAME_BY_CODE = {
   0: 'invalid',
@@ -222,8 +223,88 @@ function decodeHardcodedHashEntry(key, field, value, decodeEnabled) {
   return [decoder.decodeField(field), decoder.decodeValue(value)];
 }
 
+function decodeBase64BlobSummary(base64Value) {
+  if (typeof base64Value !== 'string' || base64Value.length === 0) {
+    return decodeRedisDisplayValue(base64Value);
+  }
+  try {
+    const raw = Buffer.from(base64Value, 'base64');
+    return `decodedBytes=${raw.length} preview=${formatBinaryPreview(raw)}`;
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown';
+    return `<base64 decode error: ${message}>`;
+  }
+}
+
+function decodeBase64NetworkIdentity(base64Value) {
+  if (typeof base64Value !== 'string' || base64Value.length === 0) {
+    return decodeRedisDisplayValue(base64Value);
+  }
+  try {
+    const raw = Buffer.from(base64Value, 'base64');
+    return decodeNetworkIdentityValue(raw);
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'unknown';
+    return `<base64 decode error: ${message}>`;
+  }
+}
+
+function decodeHeuristicManifestJsonPayload(payload, decodeEnabled) {
+  if (!decodeEnabled || typeof payload !== 'string' || payload.trim().length === 0) {
+    return payload;
+  }
+
+  try {
+    const parsed = JSON.parse(payload);
+    if (!parsed || typeof parsed !== 'object') {
+      return payload;
+    }
+
+    if (typeof parsed.HeuristicData64 === 'string') {
+      parsed.HeuristicData64_Decoded = decodeBase64BlobSummary(parsed.HeuristicData64);
+    }
+
+    if (parsed.Pending && typeof parsed.Pending === 'object') {
+      for (const item of Object.values(parsed.Pending)) {
+        if (!item || typeof item !== 'object') {
+          continue;
+        }
+        if (typeof item.BoundsData64 === 'string') {
+          item.BoundsData64_Decoded = decodeBase64BlobSummary(item.BoundsData64);
+        }
+      }
+    }
+
+    if (parsed.Claimed && typeof parsed.Claimed === 'object') {
+      for (const item of Object.values(parsed.Claimed)) {
+        if (!item || typeof item !== 'object') {
+          continue;
+        }
+        if (typeof item.Owner64 === 'string') {
+          item.Owner64_Decoded = decodeBase64NetworkIdentity(item.Owner64);
+        }
+        if (typeof item.BoundsData64 === 'string') {
+          item.BoundsData64_Decoded = decodeBase64BlobSummary(item.BoundsData64);
+        }
+      }
+    }
+
+    return JSON.stringify(parsed, null, 2);
+  } catch {
+    return payload;
+  }
+}
+
+function decodeJsonPayloadForKey(key, payload, decodeEnabled) {
+  if (key === HEURISTIC_MANIFEST_KEY) {
+    return decodeHeuristicManifestJsonPayload(payload, decodeEnabled);
+  }
+  return payload;
+}
+
 module.exports = {
   decodeHardcodedHashEntry,
+  decodeJsonPayloadForKey,
   decodeSetMemberForKey,
   hasHardcodedHashDecoder,
   shouldDecodeSetKey,
