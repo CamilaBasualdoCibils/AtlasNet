@@ -8,11 +8,13 @@
 
 #include "Debug/Log.hpp"
 #include "Entity/EntityHandoff/DebugEntities/DebugEntityOrbitSimulator.hpp"
+#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
 #include "SH_EntityAuthorityTracker.hpp"
 #include "SH_TelemetryPublisher.hpp"
 
-SH_TransferMailbox::SH_TransferMailbox(std::shared_ptr<Log> inLogger)
-	: logger(std::move(inLogger))
+SH_TransferMailbox::SH_TransferMailbox(const NetworkIdentity& self,
+									   std::shared_ptr<Log> inLogger)
+	: selfIdentity(self), logger(std::move(inLogger))
 {
 }
 
@@ -54,6 +56,8 @@ size_t SH_TransferMailbox::AdoptIncomingIfDue(
 			continue;
 		}
 		debugSimulator.AdoptSingleEntity(handoff.entity);
+		HandoffTransferManifest::Get().MarkIncomingAdopted(
+			entityId, handoff.sender, selfIdentity, handoff.transferTimeUs);
 		adoptedIds.push_back(entityId);
 	}
 
@@ -92,12 +96,15 @@ size_t SH_TransferMailbox::CommitOutgoingIfDue(
 		}
 		if (!tracker.IsPassingTo(entityId, handoff.targetIdentity))
 		{
+			HandoffTransferManifest::Get().MarkTransferCanceled(entityId);
 			canceledIds.push_back(entityId);
 			continue;
 		}
 
 		debugSimulator.RemoveEntity(entityId);
 		tracker.RemoveEntity(entityId);
+		HandoffTransferManifest::Get().MarkOutgoingCommitted(
+			entityId, selfIdentity, handoff.targetIdentity);
 		committedIds.push_back(entityId);
 
 		if (logger)

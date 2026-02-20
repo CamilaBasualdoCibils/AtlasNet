@@ -4,6 +4,7 @@
 #include <unordered_map>
 
 #include "SH_HandoffTypes.hpp"
+#include "Network/NetworkIdentity.hpp"
 
 class DebugEntityOrbitSimulator;
 class Log;
@@ -15,7 +16,7 @@ class SH_TelemetryPublisher;
 class SH_TransferMailbox
 {
   public:
-	explicit SH_TransferMailbox(std::shared_ptr<Log> inLogger);
+	SH_TransferMailbox(const NetworkIdentity& self, std::shared_ptr<Log> inLogger);
 
 	// Clears all pending state.
 	void Reset();
@@ -49,6 +50,7 @@ class SH_TransferMailbox
 	}
 
   private:
+	NetworkIdentity selfIdentity;
 	std::shared_ptr<Log> logger;
 	std::unordered_map<AtlasEntityID, SH_PendingIncomingHandoff>
 		pendingIncomingByEntityId;

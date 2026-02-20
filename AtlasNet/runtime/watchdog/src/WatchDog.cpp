@@ -5,7 +5,10 @@
 #include <cstdlib>
 #include <stop_token>
 #include <thread>
+#include <unordered_set>
 
+#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
+#include "Global/Serialize/ByteReader.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Docker/DockerIO.hpp"
@@ -19,6 +22,45 @@
 
 #include "Interlink/Telemetry/NetworkManifest.hpp"
 #include "Entity/Transform.hpp"
+
+namespace
+{
+constexpr auto kHandoffAuditInterval = std::chrono::milliseconds(250);
+constexpr uint64_t kHandoffDiscrepancyThresholdUs = 1500000ULL;
+
+std::unordered_set<std::string> GetLiveShardIds()
+{
+	std::unordered_map<std::string, double> pingByRawKey;
+	HealthManifest::Get().GetAllPings(pingByRawKey);
+
+	const double nowSec = InternalDB::Get()->GetTimeNowSeconds();
+	std::unordered_set<std::string> live;
+	live.reserve(pingByRawKey.size());
+	for (const auto& [rawKey, expiresAtSec] : pingByRawKey)
+	{
+		if (expiresAtSec <= nowSec)
+		{
+			continue;
+		}
+
+		try
+		{
+			ByteReader br(rawKey);
+			NetworkIdentity id;
+			id.Deserialize(br);
+			if (id.Type == NetworkIdentityType::eShard)
+			{
+				live.insert(id.ToString());
+			}
+		}
+		catch (...)
+		{
+		}
+	}
+	return live;
+}
+}  // namespace
+
 WatchDog::WatchDog() {}
 
 WatchDog::~WatchDog() {}
@@ -33,8 +75,15 @@ void WatchDog::ClearAllDatabaseState()
 void WatchDog::Run()
 {
 	Init();
+	auto nextHandoffAudit = std::chrono::steady_clock::now() + kHandoffAuditInterval;
 	while (!ShouldShutdown)
 	{
+		const auto now = std::chrono::steady_clock::now();
+		if (now >= nextHandoffAudit)
+		{
+			AuditActiveHandoffTransfers();
+			nextHandoffAudit = now + kHandoffAuditInterval;
+		}
 		std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	}
 	logger->Debug("Shutting down");
@@ -196,5 +245,95 @@ void WatchDog::HeuristicThreadEntry(std::stop_token st)
 		std::this_thread::sleep_for(
 			std::chrono::seconds(_WATCHDOG_COMPUTE_HEURISTIC_INTERVAL_S));
 		ComputeHeuristic();
+	}
+}
+
+void WatchDog::AuditActiveHandoffTransfers()
+{
+	std::vector<HandoffTransferManifest::ActiveTransferRecord> activeTransfers;
+	HandoffTransferManifest::Get().GetAllActiveTransfers(activeTransfers);
+	if (activeTransfers.empty())
+	{
+		return;
+	}
+
+	const uint64_t nowUs = HandoffTransferManifest::Get().NowUnixTimeUs();
+	const auto liveShardIds = GetLiveShardIds();
+	for (const auto& transfer : activeTransfers)
+	{
+		if (transfer.transferTimeUs == 0)
+		{
+			continue;
+		}
+		if (nowUs <= transfer.transferTimeUs + kHandoffDiscrepancyThresholdUs)
+		{
+			continue;
+		}
+
+		const auto holders =
+			HandoffTransferManifest::Get().GetTransferHolders(transfer.entityId);
+		size_t liveHolderCount = 0;
+		for (const auto& holder : holders)
+		{
+			if (liveShardIds.contains(holder))
+			{
+				++liveHolderCount;
+			}
+		}
+
+		if (liveHolderCount == 1)
+		{
+			bool targetIsLiveHolder = false;
+			bool sourceIsLiveHolder = false;
+			for (const auto& holder : holders)
+			{
+				if (!liveShardIds.contains(holder))
+				{
+					continue;
+				}
+				if (holder == transfer.target)
+				{
+					targetIsLiveHolder = true;
+				}
+				if (holder == transfer.source)
+				{
+					sourceIsLiveHolder = true;
+				}
+			}
+
+			if (targetIsLiveHolder)
+			{
+				HandoffTransferManifest::Get().ClearTransfer(transfer.entityId);
+				continue;
+			}
+			if (sourceIsLiveHolder)
+			{
+				logger->WarningFormatted(
+					"[EntityHandoff][WatchDog] STALLED_TRANSFER entity={} from={} to={} "
+					"state={} overdue_ms={} holders={} live_holders=1(source)",
+					transfer.entityId, transfer.source, transfer.target,
+					transfer.state, (nowUs - transfer.transferTimeUs) / 1000ULL,
+					holders.size());
+			}
+			continue;
+		}
+
+		const uint64_t overdueMs =
+			(nowUs - transfer.transferTimeUs) / 1000ULL;
+		if (liveHolderCount == 0)
+		{
+			logger->ErrorFormatted(
+				"[EntityHandoff][WatchDog] LIMBO entity={} from={} to={} state={} "
+				"overdue_ms={} holders={} live_holders=0",
+				transfer.entityId, transfer.source, transfer.target,
+				transfer.state, overdueMs, holders.size());
+			continue;
+		}
+
+		logger->ErrorFormatted(
+			"[EntityHandoff][WatchDog] DUAL_AUTH entity={} from={} to={} state={} "
+			"overdue_ms={} holders={} live_holders={}",
+			transfer.entityId, transfer.source, transfer.target, transfer.state,
+			overdueMs, holders.size(), liveHolderCount);
 	}
 }

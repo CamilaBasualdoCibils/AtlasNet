@@ -8,6 +8,7 @@
 #include <vector>
 
 #include "Debug/Log.hpp"
+#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Database/ServerRegistry.hpp"
@@ -122,6 +123,8 @@ SH_BorderHandoffPlanner::PlanAndSendAll(
 		const uint64_t transferTimeUs = nowUnixTimeUs + delayUs;
 		SH_HandoffPacketManager::Get().SendEntityHandoff(*targetIdentity, entity,
 														 transferTimeUs);
+		HandoffTransferManifest::Get().MarkTransferStarted(
+			entity.Entity_ID, selfIdentity, *targetIdentity, transferTimeUs);
 
 		if (logger)
 		{

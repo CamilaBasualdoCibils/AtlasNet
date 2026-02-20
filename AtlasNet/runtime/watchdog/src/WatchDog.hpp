@@ -37,6 +37,7 @@ public:
 	void ComputeHeuristic();
 	void SwitchHeuristic(IHeuristic::Type newHeuristic);
 	void HeuristicThreadEntry(std::stop_token);
+	void AuditActiveHandoffTransfers();
 	void Init();
    
     void Cleanup();

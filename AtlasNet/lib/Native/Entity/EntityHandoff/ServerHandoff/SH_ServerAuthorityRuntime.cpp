@@ -40,7 +40,7 @@ uint64_t NowUnixTimeUs()
 }
 
 #ifndef ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT
-#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 1
+#define ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT 3000
 #endif
 constexpr uint32_t kDefaultTestEntityCount =
 	(ATLASNET_ENTITY_HANDOFF_TEST_ENTITY_COUNT > 0)
@@ -76,7 +76,7 @@ void SH_ServerAuthorityRuntime::Init(const NetworkIdentity& self,
 	borderPlanner = std::make_unique<SH_BorderHandoffPlanner>(
 		selfIdentity, logger,
 		SH_BorderHandoffPlanner::Options{.handoffDelay = kTransferDelay});
-	transferMailbox = std::make_unique<SH_TransferMailbox>(logger);
+	transferMailbox = std::make_unique<SH_TransferMailbox>(selfIdentity, logger);
 	telemetryPublisher = std::make_unique<SH_TelemetryPublisher>();
 
 	tracker->Reset();
