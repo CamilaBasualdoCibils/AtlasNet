@@ -5,7 +5,7 @@ import type { MouseEvent as ReactMouseEvent } from 'react';
 import type { RefObject } from 'react';
 import type { AuthorityEntityTelemetry } from '../../lib/cartographTypes';
 import { DatabaseExplorerInspector } from '../../database/components/DatabaseExplorerInspector';
-import type { MapViewMode } from '../../lib/mapRenderer';
+import type { MapProjectionMode, MapViewMode } from '../../lib/mapRenderer';
 import { useEntityDatabaseDetails } from './useEntityDatabaseDetails';
 
 const ENTITY_INSPECTOR_DESKTOP_GRID_COLUMNS_CLASS =
@@ -13,19 +13,25 @@ const ENTITY_INSPECTOR_DESKTOP_GRID_COLUMNS_CLASS =
 const PANEL_MIN_WIDTH_PX = 520;
 const FOLLOW_SELECTED_ENTITIES_STORAGE_KEY =
   'cartograph.map.entityInspector.followSelectedEntities';
-const FOLLOW_PADDING = 4;
-const FOLLOW_ZOOM_DAMPEN = 0.35;
-const FOLLOW_MIN_WORLD_EXTENT = 24;
+const FOLLOW_PADDING = 1.8;
+const FOLLOW_ZOOM_DAMPEN = 1;
+const FOLLOW_MIN_WORLD_EXTENT = 8;
 const FOLLOW_MIN_VISIBLE_WIDTH_PX = 180;
 const FOLLOW_MIN_VISIBLE_HEIGHT_PX = 120;
+const FOLLOW_BBOX_PADDING = 1.25;
+const FOLLOW_MIN_SCREEN_MARGIN_PX = 180;
 const PANEL_WIDTH_FALLBACK_RATIO = 0.5;
-const FOLLOW_LERP_ALPHA = 0.1;
+const FOLLOW_LERP_ALPHA = 0.05;
+const FOLLOW_BOUNDS_LERP_ALPHA = 0.1;
 const RESTORE_LERP_ALPHA = 0.12;
 const CAMERA_EPSILON = 0.001;
 const FOLLOW_MIN_SCALE_2D = 0.05;
 const FOLLOW_MAX_SCALE_2D = 20;
-const FOLLOW_PANEL_COMPENSATION_MIN = 0.55;
-const FOLLOW_PANEL_COMPENSATION_SPREAD_MULTIPLIER = 6;
+const FOLLOW_MIN_DISTANCE_3D = 5;
+const FOLLOW_MAX_DISTANCE_3D = 20000;
+const FOLLOW_MIN_ORTHO_HEIGHT_3D = 1;
+const FOLLOW_MAX_ORTHO_HEIGHT_3D = 20000;
+const FOLLOW_MIN_PROJECTED_EXTENT_PX = 2;
 
 interface CameraTransform2D {
   scale: number;
@@ -33,10 +39,35 @@ interface CameraTransform2D {
   offsetY: number;
 }
 
+interface CameraTransform3D {
+  targetX: number;
+  targetY: number;
+  targetZ: number;
+  distance: number;
+  yaw: number;
+  pitch: number;
+  roll: number;
+  orthoHeight: number;
+  projectionMode: MapProjectionMode;
+}
+
+interface FollowBoundsState {
+  centerX: number;
+  centerY: number;
+  width: number;
+  height: number;
+}
+
 interface MapRendererFollowController {
   setScale: (value: number) => void;
   setOffset: (x: number, y: number) => void;
   getViewState2D: () => CameraTransform2D;
+  getViewState3D: () => CameraTransform3D;
+  setViewState3D: (nextViewState: Partial<CameraTransform3D>) => void;
+  projectMapPoint: (point: { x: number; y: number; z?: number }) => {
+    x: number;
+    y: number;
+  } | null;
 }
 
 interface EntityInspectorPanelProps {
@@ -69,6 +100,21 @@ function lerp(from: number, to: number, alpha: number): number {
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
+}
+
+function shortestAngleDelta(from: number, to: number): number {
+  let delta = to - from;
+  while (delta > Math.PI) {
+    delta -= Math.PI * 2;
+  }
+  while (delta < -Math.PI) {
+    delta += Math.PI * 2;
+  }
+  return delta;
+}
+
+function lerpAngle(from: number, to: number, alpha: number): number {
+  return from + shortestAngleDelta(from, to) * alpha;
 }
 
 function getBoundsForEntities(
@@ -127,7 +173,15 @@ export function EntityInspectorPanel({
     startX: number;
     startWidth: number;
   } | null>(null);
-  const preFollowCameraRef = useRef<CameraTransform2D | null>(null);
+  const preFollowCamera2DRef = useRef<CameraTransform2D | null>(null);
+  const preFollowCamera3DRef = useRef<CameraTransform3D | null>(null);
+  const followLockedRotation3DRef = useRef<{
+    yaw: number;
+    pitch: number;
+    roll: number;
+  } | null>(null);
+  const smoothedFollowBoundsRef = useRef<FollowBoundsState | null>(null);
+  const wasFollowActiveRef = useRef(false);
   const [panelWidthPx, setPanelWidthPx] = useState<number | null>(null);
   const [followSelectedEntities, setFollowSelectedEntities] = useState(false);
 
@@ -162,36 +216,45 @@ export function EntityInspectorPanel({
   useEffect(() => {
     const renderer = rendererRef.current;
     const container = containerRef.current;
-    if (!renderer || !container || viewMode !== '2d') {
+    if (!renderer || !container) {
       return;
     }
 
-    const followActive =
-      followSelectedEntities && selectedEntities.length > 0;
-
-    if (
-      !followSelectedEntities &&
-      selectedEntities.length > 0 &&
-      preFollowCameraRef.current
-    ) {
-      preFollowCameraRef.current = null;
+    const followActive = followSelectedEntities && selectedEntities.length > 0;
+    if (followActive && !wasFollowActiveRef.current) {
+      preFollowCamera2DRef.current = null;
+      preFollowCamera3DRef.current = null;
+      followLockedRotation3DRef.current = null;
+      smoothedFollowBoundsRef.current = null;
     }
+    wasFollowActiveRef.current = followActive;
 
-    if (followActive && !preFollowCameraRef.current) {
-      preFollowCameraRef.current = renderer.getViewState2D();
+    if (followActive) {
+      if (viewMode === '2d' && !preFollowCamera2DRef.current) {
+        preFollowCamera2DRef.current = renderer.getViewState2D();
+        smoothedFollowBoundsRef.current = null;
+      }
+      if (viewMode === '3d' && !preFollowCamera3DRef.current) {
+        const current3D = renderer.getViewState3D();
+        preFollowCamera3DRef.current = current3D;
+        followLockedRotation3DRef.current = {
+          yaw: current3D.yaw,
+          pitch: current3D.pitch,
+          roll: current3D.roll,
+        };
+        smoothedFollowBoundsRef.current = null;
+      }
     }
 
     if (!followActive) {
-      if (
-        selectedEntities.length === 0 &&
-        preFollowCameraRef.current != null
-      ) {
-        const target = preFollowCameraRef.current;
+      if (viewMode === '2d' && preFollowCamera2DRef.current != null) {
+        const target = preFollowCamera2DRef.current;
         let rafId = 0;
         const tick = () => {
           const current = rendererRef.current;
           if (!current || viewMode !== '2d') {
-            preFollowCameraRef.current = null;
+            preFollowCamera2DRef.current = null;
+            smoothedFollowBoundsRef.current = null;
             return;
           }
 
@@ -219,7 +282,8 @@ export function EntityInspectorPanel({
           if (done) {
             current.setScale(target.scale);
             current.setOffset(target.offsetX, target.offsetY);
-            preFollowCameraRef.current = null;
+            preFollowCamera2DRef.current = null;
+            smoothedFollowBoundsRef.current = null;
             return;
           }
 
@@ -231,11 +295,114 @@ export function EntityInspectorPanel({
           window.cancelAnimationFrame(rafId);
         };
       }
+
+      if (viewMode === '3d' && preFollowCamera3DRef.current != null) {
+        const target = preFollowCamera3DRef.current;
+        let rafId = 0;
+        const tick = () => {
+          const current = rendererRef.current;
+          if (!current || viewMode !== '3d') {
+            preFollowCamera3DRef.current = null;
+            followLockedRotation3DRef.current = null;
+            smoothedFollowBoundsRef.current = null;
+            return;
+          }
+
+          const currentTransform = current.getViewState3D();
+          const nextTargetX = lerp(
+            currentTransform.targetX,
+            target.targetX,
+            RESTORE_LERP_ALPHA
+          );
+          const nextTargetY = lerp(
+            currentTransform.targetY,
+            target.targetY,
+            RESTORE_LERP_ALPHA
+          );
+          const nextTargetZ = lerp(
+            currentTransform.targetZ,
+            target.targetZ,
+            RESTORE_LERP_ALPHA
+          );
+          const nextDistance = lerp(
+            currentTransform.distance,
+            target.distance,
+            RESTORE_LERP_ALPHA
+          );
+          const nextOrthoHeight = lerp(
+            currentTransform.orthoHeight,
+            target.orthoHeight,
+            RESTORE_LERP_ALPHA
+          );
+          const nextYaw = lerpAngle(
+            currentTransform.yaw,
+            target.yaw,
+            RESTORE_LERP_ALPHA
+          );
+          const nextPitch = lerp(
+            currentTransform.pitch,
+            target.pitch,
+            RESTORE_LERP_ALPHA
+          );
+          const nextRoll = lerpAngle(
+            currentTransform.roll,
+            target.roll,
+            RESTORE_LERP_ALPHA
+          );
+
+          current.setViewState3D({
+            projectionMode: target.projectionMode,
+            targetX: nextTargetX,
+            targetY: nextTargetY,
+            targetZ: nextTargetZ,
+            distance: nextDistance,
+            orthoHeight: nextOrthoHeight,
+            yaw: nextYaw,
+            pitch: nextPitch,
+            roll: nextRoll,
+          });
+
+          const done =
+            Math.abs(nextTargetX - target.targetX) < CAMERA_EPSILON &&
+            Math.abs(nextTargetY - target.targetY) < CAMERA_EPSILON &&
+            Math.abs(nextTargetZ - target.targetZ) < CAMERA_EPSILON &&
+            Math.abs(nextDistance - target.distance) < CAMERA_EPSILON &&
+            Math.abs(nextOrthoHeight - target.orthoHeight) < CAMERA_EPSILON &&
+            Math.abs(shortestAngleDelta(nextYaw, target.yaw)) < CAMERA_EPSILON &&
+            Math.abs(nextPitch - target.pitch) < CAMERA_EPSILON &&
+            Math.abs(shortestAngleDelta(nextRoll, target.roll)) < CAMERA_EPSILON;
+
+          if (done) {
+            current.setViewState3D({
+              projectionMode: target.projectionMode,
+              targetX: target.targetX,
+              targetY: target.targetY,
+              targetZ: target.targetZ,
+              distance: target.distance,
+              orthoHeight: target.orthoHeight,
+              yaw: target.yaw,
+              pitch: target.pitch,
+              roll: target.roll,
+            });
+            preFollowCamera3DRef.current = null;
+            followLockedRotation3DRef.current = null;
+            smoothedFollowBoundsRef.current = null;
+            return;
+          }
+
+          rafId = window.requestAnimationFrame(tick);
+        };
+
+        rafId = window.requestAnimationFrame(tick);
+        return () => {
+          window.cancelAnimationFrame(rafId);
+        };
+      }
+
       return;
     }
 
-    const bounds = getBoundsForEntities(selectedEntities);
-    if (!bounds) {
+    if (!getBoundsForEntities(selectedEntities)) {
       return;
     }
     let rafId = 0;
@@ -246,7 +413,6 @@ export function EntityInspectorPanel({
         !currentRenderer ||
         !currentContainer ||
         !followSelectedEntities ||
-        viewMode !== '2d' ||
         selectedEntities.length === 0
       ) {
         return;
@@ -264,14 +430,6 @@ export function EntityInspectorPanel({
         typeof measuredPanelWidth === 'number' && Number.isFinite(measuredPanelWidth)
           ? measuredPanelWidth
           : panelWidthPx ?? containerWidth * PANEL_WIDTH_FALLBACK_RATIO;
-      const visibleWidth = Math.max(
-        FOLLOW_MIN_VISIBLE_WIDTH_PX,
-        containerWidth - panelWidth
-      );
-      const visibleHeight = Math.max(
-        FOLLOW_MIN_VISIBLE_HEIGHT_PX,
-        containerHeight
-      );
 
       const worldWidth = Math.max(
         FOLLOW_MIN_WORLD_EXTENT,
@@ -281,55 +439,233 @@ export function EntityInspectorPanel({
         FOLLOW_MIN_WORLD_EXTENT,
         latestBounds.maxY - latestBounds.minY
       );
-      const spreadExtent = Math.max(worldWidth, worldHeight);
-      const spreadRatio = clamp(
-        (spreadExtent - FOLLOW_MIN_WORLD_EXTENT) /
-          (FOLLOW_MIN_WORLD_EXTENT * FOLLOW_PANEL_COMPENSATION_SPREAD_MULTIPLIER),
-        0,
-        1
-      );
-      const panelCompensation =
-        FOLLOW_PANEL_COMPENSATION_MIN +
-        (1 - FOLLOW_PANEL_COMPENSATION_MIN) * spreadRatio;
-      const effectivePanelWidth = panelWidth * panelCompensation;
+      const rawCenterX = (latestBounds.minX + latestBounds.maxX) / 2;
+      const rawCenterY = (latestBounds.minY + latestBounds.maxY) / 2;
+      const previousSmoothedBounds = smoothedFollowBoundsRef.current;
+      const smoothedBounds: FollowBoundsState = previousSmoothedBounds
+        ? {
+            centerX: lerp(
+              previousSmoothedBounds.centerX,
+              rawCenterX,
+              FOLLOW_BOUNDS_LERP_ALPHA
+            ),
+            centerY: lerp(
+              previousSmoothedBounds.centerY,
+              rawCenterY,
+              FOLLOW_BOUNDS_LERP_ALPHA
+            ),
+            width: lerp(
+              previousSmoothedBounds.width,
+              worldWidth,
+              FOLLOW_BOUNDS_LERP_ALPHA
+            ),
+            height: lerp(
+              previousSmoothedBounds.height,
+              worldHeight,
+              FOLLOW_BOUNDS_LERP_ALPHA
+            ),
+          }
+        : {
+            centerX: rawCenterX,
+            centerY: rawCenterY,
+            width: worldWidth,
+            height: worldHeight,
+          };
+      smoothedFollowBoundsRef.current = smoothedBounds;
 
-      const scaleX = visibleWidth / (worldWidth * FOLLOW_PADDING);
-      const scaleY = visibleHeight / (worldHeight * FOLLOW_PADDING);
+      const obstructionWidth = clamp(
+        panelWidth,
+        0,
+        Math.max(0, containerWidth - FOLLOW_MIN_VISIBLE_WIDTH_PX)
+      );
+      const followScreenMarginPx =
+        activeEntityId != null ? 0 : FOLLOW_MIN_SCREEN_MARGIN_PX;
+      const safeLeft = followScreenMarginPx;
+      const safeRight = Math.max(
+        safeLeft + FOLLOW_MIN_VISIBLE_WIDTH_PX,
+        containerWidth - obstructionWidth - followScreenMarginPx
+      );
+      const safeTop = followScreenMarginPx;
+      const safeBottom = Math.max(
+        safeTop + FOLLOW_MIN_VISIBLE_HEIGHT_PX,
+        containerHeight - followScreenMarginPx
+      );
+      const usableWidth = Math.max(
+        FOLLOW_MIN_VISIBLE_WIDTH_PX,
+        safeRight - safeLeft
+      );
+      const usableHeight = Math.max(
+        FOLLOW_MIN_VISIBLE_HEIGHT_PX,
+        safeBottom - safeTop
+      );
+
+      const paddedWorldWidth =
+        smoothedBounds.width * FOLLOW_PADDING * FOLLOW_BBOX_PADDING;
+      const paddedWorldHeight =
+        smoothedBounds.height * FOLLOW_PADDING * FOLLOW_BBOX_PADDING;
+      const scaleX = usableWidth / paddedWorldWidth;
+      const scaleY = usableHeight / paddedWorldHeight;
       const targetScale = clamp(
         Math.min(scaleX, scaleY) * FOLLOW_ZOOM_DAMPEN,
         FOLLOW_MIN_SCALE_2D,
         FOLLOW_MAX_SCALE_2D
       );
 
-      const centerX = (latestBounds.minX + latestBounds.maxX) / 2;
-      const centerY = (latestBounds.minY + latestBounds.maxY) / 2;
-      const desiredScreenX = Math.max(
-        FOLLOW_MIN_VISIBLE_WIDTH_PX / 2,
-        (containerWidth - effectivePanelWidth) / 2
-      );
-      const desiredScreenY = containerHeight / 2;
-      const targetOffsetX = desiredScreenX - centerX * targetScale;
-      const targetOffsetY = desiredScreenY - centerY * targetScale;
+      const centerX = smoothedBounds.centerX;
+      const centerY = smoothedBounds.centerY;
+      const desiredScreenX = safeLeft + usableWidth / 2;
+      const desiredScreenY = safeTop + usableHeight / 2;
 
-      const current = currentRenderer.getViewState2D();
-      const nextScale = clamp(
-        lerp(current.scale, targetScale, FOLLOW_LERP_ALPHA),
-        FOLLOW_MIN_SCALE_2D,
-        FOLLOW_MAX_SCALE_2D
-      );
-      const nextOffsetX = lerp(
-        current.offsetX,
-        targetOffsetX,
-        FOLLOW_LERP_ALPHA
-      );
-      const nextOffsetY = lerp(
-        current.offsetY,
-        targetOffsetY,
-        FOLLOW_LERP_ALPHA
-      );
+      if (viewMode === '2d') {
+        const targetOffsetX = desiredScreenX - centerX * targetScale;
+        const targetOffsetY = desiredScreenY - centerY * targetScale;
 
-      currentRenderer.setScale(nextScale);
-      currentRenderer.setOffset(nextOffsetX, nextOffsetY);
+        const current = currentRenderer.getViewState2D();
+        const nextScale = clamp(
+          lerp(current.scale, targetScale, FOLLOW_LERP_ALPHA),
+          FOLLOW_MIN_SCALE_2D,
+          FOLLOW_MAX_SCALE_2D
+        );
+        const nextOffsetX = lerp(
+          current.offsetX,
+          targetOffsetX,
+          FOLLOW_LERP_ALPHA
+        );
+        const nextOffsetY = lerp(
+          current.offsetY,
+          targetOffsetY,
+          FOLLOW_LERP_ALPHA
+        );
+
+        currentRenderer.setScale(nextScale);
+        currentRenderer.setOffset(nextOffsetX, nextOffsetY);
+      } else if (viewMode === '3d') {
+        const current3D = currentRenderer.getViewState3D();
+        const projectedEntities = selectedEntities
+          .map((entity) =>
+            currentRenderer.projectMapPoint({
+              x: entity.x,
+              y: entity.y,
+              z: entity.z,
+            })
+          )
+          .filter(
+            (point): point is { x: number; y: number } => point != null
+          );
+        if (projectedEntities.length === 0) {
+          rafId = window.requestAnimationFrame(tick);
+          return;
+        }
+
+        let minScreenX = Infinity;
+        let maxScreenX = -Infinity;
+        let minScreenY = Infinity;
+        let maxScreenY = -Infinity;
+        for (const point of projectedEntities) {
+          minScreenX = Math.min(minScreenX, point.x);
+          maxScreenX = Math.max(maxScreenX, point.x);
+          minScreenY = Math.min(minScreenY, point.y);
+          maxScreenY = Math.max(maxScreenY, point.y);
+        }
+        const projectedWidth = Math.max(
+          FOLLOW_MIN_PROJECTED_EXTENT_PX,
+          maxScreenX - minScreenX
+        );
+        const projectedHeight = Math.max(
+          FOLLOW_MIN_PROJECTED_EXTENT_PX,
+          maxScreenY - minScreenY
+        );
+        const projectedScreenCenterX = (minScreenX + maxScreenX) / 2;
+        const projectedScreenCenterY = (minScreenY + maxScreenY) / 2;
+
+        const targetProjectedWidth = Math.max(
+          FOLLOW_MIN_PROJECTED_EXTENT_PX,
+          usableWidth / (FOLLOW_PADDING * FOLLOW_BBOX_PADDING)
+        );
+        const targetProjectedHeight = Math.max(
+          FOLLOW_MIN_PROJECTED_EXTENT_PX,
+          usableHeight / (FOLLOW_PADDING * FOLLOW_BBOX_PADDING)
+        );
+
+        let zoomScaleFactor = Math.max(
+          projectedWidth / targetProjectedWidth,
+          projectedHeight / targetProjectedHeight
+        );
+        if (!Number.isFinite(zoomScaleFactor) || zoomScaleFactor <= 0) {
+          zoomScaleFactor = 1;
+        }
+
+        const targetDistance = clamp(
+          current3D.distance * zoomScaleFactor * FOLLOW_ZOOM_DAMPEN,
+          FOLLOW_MIN_DISTANCE_3D,
+          FOLLOW_MAX_DISTANCE_3D
+        );
+        const targetOrthoHeight = clamp(
+          current3D.orthoHeight * zoomScaleFactor * FOLLOW_ZOOM_DAMPEN,
+          FOLLOW_MIN_ORTHO_HEIGHT_3D,
+          FOLLOW_MAX_ORTHO_HEIGHT_3D
+        );
+
+        const projectedCenter = currentRenderer.projectMapPoint({
+          x: centerX,
+          y: centerY,
+        });
+        if (!projectedCenter) {
+          rafId = window.requestAnimationFrame(tick);
+          return;
+        }
+
+        const projectedXUnit = currentRenderer.projectMapPoint({
+          x: centerX + 1,
+          y: centerY,
+        });
+        const projectedYUnit = currentRenderer.projectMapPoint({
+          x: centerX,
+          y: centerY + 1,
+        });
+
+        let targetCenterX = centerX;
+        let targetCenterY = centerY;
+        if (projectedXUnit && projectedYUnit) {
+          const basisXX = projectedXUnit.x - projectedCenter.x;
+          const basisXY = projectedXUnit.y - projectedCenter.y;
+          const basisYX = projectedYUnit.x - projectedCenter.x;
+          const basisYY = projectedYUnit.y - projectedCenter.y;
+          const deltaScreenX = desiredScreenX - projectedScreenCenterX;
+          const deltaScreenY = desiredScreenY - projectedScreenCenterY;
+          const determinant = basisXX * basisYY - basisXY * basisYX;
+
+          if (Math.abs(determinant) > 1e-5) {
+            const worldOffsetX =
+              (deltaScreenX * basisYY - deltaScreenY * basisYX) /
+              determinant;
+            const worldOffsetY =
+              (basisXX * deltaScreenY - basisXY * deltaScreenX) /
+              determinant;
+
+            if (Number.isFinite(worldOffsetX) && Number.isFinite(worldOffsetY)) {
+              targetCenterX += worldOffsetX;
+              targetCenterY += worldOffsetY;
+            }
+          }
+        }
+
+        currentRenderer.setViewState3D({
+          targetX: lerp(current3D.targetX, targetCenterX, FOLLOW_LERP_ALPHA),
+          targetZ: lerp(current3D.targetZ, targetCenterY, FOLLOW_LERP_ALPHA),
+          distance:
+            current3D.projectionMode === 'perspective'
+              ? lerp(current3D.distance, targetDistance, FOLLOW_LERP_ALPHA)
+              : undefined,
+          orthoHeight:
+            current3D.projectionMode === 'orthographic'
+              ? lerp(current3D.orthoHeight, targetOrthoHeight, FOLLOW_LERP_ALPHA)
+              : undefined,
+          yaw: followLockedRotation3DRef.current?.yaw ?? current3D.yaw,
+          pitch: followLockedRotation3DRef.current?.pitch ?? current3D.pitch,
+          roll: followLockedRotation3DRef.current?.roll ?? current3D.roll,
+        });
+      }
 
       rafId = window.requestAnimationFrame(tick);
     };
@@ -339,6 +675,7 @@ export function EntityInspectorPanel({
       window.cancelAnimationFrame(rafId);
     };
   }, [
+    activeEntityId,
     containerRef,
     followSelectedEntities,
     panelWidthPx,
@@ -549,7 +886,7 @@ export function EntityInspectorPanel({
               cursor: 'pointer',
             }}
           >
-            Clear
+            Close
           </button>
         </div>
       </div>

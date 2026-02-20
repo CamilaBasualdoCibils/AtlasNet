@@ -64,6 +64,7 @@ const CAMERA_FLY_BASE_SPEED = 90;
 const CAMERA_FLY_SHIFT_MULTIPLIER = 2.5;
 const MIN_INTERACTION_SENSITIVITY = 0;
 const MAX_INTERACTION_SENSITIVITY = 2;
+const AUTHORITY_ENTITY_WORLD_RADIUS = 1.8;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -360,32 +361,62 @@ export function createMapRenderer({
     return { x: projected.x, y: projected.y };
   }
 
+  function getEntityFocusRadius3D(
+    point: MapPoint,
+    basis: CameraBasis
+  ): number {
+    const center = projectMapPoint3D(point, basis);
+    if (!center) {
+      return 6;
+    }
+
+    const sampleX = projectMapPoint3D(
+      { x: point.x + AUTHORITY_ENTITY_WORLD_RADIUS, y: point.y },
+      basis
+    );
+    const sampleY = projectMapPoint3D(
+      { x: point.x, y: point.y + AUTHORITY_ENTITY_WORLD_RADIUS },
+      basis
+    );
+
+    let projectedRadius = 0;
+    if (sampleX) {
+      projectedRadius = Math.max(
+        projectedRadius,
+        Math.hypot(sampleX.x - center.x, sampleX.y - center.y)
+      );
+    }
+    if (sampleY) {
+      projectedRadius = Math.max(
+        projectedRadius,
+        Math.hypot(sampleY.x - center.x, sampleY.y - center.y)
+      );
+    }
+
+    if (!Number.isFinite(projectedRadius) || projectedRadius <= 0.001) {
+      return 6;
+    }
+
+    return clamp(projectedRadius, 1.5, 72);
+  }
+
   function drawEntityFocusMarker(
+    point: MapPoint,
     screenX: number,
     screenY: number,
-    tone: 'selected' | 'focus'
+    tone: 'selected' | 'focus',
+    basis?: CameraBasis
   ): void {
     const isFocus = tone === 'focus';
     const outerRadius =
       viewMode === '2d'
-        ? clamp(
-            (isFocus ? 3.4 : 2.8) * Math.max(scale2D, 0.0001),
-            isFocus ? 3.2 : 2.6,
-            isFocus ? 22 : 18
-          )
-        : isFocus
-          ? 7
-          : 5;
-    const innerRadius =
+        ? AUTHORITY_ENTITY_WORLD_RADIUS * Math.max(scale2D, 0.0001)
+        : getEntityFocusRadius3D(point, basis ?? getCameraBasis());
+    const innerRadius = outerRadius * 0.55;
+    const strokeWidth =
       viewMode === '2d'
-        ? clamp(
-            outerRadius * (isFocus ? 0.48 : 0.46),
-            1.4,
-            isFocus ? 10 : 8
-          )
-        : isFocus
-          ? 3.2
-          : 2.3;
+        ? Math.max(scale2D, 0.0001)
+        : clamp(outerRadius * 0.2, 1.4, 3.2);
     const strokeColor = isFocus
       ? 'rgba(59, 130, 246, 0.95)'
       : 'rgba(251, 191, 36, 0.95)';
@@ -398,7 +429,7 @@ export function createMapRenderer({
     ctx.arc(screenX, screenY, outerRadius, 0, Math.PI * 2);
     ctx.fillStyle = fillColor;
     ctx.fill();
-    ctx.lineWidth = 2;
+    ctx.lineWidth = strokeWidth;
     ctx.strokeStyle = strokeColor;
     ctx.stroke();
 
@@ -430,7 +461,7 @@ export function createMapRenderer({
       if (!screen) {
         continue;
       }
-      drawEntityFocusMarker(screen.x, screen.y, 'selected');
+      drawEntityFocusMarker(point, screen.x, screen.y, 'selected', basis);
     }
 
     if (entityFocusOverlay.inspectedPoint) {
@@ -439,7 +470,13 @@ export function createMapRenderer({
         basis
       );
       if (inspectedScreen) {
-        drawEntityFocusMarker(inspectedScreen.x, inspectedScreen.y, 'focus');
+        drawEntityFocusMarker(
+          entityFocusOverlay.inspectedPoint,
+          inspectedScreen.x,
+          inspectedScreen.y,
+          'focus',
+          basis
+        );
         projectedFocusKeys.add(projectKeyForPoint(entityFocusOverlay.inspectedPoint));
       }
     }
@@ -452,7 +489,13 @@ export function createMapRenderer({
           basis
         );
         if (hoveredScreen) {
-          drawEntityFocusMarker(hoveredScreen.x, hoveredScreen.y, 'focus');
+          drawEntityFocusMarker(
+            entityFocusOverlay.hoveredPoint,
+            hoveredScreen.x,
+            hoveredScreen.y,
+            'focus',
+            basis
+          );
         }
       }
     }
@@ -1568,6 +1611,76 @@ export function createMapRenderer({
         offsetX,
         offsetY,
       };
+    },
+    getViewState3D() {
+      return {
+        targetX: cameraTarget.x,
+        targetY: cameraTarget.y,
+        targetZ: cameraTarget.z,
+        distance: cameraDistance,
+        yaw: cameraYaw,
+        pitch: cameraPitch,
+        roll: cameraRoll,
+        orthoHeight,
+        projectionMode,
+      };
+    },
+    setViewState3D(nextViewState: {
+      targetX?: number;
+      targetY?: number;
+      targetZ?: number;
+      distance?: number;
+      yaw?: number;
+      pitch?: number;
+      roll?: number;
+      orthoHeight?: number;
+      projectionMode?: MapProjectionMode;
+    }) {
+      if (
+        nextViewState.projectionMode === 'orthographic' ||
+        nextViewState.projectionMode === 'perspective'
+      ) {
+        projectionMode = nextViewState.projectionMode;
+      }
+
+      if (Number.isFinite(nextViewState.targetX)) {
+        cameraTarget.x = Number(nextViewState.targetX);
+      }
+      if (Number.isFinite(nextViewState.targetY)) {
+        cameraTarget.y = Number(nextViewState.targetY);
+      }
+      if (Number.isFinite(nextViewState.targetZ)) {
+        cameraTarget.z = Number(nextViewState.targetZ);
+      }
+      if (Number.isFinite(nextViewState.distance)) {
+        cameraDistance = clamp(
+          Number(nextViewState.distance),
+          MIN_DISTANCE_3D,
+          MAX_DISTANCE_3D
+        );
+      }
+      if (Number.isFinite(nextViewState.yaw)) {
+        cameraYaw = Number(nextViewState.yaw);
+      }
+      if (Number.isFinite(nextViewState.pitch)) {
+        cameraPitch = clamp(
+          Number(nextViewState.pitch),
+          MIN_PITCH,
+          MAX_PITCH
+        );
+      }
+      if (Number.isFinite(nextViewState.roll)) {
+        cameraRoll = Number(nextViewState.roll);
+      }
+      if (Number.isFinite(nextViewState.orthoHeight)) {
+        orthoHeight = clamp(
+          Number(nextViewState.orthoHeight),
+          MIN_ORTHO_HEIGHT,
+          MAX_ORTHO_HEIGHT
+        );
+      }
+
+      draw();
     },
     setInteractionSensitivity(nextSensitivity: number) {
       interactionSensitivity = clamp(
