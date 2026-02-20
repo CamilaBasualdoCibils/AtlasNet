@@ -13,7 +13,7 @@ const {
   readHardcodedHashPayload,
   readHardcodedSetPayload,
   shouldDecodeSetKey,
-} = require('./databaseReadOnlyView');
+} = require('./RevertByteOptimation');
 
 function truncatePayload(payload) {
   if (typeof payload !== 'string') {

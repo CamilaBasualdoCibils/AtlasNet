@@ -20,7 +20,7 @@ import {
   KeyRound,
   List,
 } from 'lucide-react';
-import { HardcodedDecodeToggle } from './readOnlyDecode/HardcodedDecodeToggle';
+import { HardcodedDecodeToggle } from './RevertByteOptimation/HardcodedDecodeToggle';
 
 const DEFAULT_POLL_INTERVAL_MS = 1000;
 const MIN_POLL_INTERVAL_MS = 250;
