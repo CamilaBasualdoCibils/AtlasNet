@@ -50,8 +50,8 @@ const CAMERA_PAN_SCALE = 0.0022;
 const GRID_LINE_COUNT_PER_SIDE = 14;
 const CAMERA_FLY_BASE_SPEED = 90;
 const CAMERA_FLY_SHIFT_MULTIPLIER = 2.5;
-const MIN_INTERACTION_SENSITIVITY = 0.1;
-const MAX_INTERACTION_SENSITIVITY = 6;
+const MIN_INTERACTION_SENSITIVITY = 0;
+const MAX_INTERACTION_SENSITIVITY = 2;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -1241,8 +1241,8 @@ export function createMapRenderer({
     lastPointerY = event.clientY;
 
     if (pointerDragMode === 'pan2d') {
-      const deltaViewX = dx;
-      const deltaViewY = -dy;
+      const deltaViewX = dx * interactionSensitivity;
+      const deltaViewY = -dy * interactionSensitivity;
       const rollCos = Math.cos(cameraRoll);
       const rollSin = Math.sin(cameraRoll);
       offsetX += deltaViewX * rollCos + deltaViewY * rollSin;
@@ -1292,9 +1292,13 @@ export function createMapRenderer({
 
   function onWheel(event: WheelEvent): void {
     event.preventDefault();
+    if (interactionSensitivity <= 0) {
+      return;
+    }
     const zoomOutFactor = 1.1;
     const zoomInFactor = 1 / zoomOutFactor;
     const zoomFactor = event.deltaY > 0 ? zoomOutFactor : zoomInFactor;
+    const sensitivityZoomFactor = Math.pow(zoomFactor, interactionSensitivity);
 
     if (viewMode === '2d') {
       const centerX = canvasWidth() / 2;
@@ -1307,7 +1311,11 @@ export function createMapRenderer({
       const dyView = mouseViewY - centerY;
       const mouseX = centerX + dxView * rollCos + dyView * rollSin;
       const mouseY = centerY - dxView * rollSin + dyView * rollCos;
-      const nextScale = clamp(scale2D / zoomFactor, MIN_SCALE_2D, MAX_SCALE_2D);
+      const nextScale = clamp(
+        scale2D / sensitivityZoomFactor,
+        MIN_SCALE_2D,
+        MAX_SCALE_2D
+      );
 
       offsetX = mouseX - ((mouseX - offsetX) * nextScale) / scale2D;
       offsetY = mouseY - ((mouseY - offsetY) * nextScale) / scale2D;
@@ -1317,9 +1325,17 @@ export function createMapRenderer({
     }
 
     if (projectionMode === 'perspective') {
-      cameraDistance = clamp(cameraDistance * zoomFactor, MIN_DISTANCE_3D, MAX_DISTANCE_3D);
+      cameraDistance = clamp(
+        cameraDistance * sensitivityZoomFactor,
+        MIN_DISTANCE_3D,
+        MAX_DISTANCE_3D
+      );
     } else {
-      orthoHeight = clamp(orthoHeight * zoomFactor, MIN_ORTHO_HEIGHT, MAX_ORTHO_HEIGHT);
+      orthoHeight = clamp(
+        orthoHeight * sensitivityZoomFactor,
+        MIN_ORTHO_HEIGHT,
+        MAX_ORTHO_HEIGHT
+      );
     }
     draw();
   }

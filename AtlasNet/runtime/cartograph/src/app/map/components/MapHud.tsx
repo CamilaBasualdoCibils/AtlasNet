@@ -3,7 +3,6 @@
 import type { CSSProperties } from 'react';
 import type {
   MapProjectionMode,
-  MapViewPreset,
   MapViewMode,
 } from '../../lib/mapRenderer';
 
@@ -22,7 +21,6 @@ interface MapHudProps {
   projectionMode: MapProjectionMode;
   onSetViewMode: (mode: MapViewMode) => void;
   onSetProjectionMode: (mode: MapProjectionMode) => void;
-  onSetViewPreset: (preset: MapViewPreset) => void;
   interactionSensitivity: number;
   minInteractionSensitivity: number;
   maxInteractionSensitivity: number;
@@ -41,16 +39,6 @@ const HUD_BUTTON_BASE_STYLE: CSSProperties = {
   border: '1px solid rgba(148, 163, 184, 0.45)',
   color: '#e2e8f0',
 };
-
-const MAP_VIEW_PRESET_BUTTONS: Array<{
-  label: string;
-  title: string;
-  preset: MapViewPreset;
-}> = [
-  { label: 'Top', title: 'Top view', preset: 'top' },
-  { label: 'Front', title: 'Front view', preset: 'front' },
-  { label: 'Side', title: 'Right side view', preset: 'right' },
-];
 
 function hudButtonStyle(active = false): CSSProperties {
   return {
@@ -89,7 +77,6 @@ export function MapHud({
   onSetPollIntervalMs,
   onSetProjectionMode,
   onSetViewMode,
-  onSetViewPreset,
   onToggleAuthorityEntities,
   onToggleGnsConnections,
   onToggleShardHoverDetails,
@@ -193,30 +180,6 @@ export function MapHud({
             3D Persp
           </button>
         </div>
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-            padding: '4px',
-            borderRadius: 8,
-            border: '1px solid rgba(148, 163, 184, 0.45)',
-            background: 'rgba(2, 6, 23, 0.45)',
-          }}
-        >
-          <span style={{ opacity: 0.72, fontSize: 11, padding: '0 4px' }}>Views</span>
-          {MAP_VIEW_PRESET_BUTTONS.map((button) => (
-            <button
-              key={button.preset}
-              type="button"
-              onClick={() => onSetViewPreset(button.preset)}
-              style={hudButtonStyle()}
-              title={button.title}
-            >
-              {button.label}
-            </button>
-          ))}
-        </div>
       </div>
 
       <span style={{ opacity: 0.85, fontSize: 12 }}>
@@ -230,11 +193,12 @@ export function MapHud({
           display: 'flex',
           gap: 8,
           alignItems: 'center',
+          minWidth: 220,
         }}
       >
         sensitivity
         <input
-          type="number"
+          type="range"
           min={minInteractionSensitivity}
           max={maxInteractionSensitivity}
           step={0.1}
@@ -249,15 +213,8 @@ export function MapHud({
               )
             )
           }
-          style={{
-            width: 68,
-            borderRadius: 6,
-            border: '1px solid rgba(148, 163, 184, 0.45)',
-            background: 'rgba(2, 6, 23, 0.45)',
-            color: '#e2e8f0',
-            padding: '2px 6px',
-          }}
         />
+        {interactionSensitivity.toFixed(1)}
       </label>
 
       <label

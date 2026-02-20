@@ -11,7 +11,6 @@ import {
 import {
   createMapRenderer,
   type MapProjectionMode,
-  type MapViewPreset,
   type MapViewMode,
 } from '../lib/mapRenderer';
 import { MapHud } from './components/MapHud';
@@ -21,8 +20,8 @@ const DEFAULT_POLL_INTERVAL_MS = 50;
 const MIN_POLL_INTERVAL_MS = 50;
 const MAX_POLL_INTERVAL_MS = 1000;
 const DEFAULT_INTERACTION_SENSITIVITY = 1;
-const MIN_INTERACTION_SENSITIVITY = 0.1;
-const MAX_INTERACTION_SENSITIVITY = 6;
+const MIN_INTERACTION_SENSITIVITY = 0;
+const MAX_INTERACTION_SENSITIVITY = 2;
 
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -136,11 +135,6 @@ export default function MapPage() {
     rendererRef.current?.setInteractionSensitivity(interactionSensitivity);
   }, [interactionSensitivity]);
 
-  function snapToPreset(preset: MapViewPreset) {
-    setViewMode('3d');
-    rendererRef.current?.setViewPreset(preset);
-  }
-
   const hoveredTelemetry = hoveredShardId
     ? shardTelemetryById.get(hoveredShardId)
     : undefined;
@@ -196,7 +190,6 @@ export default function MapPage() {
         projectionMode={projectionMode}
         onSetViewMode={setViewMode}
         onSetProjectionMode={setProjectionMode}
-        onSetViewPreset={snapToPreset}
         interactionSensitivity={interactionSensitivity}
         minInteractionSensitivity={MIN_INTERACTION_SENSITIVITY}
         maxInteractionSensitivity={MAX_INTERACTION_SENSITIVITY}
