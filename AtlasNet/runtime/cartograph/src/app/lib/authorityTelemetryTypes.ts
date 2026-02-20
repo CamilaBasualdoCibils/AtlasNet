@@ -1,13 +1,6 @@
-export interface AuthorityEntityTelemetry {
-  entityId: string;
-  ownerId: string;
-  world: number;
-  x: number;
-  y: number;
-  z: number;
-  isClient: boolean;
-  clientId: string;
-}
+import type { AuthorityEntityTelemetry } from './cartographTypes';
+
+export type { AuthorityEntityTelemetry } from './cartographTypes';
 
 function toNumber(value: unknown, fallback = 0): number {
   const n = Number(value);

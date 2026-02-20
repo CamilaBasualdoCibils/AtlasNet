@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
+import type { ShapeJS } from '../lib/cartographTypes';
 import {
-  parseAuthorityRows,
-  type AuthorityEntityTelemetry,
-} from '../lib/authorityTelemetryTypes';
+  useAuthorityEntities,
+  useHeuristicShapes,
+  useNetworkTelemetry,
+} from '../lib/hooks/useTelemetryFeeds';
 import { createMapRenderer } from '../lib/mapRenderer';
-import type { ShapeJS } from '../lib/types';
 
 const DEFAULT_POLL_INTERVAL_MS = 200;
 const MIN_POLL_INTERVAL_MS = 50;
@@ -72,75 +72,20 @@ function getShapeAnchorPoints(shape: ShapeJS): Array<{ x: number; y: number }> {
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<ReturnType<typeof createMapRenderer> | null>(null);
-  const [baseShapes, setBaseShapes] = useState<ShapeJS[]>([]);
-  const [networkTelemetry, setNetworkTelemetry] = useState<ShardTelemetry[]>([]);
-  const [authorityEntities, setAuthorityEntities] = useState<
-    AuthorityEntityTelemetry[]
-  >([]);
   const [showGnsConnections, setShowGnsConnections] = useState(true);
   const [showAuthorityEntities, setShowAuthorityEntities] = useState(true);
   const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
-
-  // Fetch static heuristic shapes (base map)
-  useEffect(() => {
-    let alive = true;
-    fetch('/api/heuristicfetch')
-      .then((res) => res.json())
-      .then((data: ShapeJS[]) => {
-        if (!alive) return;
-        setBaseShapes(Array.isArray(data) ? data : []);
-      })
-      .catch(console.error);
-    return () => {
-      alive = false;
-    };
-  }, []);
-
-  // Poll network telemetry for GNS overlay
-  useEffect(() => {
-    let alive = true;
-    async function poll() {
-      try {
-        const res = await fetch('/api/networktelemetry', { cache: 'no-store' });
-        if (!res.ok) return;
-        const data = (await res.json()) as ShardTelemetry[];
-        if (!alive) return;
-        setNetworkTelemetry(Array.isArray(data) ? data : []);
-      } catch {
-        if (!alive) return;
-        setNetworkTelemetry([]);
-      }
-    }
-    poll();
-    const id = setInterval(poll, pollIntervalMs);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [pollIntervalMs]);
-
-  // Poll authority telemetry rows for entity overlay
-  useEffect(() => {
-    let alive = true;
-    async function poll() {
-      try {
-        const res = await fetch('/api/authoritytelemetry', { cache: 'no-store' });
-        if (!res.ok) return;
-        const raw = await res.json();
-        if (!alive) return;
-        setAuthorityEntities(parseAuthorityRows(raw));
-      } catch {
-        if (!alive) return;
-        setAuthorityEntities([]);
-      }
-    }
-    poll();
-    const id = setInterval(poll, pollIntervalMs);
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, [pollIntervalMs]);
+  const baseShapes = useHeuristicShapes();
+  const networkTelemetry = useNetworkTelemetry({
+    intervalMs: pollIntervalMs,
+    resetOnException: true,
+    resetOnHttpError: false,
+  });
+  const authorityEntities = useAuthorityEntities({
+    intervalMs: pollIntervalMs,
+    resetOnException: true,
+    resetOnHttpError: false,
+  });
 
   const ownerPositions = useMemo(() => {
     const acc = new Map<string, { sumX: number; sumY: number; count: number }>();
@@ -195,21 +140,21 @@ export default function MapPage() {
   }, [baseShapes]);
 
   const networkNodeIds = useMemo(() => {
+    // Authoritative shard ids come from telemetry rows, not connection targets.
+    // This avoids rendering nodes for malformed/stale target ids.
     const ids = new Set<string>();
     for (const shard of networkTelemetry) {
       const shardId = normalizeShardId(shard.shardId);
       if (shardId.length > 0 && isShardIdentity(shardId)) {
         ids.add(shardId);
       }
-      for (const connection of shard.connections) {
-        const targetId = normalizeShardId(connection.targetId);
-        if (targetId.length > 0 && isShardIdentity(targetId)) {
-          ids.add(targetId);
-        }
-      }
     }
-    return Array.from(ids.values());
+    return Array.from(ids.values()).sort();
   }, [networkTelemetry]);
+  const networkNodeIdSet = useMemo(
+    () => new Set(networkNodeIds),
+    [networkNodeIds]
+  );
 
   const projectedShardPositions = useMemo(() => {
     const out = new Map<string, { x: number; y: number }>();
@@ -259,12 +204,12 @@ export default function MapPage() {
     const seen = new Set<string>();
     for (const shard of networkTelemetry) {
       const fromId = normalizeShardId(shard.shardId);
-      if (!isShardIdentity(fromId)) {
+      if (!networkNodeIdSet.has(fromId)) {
         continue;
       }
       for (const connection of shard.connections) {
         const toId = normalizeShardId(connection.targetId);
-        if (!isShardIdentity(toId)) {
+        if (!networkNodeIdSet.has(toId)) {
           continue;
         }
         const key = fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
@@ -272,7 +217,7 @@ export default function MapPage() {
       }
     }
     return seen.size;
-  }, [networkTelemetry]);
+  }, [networkTelemetry, networkNodeIdSet]);
 
   const overlayShapes = useMemo<ShapeJS[]>(() => {
     const overlays: ShapeJS[] = [];
@@ -309,14 +254,14 @@ export default function MapPage() {
       const seen = new Set<string>();
       for (const shard of networkTelemetry) {
         const fromId = normalizeShardId(shard.shardId);
-        if (!isShardIdentity(fromId)) {
+        if (!networkNodeIdSet.has(fromId)) {
           continue;
         }
         const fromPos = projectedShardPositions.get(fromId);
         if (!fromPos) continue;
         for (const connection of shard.connections) {
           const toId = normalizeShardId(connection.targetId);
-          if (!isShardIdentity(toId)) {
+          if (!networkNodeIdSet.has(toId)) {
             continue;
           }
           const toPos = projectedShardPositions.get(toId);
@@ -363,6 +308,7 @@ export default function MapPage() {
     authorityEntities,
     networkTelemetry,
     networkNodeIds,
+    networkNodeIdSet,
     ownerPositions,
     projectedShardPositions,
     showAuthorityEntities,

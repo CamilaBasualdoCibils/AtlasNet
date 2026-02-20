@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
+import type { ShardTelemetry } from '../lib/cartographTypes';
 
 function Metric({
   label,

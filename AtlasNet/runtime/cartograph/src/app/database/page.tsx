@@ -5,7 +5,7 @@ import type {
   DatabaseRecord,
   DatabaseSnapshotResponse,
   DatabaseSource,
-} from '../lib/databaseTypes';
+} from '../lib/cartographTypes';
 import {
   ArrowUpDown,
   Braces,

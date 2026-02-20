@@ -1,6 +1,6 @@
 // /src/lib/mapRenderer.ts
 
-import type { ShapeJS } from './types'; // optional type definition
+import type { ShapeJS } from './cartographTypes';
 
 interface DrawOptions {
     container: HTMLDivElement; // the element to attach the canvas

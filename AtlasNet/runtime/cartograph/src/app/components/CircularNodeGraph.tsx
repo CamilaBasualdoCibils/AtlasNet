@@ -2,19 +2,14 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { MouseEvent, WheelEvent } from 'react';
+import type { GraphEdge, GraphNode, GraphNodeStats } from '../lib/networkGraph';
 
-type GraphNode = {
-  id: string;
-  x: number;
-  y: number;
-};
-
-type GraphEdge = {
-  from: string;
-  to: string;
-  inBytesPerSec: number;
-  outBytesPerSec: number;
-};
+const MIN_ZOOM = 0.3;
+const MAX_ZOOM = 3;
+const ZOOM_IN_FACTOR = 1.1;
+const ZOOM_OUT_FACTOR = 0.9;
+const DEFAULT_NODE_RADIUS = 12;
+const SELECTED_NODE_RADIUS = 16;
 
 type CircularNodeGraphProps = {
   width: number;
@@ -25,12 +20,32 @@ type CircularNodeGraphProps = {
   selectedNodeId?: string | null;
   onNodeHover?: (nodeId: string | null) => void;
   onNodeSelect?: (nodeId: string) => void;
-  nodeStats?: Map<
-    string,
-    { downloadKbps: number; uploadKbps: number; connections: number }
-  >;
+  nodeStats?: Map<string, GraphNodeStats>;
   resetViewToken?: number;
 };
+
+function formatRate(value: number): string {
+  if (!Number.isFinite(value)) {
+    return '0';
+  }
+  return value.toFixed(1);
+}
+
+function getNodeRadius(selectedNodeId: string | null | undefined, nodeId: string): number {
+  return selectedNodeId === nodeId ? SELECTED_NODE_RADIUS : DEFAULT_NODE_RADIUS;
+}
+
+function edgeColor(edge: GraphEdge): string {
+  const key = `${edge.from}->${edge.to}`;
+  let hash = 0;
+  for (let i = 0; i < key.length; i += 1) {
+    hash = (hash * 31 + key.charCodeAt(i)) | 0;
+  }
+  const r = (hash & 0xff0000) >> 16;
+  const g = (hash & 0x00ff00) >> 8;
+  const b = hash & 0x0000ff;
+  return `rgb(${Math.abs(r)}, ${Math.abs(g)}, ${Math.abs(b)})`;
+}
 
 export function CircularNodeGraph({
   width,
@@ -72,15 +87,13 @@ export function CircularNodeGraph({
     setPan({ x: 0, y: 0 });
   }, [resetViewToken]);
 
-  function formatRate(value: number): string {
-    if (!Number.isFinite(value)) return '0';
-    return value.toFixed(1);
-  }
-
   function handleWheel(event: WheelEvent<SVGSVGElement>) {
     event.preventDefault();
 
-    const nextZoom = Math.min(3, Math.max(0.3, zoom * (event.deltaY > 0 ? 0.9 : 1.1)));
+    const nextZoom = Math.min(
+      MAX_ZOOM,
+      Math.max(MIN_ZOOM, zoom * (event.deltaY > 0 ? ZOOM_OUT_FACTOR : ZOOM_IN_FACTOR))
+    );
     const svg = svgRef.current;
     if (!svg) {
       setZoom(nextZoom);
@@ -114,23 +127,6 @@ export function CircularNodeGraph({
 
   function handleMouseUp() {
     setIsDragging(false);
-  }
-
-  function getNodeRadius(nodeId: string): number {
-    return selectedNodeId === nodeId ? 16 : 12;
-  }
-
-  // Deterministic "random" color per edge (stable across renders)
-  function edgeColor(edge: GraphEdge): string {
-    const key = `${edge.from}->${edge.to}`;
-    let hash = 0;
-    for (let i = 0; i < key.length; i += 1) {
-      hash = (hash * 31 + key.charCodeAt(i)) | 0;
-    }
-    const r = (hash & 0xff0000) >> 16;
-    const g = (hash & 0x00ff00) >> 8;
-    const b = hash & 0x0000ff;
-    return `rgb(${Math.abs(r)}, ${Math.abs(g)}, ${Math.abs(b)})`;
   }
 
   return (
@@ -190,8 +186,8 @@ export function CircularNodeGraph({
           if (length === 0) return null;
           const unitX = dx / length;
           const unitY = dy / length;
-          const startOffset = getNodeRadius(edge.from);
-          const endOffset = getNodeRadius(edge.to) + 2;
+          const startOffset = getNodeRadius(selectedNodeId, edge.from);
+          const endOffset = getNodeRadius(selectedNodeId, edge.to) + 2;
           const x1 = from.x + unitX * startOffset;
           const y1 = from.y + unitY * startOffset;
           const x2 = to.x - unitX * endOffset;
@@ -227,7 +223,7 @@ export function CircularNodeGraph({
             <circle
               cx={node.x}
               cy={node.y}
-              r={getNodeRadius(node.id)}
+              r={getNodeRadius(selectedNodeId, node.id)}
               fill="rgba(99, 102, 241, 0.9)"
               stroke="rgba(129, 140, 248, 0.9)"
               strokeWidth={1}

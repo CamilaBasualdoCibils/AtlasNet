@@ -1,13 +1,15 @@
 'use client';
 
 import { useEffect, useState, useMemo } from 'react';
-import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
 import { CircularNodeGraphPanel } from '../components/CircularNodeGraphPanel';
 import { ShardTelemetryRow } from '../components/ShardTelemetryRow';
 import { TelemetryPanel } from '../components/TelemetryPanel';
+import { useNetworkTelemetry } from '../lib/hooks/useTelemetryFeeds';
 
 const ENABLE_NETWORK_TELEMETRY = true;
 const DEFAULT_POLL_INTERVAL_MS = 200;
+const MIN_POLL_INTERVAL_MS = 50;
+const MAX_POLL_INTERVAL_MS = 1000;
 
 type ShardState = {
   shardId: string;
@@ -29,8 +31,20 @@ function pushRolling(prev: number[], value: number): number[] {
 
 export default function NetworkTelemetryPage() {
   const [shards, setShards] = useState<ShardState[]>([]);
-  const [latestTelemetry, setLatestTelemetry] = useState<ShardTelemetry[]>([]);
   const [selectedShardId, setSelectedShardId] = useState<string | null>(null);
+  const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
+  const latestTelemetry = useNetworkTelemetry({
+    intervalMs: pollIntervalMs,
+    enabled: ENABLE_NETWORK_TELEMETRY,
+    resetOnException: false,
+    resetOnHttpError: false,
+    onHttpError: () => {
+      console.error('network telemetry fetch failed');
+    },
+    onException: (err) => {
+      console.error(err);
+    },
+  });
 
   const latestById = useMemo(() => {
     return new Map(latestTelemetry.map(t => [t.shardId, t]));
@@ -39,66 +53,56 @@ export default function NetworkTelemetryPage() {
   const selectedShard = selectedShardId ? latestById.get(selectedShardId) : null;
 
   useEffect(() => {
-    if (!ENABLE_NETWORK_TELEMETRY) return;
+    setShards((prev) => {
+      const prevById = new Map(prev.map((s) => [s.shardId, s]));
 
-    let alive = true;
-
-    async function poll() {
-      try {
-        const res = await fetch('/api/networktelemetry', {
-          cache: 'no-store',
-        });
-
-        if (!res.ok) {
-          console.error('network telemetry fetch failed');
-          return;
-        }
-
-        const data = (await res.json()) as ShardTelemetry[];
-
-        if (!alive) return;
-        
-        setLatestTelemetry(data);
-
-        setShards(prev => {
-          const prevById = new Map(prev.map(s => [s.shardId, s]));
-
-          return data.map(t => {
-            const old = prevById.get(t.shardId);
-
-            return {
-              shardId: t.shardId,
-              downloadKbps: t.downloadKbps,
-              uploadKbps: t.uploadKbps,
-              downloadHistory: pushRolling(
-                old?.downloadHistory ?? [],
-                t.downloadKbps
-              ),
-              uploadHistory: pushRolling(
-                old?.uploadHistory ?? [],
-                t.uploadKbps
-              ),
-            };
-          });
-        });
-      } catch (err) {
-        console.error(err);
-      }
-    }
-
-    // initial + interval
-    poll();
-    const id = setInterval(poll, DEFAULT_POLL_INTERVAL_MS);
-
-    return () => {
-      alive = false;
-      clearInterval(id);
-    };
-  }, []);
+      return latestTelemetry.map((t) => {
+        const old = prevById.get(t.shardId);
+        return {
+          shardId: t.shardId,
+          downloadKbps: t.downloadKbps,
+          uploadKbps: t.uploadKbps,
+          downloadHistory: pushRolling(old?.downloadHistory ?? [], t.downloadKbps),
+          uploadHistory: pushRolling(old?.uploadHistory ?? [], t.uploadKbps),
+        };
+      });
+    });
+  }, [latestTelemetry]);
 
   return (
     <div style={{ padding: 16 }}>
       <h2>Network Telemetry</h2>
+      <div
+        style={{
+          margin: '8px 0 14px',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '8px 10px',
+          borderRadius: 10,
+          border: '1px solid rgba(148, 163, 184, 0.45)',
+          background: 'rgba(15, 23, 42, 0.82)',
+          color: '#e2e8f0',
+          fontSize: 13,
+        }}
+      >
+        <span>poll: {pollIntervalMs}ms</span>
+        <input
+          type="range"
+          min={MIN_POLL_INTERVAL_MS}
+          max={MAX_POLL_INTERVAL_MS}
+          step={50}
+          value={pollIntervalMs}
+          onChange={(e) =>
+            setPollIntervalMs(
+              Math.max(
+                MIN_POLL_INTERVAL_MS,
+                Math.min(MAX_POLL_INTERVAL_MS, Number(e.target.value))
+              )
+            )
+          }
+        />
+      </div>
       <div style={{ margin: '12px 0 16px' }}>
         <CircularNodeGraphPanel telemetry={latestTelemetry} />
       </div>

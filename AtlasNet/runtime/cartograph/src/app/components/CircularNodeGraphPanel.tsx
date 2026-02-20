@@ -2,51 +2,13 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type { MouseEvent, WheelEvent } from 'react';
-import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
+import type { ShardTelemetry } from '../lib/cartographTypes';
+import {
+  buildCircularNodes,
+  buildNetworkGraph,
+  buildNodeStats,
+} from '../lib/networkGraph';
 import { CircularNodeGraph } from './CircularNodeGraph';
-
-type ConnectionLike =
-  | {
-      IdentityId: string;
-      targetId: string;
-      inBytesPerSec?: number;
-      outBytesPerSec?: number;
-    }
-  | string[];
-
-function getConnectionTarget(connection: ConnectionLike): string | null {
-  if (Array.isArray(connection)) {
-    return connection.length > 1 ? String(connection[1]) : null;
-  }
-
-  return connection.targetId ?? null;
-}
-
-function getConnectionRates(
-  connection: ConnectionLike
-): { inBytesPerSec: number; outBytesPerSec: number } | null {
-  if (Array.isArray(connection)) {
-    if (connection.length < 5) return null;
-    const inBytesPerSec = Number(connection[3]);
-    const outBytesPerSec = Number(connection[4]);
-    if (!Number.isFinite(inBytesPerSec) || !Number.isFinite(outBytesPerSec)) {
-      return null;
-    }
-    return { inBytesPerSec, outBytesPerSec };
-  }
-
-  if (
-    typeof connection.inBytesPerSec === 'number' &&
-    typeof connection.outBytesPerSec === 'number'
-  ) {
-    return {
-      inBytesPerSec: connection.inBytesPerSec,
-      outBytesPerSec: connection.outBytesPerSec,
-    };
-  }
-
-  return null;
-}
 
 export function CircularNodeGraphPanel({
   telemetry,
@@ -63,78 +25,12 @@ export function CircularNodeGraphPanel({
     0
   );
 
-  const { nodeIds, edges } = useMemo(() => {
-    const nodeIdsLocal: string[] = telemetry.map((shard) => shard.shardId);
-    const nodePositions = new Set(nodeIdsLocal);
-    const edgeMap = new Map<string, {
-      from: string;
-      to: string;
-      inBytesPerSec: number;
-      outBytesPerSec: number;
-    }>();
-
-    for (const shard of telemetry) {
-      for (const rawConnection of shard.connections as ConnectionLike[]) {
-        const targetId = getConnectionTarget(rawConnection);
-        if (!targetId) continue;
-        if (!nodePositions.has(targetId)) continue;
-
-        const sourceId = shard.shardId;
-        if (sourceId === targetId) continue;
-
-        const rates = getConnectionRates(rawConnection);
-        const edgeKey = `${sourceId}->${targetId}`;
-        const existing = edgeMap.get(edgeKey);
-        const inRate = rates?.inBytesPerSec ?? 0;
-        const outRate = rates?.outBytesPerSec ?? 0;
-        if (existing) {
-          // Merge duplicate directed edges from telemetry rows.
-          existing.inBytesPerSec += inRate;
-          existing.outBytesPerSec += outRate;
-        } else {
-          edgeMap.set(edgeKey, {
-            from: sourceId,
-            to: targetId,
-            inBytesPerSec: inRate,
-            outBytesPerSec: outRate,
-          });
-        }
-      }
-    }
-
-    return { nodeIds: nodeIdsLocal, edges: Array.from(edgeMap.values()) };
-  }, [telemetry]);
+  const { nodeIds, edges } = useMemo(() => buildNetworkGraph(telemetry), [telemetry]);
 
   const focusedNodeId = selectedNodeId ?? hoveredNodeId;
-  const nodeStats = useMemo(() => {
-    const stats = new Map<
-      string,
-      { downloadKbps: number; uploadKbps: number; connections: number }
-    >();
-    for (const shard of telemetry) {
-      stats.set(shard.shardId, {
-        downloadKbps: shard.downloadKbps,
-        uploadKbps: shard.uploadKbps,
-        connections: shard.connections.length,
-      });
-    }
-    return stats;
-  }, [telemetry]);
-
-  function buildNodes(width: number, height: number) {
-    const centerX = width / 2;
-    const centerY = height / 2;
-    const nodeCount = nodeIds.length;
-    const baseRadius = Math.min(width, height) * 0.35;
-    const radius = baseRadius + Math.max(0, nodeCount - 8) * 8;
-
-    return nodeIds.map((id: string, index: number) => {
-      const angle = (Math.PI * 2 * index) / Math.max(1, nodeCount);
-      const x = centerX + Math.cos(angle) * radius;
-      const y = centerY + Math.sin(angle) * radius;
-      return { id, x, y };
-    });
-  }
+  const nodeStats = useMemo(() => buildNodeStats(telemetry), [telemetry]);
+  const previewNodes = useMemo(() => buildCircularNodes(nodeIds, 520, 320), [nodeIds]);
+  const expandedNodes = useMemo(() => buildCircularNodes(nodeIds, 1200, 720), [nodeIds]);
 
   useEffect(() => {
     if (!isExpanded) return;
@@ -180,7 +76,7 @@ export function CircularNodeGraphPanel({
             <CircularNodeGraph
               width={520}
               height={320}
-              nodes={buildNodes(520, 320)}
+              nodes={previewNodes}
               edges={edges}
               focusedNodeId={focusedNodeId}
               selectedNodeId={selectedNodeId}
@@ -251,7 +147,7 @@ export function CircularNodeGraphPanel({
                   <CircularNodeGraph
                     width={1200}
                     height={720}
-                    nodes={buildNodes(1200, 720)}
+                    nodes={expandedNodes}
                     edges={edges}
                     focusedNodeId={focusedNodeId}
                     selectedNodeId={selectedNodeId}
