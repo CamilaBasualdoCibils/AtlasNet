@@ -147,8 +147,7 @@ inline void HeuristicManifest::GetAllPendingBounds(
 	std::vector<std::string> data_for_readers;
 	std::unordered_map<IBounds::BoundsID, ByteReader> brs;
 	GetPendingBoundsAsByteReaders(data_for_readers, brs);
-	const auto PendingBoundsSet = InternalDB::Get()->HGetAll(PendingHashTable);
-	out_bounds.reserve(PendingBoundsSet.size());
+	out_bounds.reserve(brs.size());
 	for (auto& [bound_id, boundByteReader] : brs)
 	{
 		out_bounds.emplace_back(BoundType());
@@ -227,11 +226,9 @@ local claimed_field = ARGV[2]
 local owner_base64 = ARGV[3]
 local owner_name = ARGV[4]
 
--- Ensure Claimed object exists
-local claimed_type = redis.call("JSON.TYPE", key, claimed_field)
-if claimed_type == false or claimed_type[1] == nil then
-    redis.call("JSON.SET", key, claimed_field, "{}","NX")
-end
+redis.call("JSON.SET", key, ".", "{}", "NX")
+redis.call("JSON.SET", key, pending_field, "{}", "NX")
+redis.call("JSON.SET", key, claimed_field, "{}","NX")
 
 -- Get all keys in Pending
 local pending_keys = redis.call("JSON.OBJKEYS", key, pending_field)
@@ -242,22 +239,24 @@ end
 
 -- Pick the first key (any entry)
 local id = tostring(pending_keys[1])  -- <-- force string
+local pending_entry_path = pending_field .. "[\"" .. id .. "\"]"
+local claimed_entry_path = claimed_field .. "[\"" .. id .. "\"]"
 
 -- Get the entry directly
-local entry = redis.call("JSON.GET", key, pending_field .. "." .. id)
+local entry = redis.call("JSON.GET", key, pending_entry_path)
 
 -- Set it in Claimed
-redis.call("JSON.SET", key, claimed_field .. "." .. id, entry)
+redis.call("JSON.SET", key, claimed_entry_path, entry)
 
 -- Add Owner and OwnerName fields
-redis.call("JSON.SET", key, claimed_field .. "." .. id .. ".Owner64", "\"" .. owner_base64 .. "\"")
-redis.call("JSON.SET", key, claimed_field .. "." .. id .. ".OwnerName", "\"" .. owner_name .. "\"")
+redis.call("JSON.SET", key, claimed_entry_path .. ".Owner64", "\"" .. owner_base64 .. "\"")
+redis.call("JSON.SET", key, claimed_entry_path .. ".OwnerName", "\"" .. owner_name .. "\"")
 
 -- Remove from Pending
-redis.call("JSON.DEL", key, pending_field .. "." .. id)
+redis.call("JSON.DEL", key, pending_entry_path)
 
 -- Return the claimed entry
-return redis.call("JSON.GET", key, claimed_field .. "." .. id)
+return redis.call("JSON.GET", key, claimed_entry_path)
 
 )lua";
 	ByteWriter bw;
@@ -266,15 +265,36 @@ return redis.call("JSON.GET", key, claimed_field .. "." .. id)
 		[&](auto& r) -> auto
 		{
 			const auto result = r.template command<std::optional<std::string>>(
-				"EVAL", kLuaScript, "1", JSONDataTable, JSONPendingEntry,
-				JSONClaimedEntry, bw.as_string_base_64(), claim_key.ToString());
+				"EVAL", kLuaScript, "1", JSONDataTable, "." + JSONPendingEntry,
+				"." + JSONClaimedEntry, bw.as_string_base_64(),
+				claim_key.ToString());
 			return result;
 		});
 
 	if (!claimed)
 		return false;
 
-	ByteReader br(claimed.value());
+	Json claimedJson = Json::parse(*claimed, nullptr, false);
+	if (claimedJson.is_discarded())
+	{
+		return false;
+	}
+	if (claimedJson.is_array())
+	{
+		if (claimedJson.empty())
+		{
+			return false;
+		}
+		claimedJson = claimedJson.front();
+	}
+	if (!claimedJson.is_object())
+	{
+		return false;
+	}
+
+	ClaimedBoundStruct claimedBound;
+	claimedBound.from_json(claimedJson);
+	ByteReader br(claimedBound.BoundsDataBase64, true);
 	out_bound.Deserialize(br);
 	return true;
 }
@@ -284,18 +304,17 @@ void HeuristicManifest::GetAllClaimedBounds(
 	std::unordered_map<NetworkIdentity, BoundType>& out_bounds)
 {
 	out_bounds.clear();
-	const auto BoundsTable =
-		InternalDB::Get()->HGetAll(ClaimedHashTableNID2BoundData);
-	out_bounds.reserve(BoundsTable.size());
+	std::vector<std::string> data_for_readers;
+	std::unordered_map<NetworkIdentity,
+					   std::pair<IBounds::BoundsID, ByteReader>>
+		claimedReaders;
+	GetClaimedBoundsAsByteReaders(data_for_readers, claimedReaders);
+	out_bounds.reserve(claimedReaders.size());
 
-	for (const auto& [key, boundsString] : BoundsTable)
+	for (auto& [id, boundReaderPair] : claimedReaders)
 	{
-		NetworkIdentity id;
-		ByteReader brKey(key);
-		id.Deserialize(brKey);
 		auto [it, inserted] = out_bounds.emplace(id, BoundType());
 		BoundType& b = it->second;
-		ByteReader br(boundsString);
-		b.Deserialize(br);
+		b.Deserialize(boundReaderPair.second);
 	}
 }

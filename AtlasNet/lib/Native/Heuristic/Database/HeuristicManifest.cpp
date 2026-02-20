@@ -12,6 +12,33 @@
 #include "Heuristic/IHeuristic.hpp"
 #include "InternalDB/InternalDB.hpp"
 #include "Network/NetworkIdentity.hpp"
+
+namespace
+{
+std::optional<Json> ParseRedisJsonPayload(
+	const std::optional<std::string>& payload)
+{
+	if (!payload || payload->empty() || *payload == "null")
+	{
+		return std::nullopt;
+	}
+
+	Json parsed = Json::parse(*payload, nullptr, false);
+	if (parsed.is_discarded())
+	{
+		return std::nullopt;
+	}
+	if (parsed.is_array())
+	{
+		if (parsed.empty())
+		{
+			return std::nullopt;
+		}
+		parsed = parsed.front();
+	}
+	return parsed;
+}
+}  // namespace
 // IHeuristic::Type HeuristicManifest::GetActiveHeuristic() const
 //{
 //	const auto TypeEntry = InternalDB::Get()->Get(HeuristicTypeKey);
@@ -27,13 +54,34 @@ void HeuristicManifest::GetPendingBoundsAsByteReaders(
 	std::vector<std::string>& data_for_readers,
 	std::unordered_map<IBounds::BoundsID, ByteReader>& brs)
 {
-	const auto values = InternalDB::Get()->HGetAll(PendingHashTable);
-	for (const auto& [key_raw, value_raw] : values)
+	data_for_readers.clear();
+	brs.clear();
+	const auto manifestJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
+		[&](auto& r) -> std::optional<std::string>
+		{
+			return r.template command<std::optional<std::string>>(
+				"JSON.GET", JSONDataTable, ".");
+		}));
+	if (!manifestJson || !manifestJson->is_object())
 	{
-		data_for_readers.push_back(value_raw);
-		ByteReader key_reader(key_raw);
-		const auto ID = key_reader.read_scalar<IBounds::BoundsID>();
-		brs.emplace(ID, ByteReader(data_for_readers.back()));
+		return;
+	}
+	auto pendingIt = manifestJson->find(JSONPendingEntry);
+	if (pendingIt == manifestJson->end() || !pendingIt->is_object())
+	{
+		return;
+	}
+
+	for (const auto& [_, pendingEntry] : pendingIt->items())
+	{
+		if (!pendingEntry.is_object())
+		{
+			continue;
+		}
+		PendingBoundStruct pendingBound;
+		pendingBound.from_json(pendingEntry);
+		data_for_readers.push_back(pendingBound.BoundsDataBase64);
+		brs.emplace(pendingBound.ID, ByteReader(data_for_readers.back(), true));
 	}
 }
 void HeuristicManifest::StorePendingBoundsFromByteWriters(
@@ -53,11 +101,41 @@ void HeuristicManifest::StorePendingBoundsFromByteWriters(
 }
 long long HeuristicManifest::GetPendingBoundsCount() const
 {
-	return InternalDB::Get()->HLen(PendingHashTable);
+	const auto manifestJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
+		[&](auto& r) -> std::optional<std::string>
+		{
+			return r.template command<std::optional<std::string>>(
+				"JSON.GET", JSONDataTable, ".");
+		}));
+	if (!manifestJson || !manifestJson->is_object())
+	{
+		return 0;
+	}
+	auto pendingIt = manifestJson->find(JSONPendingEntry);
+	if (pendingIt == manifestJson->end() || !pendingIt->is_object())
+	{
+		return 0;
+	}
+	return static_cast<long long>(pendingIt->size());
 }
 long long HeuristicManifest::GetClaimedBoundsCount() const
 {
-	return InternalDB::Get()->HLen(ClaimedHashTableNID2BoundData);
+	const auto manifestJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
+		[&](auto& r) -> std::optional<std::string>
+		{
+			return r.template command<std::optional<std::string>>(
+				"JSON.GET", JSONDataTable, ".");
+		}));
+	if (!manifestJson || !manifestJson->is_object())
+	{
+		return 0;
+	}
+	auto claimedIt = manifestJson->find(JSONClaimedEntry);
+	if (claimedIt == manifestJson->end() || !claimedIt->is_object())
+	{
+		return 0;
+	}
+	return static_cast<long long>(claimedIt->size());
 }
 
 bool HeuristicManifest::RequeueClaimedBound(const std::string_view& claim_key)
@@ -133,6 +211,38 @@ void HeuristicManifest::GetClaimedBoundsAsByteReaders(
 	std::unordered_map<NetworkIdentity,
 					   std::pair<IBounds::BoundsID, ByteReader>>& brs)
 {
+	data_for_readers.clear();
+	brs.clear();
+	const auto manifestJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
+		[&](auto& r) -> std::optional<std::string>
+		{
+			return r.template command<std::optional<std::string>>(
+				"JSON.GET", JSONDataTable, ".");
+		}));
+	if (!manifestJson || !manifestJson->is_object())
+	{
+		return;
+	}
+	auto claimedIt = manifestJson->find(JSONClaimedEntry);
+	if (claimedIt == manifestJson->end() || !claimedIt->is_object())
+	{
+		return;
+	}
+
+	for (const auto& [_, claimedEntry] : claimedIt->items())
+	{
+		if (!claimedEntry.is_object())
+		{
+			continue;
+		}
+		ClaimedBoundStruct claimedBound;
+		claimedBound.from_json(claimedEntry);
+		data_for_readers.push_back(claimedBound.BoundsDataBase64);
+		brs.emplace(
+			claimedBound.identity,
+			std::make_pair(claimedBound.ID,
+						   ByteReader(data_for_readers.back(), true)));
+	}
 }
 void HeuristicManifest::Internal_InsertPendingBound(const PendingBoundStruct& p)
 {
@@ -237,7 +347,7 @@ std::unique_ptr<IHeuristic> HeuristicManifest::PullHeuristic()
 			throw std::runtime_error("Invalid Heuristic?");
 			break;
 	}
-	std::optional<std::string> serializedData64 = InternalDB::Get()->WithSync(
+	const auto heuristicDataJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
 		[&](auto& r) -> std::optional<std::string>
 		{
 			// JSON.GET key .HeuristicData64
@@ -250,14 +360,10 @@ std::unique_ptr<IHeuristic> HeuristicManifest::PullHeuristic()
 
 			return r.template command<std::optional<std::string>>(
 				get_cmd.begin(), get_cmd.end());
-		});
-	ASSERT(serializedData64.has_value(),
+		}));
+	ASSERT(heuristicDataJson.has_value() && heuristicDataJson->is_string(),
 		   "Heuristic Serialize data has no data?");
-	std::string encoded = serializedData64.value();
-	if (encoded.size() >= 2 && encoded.front() == '"' && encoded.back() == '"')
-	{
-		encoded = encoded.substr(1, encoded.size() - 2);
-	}
+	const std::string encoded = heuristicDataJson->get<std::string>();
 	ByteReader br(encoded, true);
 	heuristic->Deserialize(br);
 
@@ -266,22 +372,24 @@ std::unique_ptr<IHeuristic> HeuristicManifest::PullHeuristic()
 HeuristicManifest::ClaimedBoundStruct
 HeuristicManifest::Internal_PullClaimedBound(IBounds::BoundsID id)
 {
-	std::optional<std::string> claimedBound = InternalDB::Get()->WithSync(
+	const auto claimedJson = ParseRedisJsonPayload(InternalDB::Get()->WithSync(
 		[&](auto& r) -> std::optional<std::string>
 		{
-			// JSON.GET key .Claimed.<ID>
 			std::array<std::string, 3> get_cmd = {
 				"JSON.GET",
-				JSONDataTable,					// the Redis key
-				std::format(".Claimed.{}", id)	// targetID is an int
+				JSONDataTable,	// the Redis key
+				"." + JSONClaimedEntry
 			};
 
 			return r.template command<std::optional<std::string>>(
 				get_cmd.begin(), get_cmd.end());
-		});
-	ASSERT(claimedBound.has_value(), "ID not found!");
-	Json json = Json::parse(claimedBound.value());
+		}));
+	ASSERT(claimedJson.has_value() && claimedJson->is_object(), "ID not found!");
+	const std::string idKey = std::to_string(id);
+	auto claimedIt = claimedJson->find(idKey);
+	ASSERT(claimedIt != claimedJson->end(), "ID not found!");
+
 	ClaimedBoundStruct c;
-	c.from_json(json);
+	c.from_json(*claimedIt);
 	return c;
 }
