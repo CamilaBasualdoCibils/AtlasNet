@@ -28,6 +28,7 @@ const DATABASE_POLL_INTERVAL_MS = 5000;
 interface ShardSummary {
   shardId: string;
   bounds: ShardHoverBounds | null;
+  status: 'bounded' | 'unbounded' | 'bounded stale';
   hasClaimedBound: boolean;
   area: number;
   clientCount: number;
@@ -150,16 +151,28 @@ function computeGlobalBounds(boundsByShardId: Map<string, ShardHoverBounds>): Sh
 
 function MiniShardMap({
   boundsByShardId,
+  claimedBoundShardIds,
   focusShardId,
   highlightFocus,
 }: {
   boundsByShardId: Map<string, ShardHoverBounds>;
+  claimedBoundShardIds: Set<string>;
   focusShardId: string;
   highlightFocus: boolean;
 }) {
+  const visibleBoundsByShardId = useMemo(() => {
+    const out = new Map<string, ShardHoverBounds>();
+    for (const [shardId, bounds] of boundsByShardId) {
+      if (claimedBoundShardIds.has(shardId)) {
+        out.set(shardId, bounds);
+      }
+    }
+    return out;
+  }, [boundsByShardId, claimedBoundShardIds]);
+
   const globalBounds = useMemo(
-    () => computeGlobalBounds(boundsByShardId),
-    [boundsByShardId]
+    () => computeGlobalBounds(visibleBoundsByShardId),
+    [visibleBoundsByShardId]
   );
 
   if (!globalBounds) {
@@ -196,7 +209,7 @@ function MiniShardMap({
       role="img"
       aria-label={`Bounds minimap for ${focusShardId}`}
     >
-      {Array.from(boundsByShardId.entries()).map(([shardId, bounds]) => {
+      {Array.from(visibleBoundsByShardId.entries()).map(([shardId, bounds]) => {
         const x1 = toX(bounds.minX);
         const x2 = toX(bounds.maxX);
         const y1 = toY(bounds.minY);
@@ -227,9 +240,11 @@ function MiniShardMap({
 function ShardSummaryCard({
   summary,
   boundsByShardId,
+  claimedBoundShardIds,
 }: {
   summary: ShardSummary;
   boundsByShardId: Map<string, ShardHoverBounds>;
+  claimedBoundShardIds: Set<string>;
 }) {
   return (
     <article className="rounded-2xl border border-slate-800 bg-slate-900/70 p-3">
@@ -239,12 +254,13 @@ function ShardSummaryCard({
           <p className="text-xs text-slate-500">bounds area {formatArea(summary.area)}</p>
         </div>
         <span className="rounded-full border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] uppercase tracking-wide text-slate-300">
-          {summary.hasClaimedBound ? 'bounded' : 'unbounded'}
+          {summary.status}
         </span>
       </div>
 
       <MiniShardMap
         boundsByShardId={boundsByShardId}
+        claimedBoundShardIds={claimedBoundShardIds}
         focusShardId={summary.shardId}
         highlightFocus={summary.hasClaimedBound}
       />
@@ -462,6 +478,11 @@ export default function OverviewPage() {
     [networkNodeIds, projectedShardPositions, shardBoundsById]
   );
 
+  const claimedBoundShardIds = useMemo(
+    () => new Set(shardBoundsById.keys()),
+    [shardBoundsById]
+  );
+
   const networkEdgeCount = useMemo(
     () => computeNetworkEdgeCount({ networkNodeIdSet, networkTelemetry }),
     [networkNodeIdSet, networkTelemetry]
@@ -478,10 +499,18 @@ export default function OverviewPage() {
       const telemetry = shardTelemetryById.get(shardId);
       const claimedBound = shardBoundsById.get(shardId) ?? null;
       const bounds = shardBoundsByIdWithNetworkFallback.get(shardId) ?? null;
+      const hasClaimedBound = claimedBound != null;
+      const hasNetworkTelemetry = telemetry != null;
+      const status: ShardSummary['status'] = hasClaimedBound
+        ? hasNetworkTelemetry
+          ? 'bounded'
+          : 'bounded stale'
+        : 'unbounded';
       out.push({
         shardId,
         bounds,
-        hasClaimedBound: claimedBound != null,
+        status,
+        hasClaimedBound,
         area: claimedBound?.area ?? 0,
         clientCount: clientsByShardId.get(shardId) ?? 0,
         entityCount: entitiesByShardId.get(shardId) ?? 0,
@@ -491,15 +520,7 @@ export default function OverviewPage() {
       });
     }
 
-    out.sort((left, right) => {
-      if (left.clientCount !== right.clientCount) {
-        return right.clientCount - left.clientCount;
-      }
-      if (left.connectionCount !== right.connectionCount) {
-        return right.connectionCount - left.connectionCount;
-      }
-      return left.shardId.localeCompare(right.shardId);
-    });
+    out.sort((left, right) => left.shardId.localeCompare(right.shardId));
     return out;
   }, [
     clientsByShardId,
@@ -622,6 +643,7 @@ export default function OverviewPage() {
                 key={summary.shardId}
                 summary={summary}
                 boundsByShardId={shardBoundsByIdWithNetworkFallback}
+                claimedBoundShardIds={claimedBoundShardIds}
               />
             ))}
           </div>
