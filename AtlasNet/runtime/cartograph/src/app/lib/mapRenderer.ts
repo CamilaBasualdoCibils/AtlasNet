@@ -42,6 +42,7 @@ interface MapPoint {
 interface EntityFocusOverlay {
   enabled: boolean;
   selectedPoints: MapPoint[];
+  inspectedPoint: MapPoint | null;
   hoveredPoint: MapPoint | null;
 }
 
@@ -224,6 +225,7 @@ export function createMapRenderer({
   let entityFocusOverlay: EntityFocusOverlay = {
     enabled: false,
     selectedPoints: [],
+    inspectedPoint: null,
     hoveredPoint: null,
   };
 
@@ -361,14 +363,33 @@ export function createMapRenderer({
   function drawEntityFocusMarker(
     screenX: number,
     screenY: number,
-    isHovered: boolean
+    tone: 'selected' | 'focus'
   ): void {
-    const outerRadius = isHovered ? 7 : 5;
-    const innerRadius = isHovered ? 3.2 : 2.3;
-    const strokeColor = isHovered
+    const isFocus = tone === 'focus';
+    const outerRadius =
+      viewMode === '2d'
+        ? clamp(
+            (isFocus ? 3.4 : 2.8) * Math.max(scale2D, 0.0001),
+            isFocus ? 3.2 : 2.6,
+            isFocus ? 22 : 18
+          )
+        : isFocus
+          ? 7
+          : 5;
+    const innerRadius =
+      viewMode === '2d'
+        ? clamp(
+            outerRadius * (isFocus ? 0.48 : 0.46),
+            1.4,
+            isFocus ? 10 : 8
+          )
+        : isFocus
+          ? 3.2
+          : 2.3;
+    const strokeColor = isFocus
       ? 'rgba(59, 130, 246, 0.95)'
       : 'rgba(251, 191, 36, 0.95)';
-    const fillColor = isHovered
+    const fillColor = isFocus
       ? 'rgba(59, 130, 246, 0.36)'
       : 'rgba(251, 191, 36, 0.3)';
 
@@ -400,18 +421,39 @@ export function createMapRenderer({
 
     const basis = viewMode === '3d' ? getCameraBasis() : undefined;
 
+    const projectedFocusKeys = new Set<string>();
+    const projectKeyForPoint = (point: MapPoint): string =>
+      `${point.x.toFixed(6)}:${point.y.toFixed(6)}`;
+
     for (const point of entityFocusOverlay.selectedPoints) {
       const screen = projectMapPointToScreen(point, basis);
       if (!screen) {
         continue;
       }
-      drawEntityFocusMarker(screen.x, screen.y, false);
+      drawEntityFocusMarker(screen.x, screen.y, 'selected');
+    }
+
+    if (entityFocusOverlay.inspectedPoint) {
+      const inspectedScreen = projectMapPointToScreen(
+        entityFocusOverlay.inspectedPoint,
+        basis
+      );
+      if (inspectedScreen) {
+        drawEntityFocusMarker(inspectedScreen.x, inspectedScreen.y, 'focus');
+        projectedFocusKeys.add(projectKeyForPoint(entityFocusOverlay.inspectedPoint));
+      }
     }
 
     if (entityFocusOverlay.hoveredPoint) {
-      const hoveredScreen = projectMapPointToScreen(entityFocusOverlay.hoveredPoint, basis);
-      if (hoveredScreen) {
-        drawEntityFocusMarker(hoveredScreen.x, hoveredScreen.y, true);
+      const hoveredKey = projectKeyForPoint(entityFocusOverlay.hoveredPoint);
+      if (!projectedFocusKeys.has(hoveredKey)) {
+        const hoveredScreen = projectMapPointToScreen(
+          entityFocusOverlay.hoveredPoint,
+          basis
+        );
+        if (hoveredScreen) {
+          drawEntityFocusMarker(hoveredScreen.x, hoveredScreen.y, 'focus');
+        }
       }
     }
   }
@@ -1520,6 +1562,13 @@ export function createMapRenderer({
       scale2D = clamp(newScale, MIN_SCALE_2D, MAX_SCALE_2D);
       draw();
     },
+    getViewState2D() {
+      return {
+        scale: scale2D,
+        offsetX,
+        offsetY,
+      };
+    },
     setInteractionSensitivity(nextSensitivity: number) {
       interactionSensitivity = clamp(
         nextSensitivity,
@@ -1554,9 +1603,16 @@ export function createMapRenderer({
         Number.isFinite(nextOverlay.hoveredPoint.y)
           ? nextOverlay.hoveredPoint
           : null;
+      const inspectedPoint =
+        nextOverlay.inspectedPoint &&
+        Number.isFinite(nextOverlay.inspectedPoint.x) &&
+        Number.isFinite(nextOverlay.inspectedPoint.y)
+          ? nextOverlay.inspectedPoint
+          : null;
       entityFocusOverlay = {
         enabled: Boolean(nextOverlay.enabled),
         selectedPoints,
+        inspectedPoint,
         hoveredPoint,
       };
       draw();

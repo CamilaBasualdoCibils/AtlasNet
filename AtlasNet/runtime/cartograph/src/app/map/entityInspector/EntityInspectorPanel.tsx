@@ -2,15 +2,47 @@
 
 import { useEffect, useRef, useState } from 'react';
 import type { MouseEvent as ReactMouseEvent } from 'react';
+import type { RefObject } from 'react';
 import type { AuthorityEntityTelemetry } from '../../lib/cartographTypes';
 import { DatabaseExplorerInspector } from '../../database/components/DatabaseExplorerInspector';
+import type { MapViewMode } from '../../lib/mapRenderer';
 import { useEntityDatabaseDetails } from './useEntityDatabaseDetails';
 
 const ENTITY_INSPECTOR_DESKTOP_GRID_COLUMNS_CLASS =
   'lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]';
 const PANEL_MIN_WIDTH_PX = 520;
+const FOLLOW_SELECTED_ENTITIES_STORAGE_KEY =
+  'cartograph.map.entityInspector.followSelectedEntities';
+const FOLLOW_PADDING = 4;
+const FOLLOW_ZOOM_DAMPEN = 0.35;
+const FOLLOW_MIN_WORLD_EXTENT = 24;
+const FOLLOW_MIN_VISIBLE_WIDTH_PX = 180;
+const FOLLOW_MIN_VISIBLE_HEIGHT_PX = 120;
+const PANEL_WIDTH_FALLBACK_RATIO = 0.5;
+const FOLLOW_LERP_ALPHA = 0.1;
+const RESTORE_LERP_ALPHA = 0.12;
+const CAMERA_EPSILON = 0.001;
+const FOLLOW_MIN_SCALE_2D = 0.05;
+const FOLLOW_MAX_SCALE_2D = 20;
+const FOLLOW_PANEL_COMPENSATION_MIN = 0.55;
+const FOLLOW_PANEL_COMPENSATION_SPREAD_MULTIPLIER = 6;
+
+interface CameraTransform2D {
+  scale: number;
+  offsetX: number;
+  offsetY: number;
+}
+
+interface MapRendererFollowController {
+  setScale: (value: number) => void;
+  setOffset: (x: number, y: number) => void;
+  getViewState2D: () => CameraTransform2D;
+}
 
 interface EntityInspectorPanelProps {
+  containerRef: RefObject<HTMLDivElement | null>;
+  rendererRef: RefObject<MapRendererFollowController | null>;
+  viewMode: MapViewMode;
   selectedEntities: AuthorityEntityTelemetry[];
   activeEntityId: string | null;
   hoveredEntityId: string | null;
@@ -31,7 +63,53 @@ function formatNumber(value: number, digits = 2): string {
   return value.toFixed(digits);
 }
 
+function lerp(from: number, to: number, alpha: number): number {
+  return from + (to - from) * alpha;
+}
+
+function clamp(value: number, min: number, max: number): number {
+  return Math.min(max, Math.max(min, value));
+}
+
+function getBoundsForEntities(
+  selectedEntities: AuthorityEntityTelemetry[]
+): {
+  minX: number;
+  maxX: number;
+  minY: number;
+  maxY: number;
+} | null {
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+
+  for (const entity of selectedEntities) {
+    if (!Number.isFinite(entity.x) || !Number.isFinite(entity.y)) {
+      continue;
+    }
+    minX = Math.min(minX, entity.x);
+    maxX = Math.max(maxX, entity.x);
+    minY = Math.min(minY, entity.y);
+    maxY = Math.max(maxY, entity.y);
+  }
+
+  if (
+    !Number.isFinite(minX) ||
+    !Number.isFinite(maxX) ||
+    !Number.isFinite(minY) ||
+    !Number.isFinite(maxY)
+  ) {
+    return null;
+  }
+
+  return { minX, maxX, minY, maxY };
+}
+
 export function EntityInspectorPanel({
+  containerRef,
+  rendererRef,
+  viewMode,
   activeEntityId,
   hoveredEntityId,
   maxPollIntervalMs,
@@ -49,7 +127,9 @@ export function EntityInspectorPanel({
     startX: number;
     startWidth: number;
   } | null>(null);
+  const preFollowCameraRef = useRef<CameraTransform2D | null>(null);
   const [panelWidthPx, setPanelWidthPx] = useState<number | null>(null);
+  const [followSelectedEntities, setFollowSelectedEntities] = useState(false);
 
   function getMaxPanelWidthPx(): number {
     const parent = panelRef.current?.parentElement;
@@ -58,6 +138,214 @@ export function EntityInspectorPanel({
     }
     return Math.max(PANEL_MIN_WIDTH_PX, parent.clientWidth - 24);
   }
+
+  useEffect(() => {
+    try {
+      const persistedValue = window.localStorage.getItem(
+        FOLLOW_SELECTED_ENTITIES_STORAGE_KEY
+      );
+      if (persistedValue === '1' || persistedValue === 'true') {
+        setFollowSelectedEntities(true);
+      }
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        FOLLOW_SELECTED_ENTITIES_STORAGE_KEY,
+        followSelectedEntities ? '1' : '0'
+      );
+    } catch {}
+  }, [followSelectedEntities]);
+
+  useEffect(() => {
+    const renderer = rendererRef.current;
+    const container = containerRef.current;
+    if (!renderer || !container || viewMode !== '2d') {
+      return;
+    }
+
+    const followActive =
+      followSelectedEntities && selectedEntities.length > 0;
+
+    if (
+      !followSelectedEntities &&
+      selectedEntities.length > 0 &&
+      preFollowCameraRef.current
+    ) {
+      preFollowCameraRef.current = null;
+    }
+
+    if (followActive && !preFollowCameraRef.current) {
+      preFollowCameraRef.current = renderer.getViewState2D();
+    }
+
+    if (!followActive) {
+      if (
+        selectedEntities.length === 0 &&
+        preFollowCameraRef.current != null
+      ) {
+        const target = preFollowCameraRef.current;
+        let rafId = 0;
+        const tick = () => {
+          const current = rendererRef.current;
+          if (!current || viewMode !== '2d') {
+            preFollowCameraRef.current = null;
+            return;
+          }
+
+          const currentTransform = current.getViewState2D();
+          const nextScale = lerp(currentTransform.scale, target.scale, RESTORE_LERP_ALPHA);
+          const nextOffsetX = lerp(
+            currentTransform.offsetX,
+            target.offsetX,
+            RESTORE_LERP_ALPHA
+          );
+          const nextOffsetY = lerp(
+            currentTransform.offsetY,
+            target.offsetY,
+            RESTORE_LERP_ALPHA
+          );
+
+          current.setScale(nextScale);
+          current.setOffset(nextOffsetX, nextOffsetY);
+
+          const done =
+            Math.abs(nextScale - target.scale) < CAMERA_EPSILON &&
+            Math.abs(nextOffsetX - target.offsetX) < CAMERA_EPSILON &&
+            Math.abs(nextOffsetY - target.offsetY) < CAMERA_EPSILON;
+
+          if (done) {
+            current.setScale(target.scale);
+            current.setOffset(target.offsetX, target.offsetY);
+            preFollowCameraRef.current = null;
+            return;
+          }
+
+          rafId = window.requestAnimationFrame(tick);
+        };
+
+        rafId = window.requestAnimationFrame(tick);
+        return () => {
+          window.cancelAnimationFrame(rafId);
+        };
+      }
+      return;
+    }
+
+    const bounds = getBoundsForEntities(selectedEntities);
+    if (!bounds) {
+      return;
+    }
+    let rafId = 0;
+    const tick = () => {
+      const currentRenderer = rendererRef.current;
+      const currentContainer = containerRef.current;
+      if (
+        !currentRenderer ||
+        !currentContainer ||
+        !followSelectedEntities ||
+        viewMode !== '2d' ||
+        selectedEntities.length === 0
+      ) {
+        return;
+      }
+
+      const latestBounds = getBoundsForEntities(selectedEntities);
+      if (!latestBounds) {
+        return;
+      }
+
+      const containerWidth = Math.max(1, currentContainer.clientWidth);
+      const containerHeight = Math.max(1, currentContainer.clientHeight);
+      const measuredPanelWidth = panelRef.current?.getBoundingClientRect().width;
+      const panelWidth =
+        typeof measuredPanelWidth === 'number' && Number.isFinite(measuredPanelWidth)
+          ? measuredPanelWidth
+          : panelWidthPx ?? containerWidth * PANEL_WIDTH_FALLBACK_RATIO;
+      const visibleWidth = Math.max(
+        FOLLOW_MIN_VISIBLE_WIDTH_PX,
+        containerWidth - panelWidth
+      );
+      const visibleHeight = Math.max(
+        FOLLOW_MIN_VISIBLE_HEIGHT_PX,
+        containerHeight
+      );
+
+      const worldWidth = Math.max(
+        FOLLOW_MIN_WORLD_EXTENT,
+        latestBounds.maxX - latestBounds.minX
+      );
+      const worldHeight = Math.max(
+        FOLLOW_MIN_WORLD_EXTENT,
+        latestBounds.maxY - latestBounds.minY
+      );
+      const spreadExtent = Math.max(worldWidth, worldHeight);
+      const spreadRatio = clamp(
+        (spreadExtent - FOLLOW_MIN_WORLD_EXTENT) /
+          (FOLLOW_MIN_WORLD_EXTENT * FOLLOW_PANEL_COMPENSATION_SPREAD_MULTIPLIER),
+        0,
+        1
+      );
+      const panelCompensation =
+        FOLLOW_PANEL_COMPENSATION_MIN +
+        (1 - FOLLOW_PANEL_COMPENSATION_MIN) * spreadRatio;
+      const effectivePanelWidth = panelWidth * panelCompensation;
+
+      const scaleX = visibleWidth / (worldWidth * FOLLOW_PADDING);
+      const scaleY = visibleHeight / (worldHeight * FOLLOW_PADDING);
+      const targetScale = clamp(
+        Math.min(scaleX, scaleY) * FOLLOW_ZOOM_DAMPEN,
+        FOLLOW_MIN_SCALE_2D,
+        FOLLOW_MAX_SCALE_2D
+      );
+
+      const centerX = (latestBounds.minX + latestBounds.maxX) / 2;
+      const centerY = (latestBounds.minY + latestBounds.maxY) / 2;
+      const desiredScreenX = Math.max(
+        FOLLOW_MIN_VISIBLE_WIDTH_PX / 2,
+        (containerWidth - effectivePanelWidth) / 2
+      );
+      const desiredScreenY = containerHeight / 2;
+      const targetOffsetX = desiredScreenX - centerX * targetScale;
+      const targetOffsetY = desiredScreenY - centerY * targetScale;
+
+      const current = currentRenderer.getViewState2D();
+      const nextScale = clamp(
+        lerp(current.scale, targetScale, FOLLOW_LERP_ALPHA),
+        FOLLOW_MIN_SCALE_2D,
+        FOLLOW_MAX_SCALE_2D
+      );
+      const nextOffsetX = lerp(
+        current.offsetX,
+        targetOffsetX,
+        FOLLOW_LERP_ALPHA
+      );
+      const nextOffsetY = lerp(
+        current.offsetY,
+        targetOffsetY,
+        FOLLOW_LERP_ALPHA
+      );
+
+      currentRenderer.setScale(nextScale);
+      currentRenderer.setOffset(nextOffsetX, nextOffsetY);
+
+      rafId = window.requestAnimationFrame(tick);
+    };
+
+    rafId = window.requestAnimationFrame(tick);
+    return () => {
+      window.cancelAnimationFrame(rafId);
+    };
+  }, [
+    containerRef,
+    followSelectedEntities,
+    panelWidthPx,
+    rendererRef,
+    selectedEntities,
+    viewMode,
+  ]);
 
   useEffect(() => {
     const handleMouseMove = (event: MouseEvent) => {
@@ -227,6 +515,25 @@ export function EntityInspectorPanel({
               }
             />
             {pollIntervalMs >= pollDisabledAtMs ? 'off' : `${pollIntervalMs}ms`}
+          </label>
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              fontSize: 11,
+              color: '#cbd5e1',
+              whiteSpace: 'nowrap',
+            }}
+            title="Continuously frame selected entities and keep them centered in visible map area."
+          >
+            <input
+              type="checkbox"
+              checked={followSelectedEntities}
+              onChange={(event) => setFollowSelectedEntities(event.target.checked)}
+            />
+            camera follow
           </label>
 
           <button

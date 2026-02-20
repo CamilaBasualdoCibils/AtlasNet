@@ -166,12 +166,20 @@ export default function MapPage() {
       selectedEntities.find(
         (entity) => entity.entityId === hoveredSelectedEntityId
       ) ?? null;
+    const inspectedEntity =
+      selectedEntities.find((entity) => entity.entityId === activeEntityId) ?? null;
     rendererRef.current?.setEntityFocusOverlay({
       enabled: selectedEntities.length > 0,
       selectedPoints: selectedEntities.map((entity) => ({
         x: entity.x,
         y: entity.y,
       })),
+      inspectedPoint: inspectedEntity
+        ? {
+            x: inspectedEntity.x,
+            y: inspectedEntity.y,
+          }
+        : null,
       hoveredPoint: hoveredEntity
         ? {
             x: hoveredEntity.x,
@@ -179,7 +187,7 @@ export default function MapPage() {
           }
         : null,
     });
-  }, [hoveredSelectedEntityId, selectedEntities]);
+  }, [activeEntityId, hoveredSelectedEntityId, selectedEntities]);
 
   const hoveredTelemetry = hoveredShardId
     ? shardTelemetryById.get(hoveredShardId)
@@ -288,6 +296,9 @@ export default function MapPage() {
       />
 
       <EntityInspectorPanel
+        containerRef={containerRef}
+        rendererRef={rendererRef}
+        viewMode={viewMode}
         selectedEntities={selectedEntities}
         activeEntityId={activeEntityId}
         hoveredEntityId={hoveredSelectedEntityId}
