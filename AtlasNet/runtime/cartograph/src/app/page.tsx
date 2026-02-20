@@ -4,7 +4,7 @@ type ServerRow = {
   id: string;
   name: string;
   address: string;
-  players: number;
+  clients: number;
   status: "Online" | "Offline";
 };
 
@@ -13,21 +13,21 @@ const MOCK_SERVERS: ServerRow[] = [
     id: "eGameServer-1",
     name: "GameServer A",
     address: "10.0.1.10:25565",
-    players: 32,
+    clients: 32,
     status: "Online",
   },
   {
     id: "eGameServer-2",
     name: "GameServer B",
     address: "10.0.1.11:25565",
-    players: 5,
+    clients: 5,
     status: "Online",
   },
   {
     id: "ePartition-7",
     name: "Partition Node 7",
     address: "10.0.2.3:4000",
-    players: 80,
+    clients: 80,
     status: "Online",
   },
 ];
@@ -69,7 +69,7 @@ export default function ServersPage() {
         <div className="border-b border-slate-800 px-6 py-3 text-sm font-medium text-slate-300 flex">
           <div className="w-1/3">Server</div>
           <div className="w-1/3">Address</div>
-          <div className="w-1/6">Players</div>
+          <div className="w-1/6">Clients</div>
           <div className="w-1/6 text-right">Status</div>
         </div>
 
@@ -96,7 +96,7 @@ export default function ServersPage() {
               </div>
 
               <div className="w-1/6 text-slate-200">
-                {srv.players} players
+                {srv.clients} clients
               </div>
 
               <div className="w-1/6 text-right">

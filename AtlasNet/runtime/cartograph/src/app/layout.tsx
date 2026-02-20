@@ -55,11 +55,11 @@ export default function RootLayout({
                 <span>Map</span>
               </Link>
               <Link
-                href="/players"
+                href="/clients"
                 className="flex items-center gap-3 px-3 py-2 rounded-lg hover:bg-slate-900"
               >
                 <Users className="h-4 w-4" />
-                <span>Players</span>
+                <span>Clients</span>
               </Link>
               <Link
                 href="/database"
