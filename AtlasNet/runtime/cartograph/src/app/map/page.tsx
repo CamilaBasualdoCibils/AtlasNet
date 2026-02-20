@@ -296,9 +296,6 @@ export default function MapPage() {
       />
 
       <EntityInspectorPanel
-        containerRef={containerRef}
-        rendererRef={rendererRef}
-        viewMode={viewMode}
         selectedEntities={selectedEntities}
         activeEntityId={activeEntityId}
         hoveredEntityId={hoveredSelectedEntityId}

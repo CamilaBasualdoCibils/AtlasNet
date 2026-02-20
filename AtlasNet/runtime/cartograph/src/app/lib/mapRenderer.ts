@@ -1500,6 +1500,14 @@ export function createMapRenderer({
       return;
     }
 
+    const pointerScreenX = event.offsetX;
+    const pointerScreenY = event.offsetY;
+    const fallbackScreenX = canvasWidth() / 2;
+    const fallbackScreenY = canvasHeight() / 2;
+    const zoomAnchorBefore =
+      screenToWorld3D(pointerScreenX, pointerScreenY) ??
+      screenToWorld3D(fallbackScreenX, fallbackScreenY);
+
     if (projectionMode === 'perspective') {
       cameraDistance = clamp(
         cameraDistance * sensitivityZoomFactor,
@@ -1513,6 +1521,29 @@ export function createMapRenderer({
         MAX_ORTHO_HEIGHT
       );
     }
+
+    const zoomAnchorAfter =
+      screenToWorld3D(pointerScreenX, pointerScreenY) ??
+      screenToWorld3D(fallbackScreenX, fallbackScreenY);
+    if (zoomAnchorBefore && zoomAnchorAfter) {
+      const deltaX = zoomAnchorBefore.x - zoomAnchorAfter.x;
+      const deltaZ = zoomAnchorBefore.y - zoomAnchorAfter.y;
+      const deltaLen = Math.hypot(deltaX, deltaZ);
+      const maxCompensation =
+        projectionMode === 'perspective'
+          ? Math.max(10, cameraDistance * 2.5)
+          : Math.max(10, orthoHeight * 2.5);
+      if (
+        Number.isFinite(deltaX) &&
+        Number.isFinite(deltaZ) &&
+        Number.isFinite(deltaLen) &&
+        deltaLen <= maxCompensation
+      ) {
+        cameraTarget.x += deltaX;
+        cameraTarget.z += deltaZ;
+      }
+    }
+
     draw();
   }
 
@@ -1611,76 +1642,6 @@ export function createMapRenderer({
         offsetX,
         offsetY,
       };
-    },
-    getViewState3D() {
-      return {
-        targetX: cameraTarget.x,
-        targetY: cameraTarget.y,
-        targetZ: cameraTarget.z,
-        distance: cameraDistance,
-        yaw: cameraYaw,
-        pitch: cameraPitch,
-        roll: cameraRoll,
-        orthoHeight,
-        projectionMode,
-      };
-    },
-    setViewState3D(nextViewState: {
-      targetX?: number;
-      targetY?: number;
-      targetZ?: number;
-      distance?: number;
-      yaw?: number;
-      pitch?: number;
-      roll?: number;
-      orthoHeight?: number;
-      projectionMode?: MapProjectionMode;
-    }) {
-      if (
-        nextViewState.projectionMode === 'orthographic' ||
-        nextViewState.projectionMode === 'perspective'
-      ) {
-        projectionMode = nextViewState.projectionMode;
-      }
-
-      if (Number.isFinite(nextViewState.targetX)) {
-        cameraTarget.x = Number(nextViewState.targetX);
-      }
-      if (Number.isFinite(nextViewState.targetY)) {
-        cameraTarget.y = Number(nextViewState.targetY);
-      }
-      if (Number.isFinite(nextViewState.targetZ)) {
-        cameraTarget.z = Number(nextViewState.targetZ);
-      }
-      if (Number.isFinite(nextViewState.distance)) {
-        cameraDistance = clamp(
-          Number(nextViewState.distance),
-          MIN_DISTANCE_3D,
-          MAX_DISTANCE_3D
-        );
-      }
-      if (Number.isFinite(nextViewState.yaw)) {
-        cameraYaw = Number(nextViewState.yaw);
-      }
-      if (Number.isFinite(nextViewState.pitch)) {
-        cameraPitch = clamp(
-          Number(nextViewState.pitch),
-          MIN_PITCH,
-          MAX_PITCH
-        );
-      }
-      if (Number.isFinite(nextViewState.roll)) {
-        cameraRoll = Number(nextViewState.roll);
-      }
-      if (Number.isFinite(nextViewState.orthoHeight)) {
-        orthoHeight = clamp(
-          Number(nextViewState.orthoHeight),
-          MIN_ORTHO_HEIGHT,
-          MAX_ORTHO_HEIGHT
-        );
-      }
-
-      draw();
     },
     setInteractionSensitivity(nextSensitivity: number) {
       interactionSensitivity = clamp(
