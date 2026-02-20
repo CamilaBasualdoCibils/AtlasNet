@@ -34,6 +34,17 @@ interface ProjectedPoint {
   depth: number;
 }
 
+interface MapPoint {
+  x: number;
+  y: number;
+}
+
+interface EntityFocusOverlay {
+  enabled: boolean;
+  selectedPoints: MapPoint[];
+  hoveredPoint: MapPoint | null;
+}
+
 const MIN_SCALE_2D = 0.05;
 const MAX_SCALE_2D = 20;
 const MIN_DISTANCE_3D = 5;
@@ -210,6 +221,11 @@ export function createMapRenderer({
   let onPointerWorldPosition = initialOnPointerWorldPosition;
   let hoverEdgeLabels: EdgeLabelOverlay[] = [];
   let lastPointerScreen: { x: number; y: number } | null = null;
+  let entityFocusOverlay: EntityFocusOverlay = {
+    enabled: false,
+    selectedPoints: [],
+    hoveredPoint: null,
+  };
 
   function canvasWidth(): number {
     return canvas.width || 1;
@@ -325,6 +341,79 @@ export function createMapRenderer({
       return null;
     }
     return projectCameraPoint(cameraPoint);
+  }
+
+  function projectMapPointToScreen(
+    point: MapPoint,
+    basisOverride?: CameraBasis
+  ): { x: number; y: number } | null {
+    if (viewMode === '2d') {
+      return worldToScreen2D(point.x, point.y);
+    }
+
+    const projected = projectMapPoint3D(point, basisOverride ?? getCameraBasis());
+    if (!projected) {
+      return null;
+    }
+    return { x: projected.x, y: projected.y };
+  }
+
+  function drawEntityFocusMarker(
+    screenX: number,
+    screenY: number,
+    isHovered: boolean
+  ): void {
+    const outerRadius = isHovered ? 7 : 5;
+    const innerRadius = isHovered ? 3.2 : 2.3;
+    const strokeColor = isHovered
+      ? 'rgba(59, 130, 246, 0.95)'
+      : 'rgba(34, 197, 94, 0.95)';
+    const fillColor = isHovered
+      ? 'rgba(59, 130, 246, 0.36)'
+      : 'rgba(34, 197, 94, 0.3)';
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, outerRadius, 0, Math.PI * 2);
+    ctx.fillStyle = fillColor;
+    ctx.fill();
+    ctx.lineWidth = 2;
+    ctx.strokeStyle = strokeColor;
+    ctx.stroke();
+
+    ctx.beginPath();
+    ctx.arc(screenX, screenY, innerRadius, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+    ctx.fill();
+    ctx.restore();
+  }
+
+  function drawEntityFocusOverlay(): void {
+    if (!entityFocusOverlay.enabled) {
+      return;
+    }
+
+    ctx.save();
+    ctx.fillStyle = 'rgba(2, 6, 23, 0.58)';
+    ctx.fillRect(0, 0, canvasWidth(), canvasHeight());
+    ctx.restore();
+
+    const basis = viewMode === '3d' ? getCameraBasis() : undefined;
+
+    for (const point of entityFocusOverlay.selectedPoints) {
+      const screen = projectMapPointToScreen(point, basis);
+      if (!screen) {
+        continue;
+      }
+      drawEntityFocusMarker(screen.x, screen.y, false);
+    }
+
+    if (entityFocusOverlay.hoveredPoint) {
+      const hoveredScreen = projectMapPointToScreen(entityFocusOverlay.hoveredPoint, basis);
+      if (hoveredScreen) {
+        drawEntityFocusMarker(hoveredScreen.x, hoveredScreen.y, true);
+      }
+    }
   }
 
   function drawEdgeLabel(screenX: number, screenY: number, text: string): void {
@@ -922,6 +1011,7 @@ export function createMapRenderer({
       ctx.restore();
       drawAxisGizmo2D();
       drawHoverEdgeLabels2D();
+      drawEntityFocusOverlay();
       if (lastPointerScreen) {
         onPointerWorldPosition?.(
           screenToWorldMap(lastPointerScreen.x, lastPointerScreen.y),
@@ -935,6 +1025,7 @@ export function createMapRenderer({
     drawAxes3D();
     drawShapes3D();
     drawHoverEdgeLabels3D();
+    drawEntityFocusOverlay();
 
     if (lastPointerScreen) {
       onPointerWorldPosition?.(
@@ -1448,6 +1539,35 @@ export function createMapRenderer({
     setHoverEdgeLabels(nextLabels: EdgeLabelOverlay[]) {
       hoverEdgeLabels = nextLabels;
       draw();
+    },
+    setEntityFocusOverlay(nextOverlay: EntityFocusOverlay) {
+      const selectedPoints = Array.isArray(nextOverlay.selectedPoints)
+        ? nextOverlay.selectedPoints.filter(
+            (point) =>
+              Number.isFinite(point.x) &&
+              Number.isFinite(point.y)
+          )
+        : [];
+      const hoveredPoint =
+        nextOverlay.hoveredPoint &&
+        Number.isFinite(nextOverlay.hoveredPoint.x) &&
+        Number.isFinite(nextOverlay.hoveredPoint.y)
+          ? nextOverlay.hoveredPoint
+          : null;
+      entityFocusOverlay = {
+        enabled: Boolean(nextOverlay.enabled),
+        selectedPoints,
+        hoveredPoint,
+      };
+      draw();
+    },
+    projectMapPoint(point: { x: number; y: number; z?: number }) {
+      const x = Number(point.x);
+      const y = Number(point.y);
+      if (!Number.isFinite(x) || !Number.isFinite(y)) {
+        return null;
+      }
+      return projectMapPointToScreen({ x, y });
     },
     resetCamera,
     destroy() {

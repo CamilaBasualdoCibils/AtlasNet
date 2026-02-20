@@ -13,12 +13,18 @@ import {
   type MapProjectionMode,
   type MapViewMode,
 } from '../lib/mapRenderer';
+import { EntityInspectorPanel } from './entityInspector/EntityInspectorPanel';
+import { useCtrlDragEntitySelection } from './entityInspector/useCtrlDragEntitySelection';
 import { MapHud } from './components/MapHud';
 import { ShardHoverTooltip } from './components/ShardHoverTooltip';
 
 const DEFAULT_POLL_INTERVAL_MS = 50;
 const MIN_POLL_INTERVAL_MS = 50;
 const MAX_POLL_INTERVAL_MS = 1000;
+const DEFAULT_ENTITY_DETAIL_POLL_INTERVAL_MS = 1000;
+const MIN_ENTITY_DETAIL_POLL_INTERVAL_MS = 250;
+const MAX_ENTITY_DETAIL_POLL_INTERVAL_MS = 5000;
+const ENTITY_DETAIL_POLL_DISABLED_AT_MS = MAX_ENTITY_DETAIL_POLL_INTERVAL_MS;
 const DEFAULT_INTERACTION_SENSITIVITY = 1;
 const MIN_INTERACTION_SENSITIVITY = 0;
 const MAX_INTERACTION_SENSITIVITY = 2;
@@ -42,6 +48,9 @@ export default function MapPage() {
     DEFAULT_INTERACTION_SENSITIVITY
   );
   const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
+  const [entityDetailPollIntervalMs, setEntityDetailPollIntervalMs] = useState(
+    DEFAULT_ENTITY_DETAIL_POLL_INTERVAL_MS
+  );
 
   const baseShapes = useHeuristicShapes({
     intervalMs: pollIntervalMs,
@@ -57,6 +66,23 @@ export default function MapPage() {
     intervalMs: pollIntervalMs,
     resetOnException: true,
     resetOnHttpError: false,
+  });
+  const {
+    selectedEntities,
+    activeEntityId,
+    hoveredEntityId: hoveredSelectedEntityId,
+    selectionRect,
+    clearSelection,
+    onPointerDownCapture,
+    onPointerMoveCapture,
+    onPointerUpCapture,
+    onPointerCancelCapture,
+    setActiveEntityId,
+    setHoveredEntityId,
+  } = useCtrlDragEntitySelection({
+    containerRef,
+    rendererRef,
+    entities: authorityEntities,
   });
 
   const {
@@ -135,6 +161,26 @@ export default function MapPage() {
     rendererRef.current?.setInteractionSensitivity(interactionSensitivity);
   }, [interactionSensitivity]);
 
+  useEffect(() => {
+    const hoveredEntity =
+      selectedEntities.find(
+        (entity) => entity.entityId === hoveredSelectedEntityId
+      ) ?? null;
+    rendererRef.current?.setEntityFocusOverlay({
+      enabled: selectedEntities.length > 0,
+      selectedPoints: selectedEntities.map((entity) => ({
+        x: entity.x,
+        y: entity.y,
+      })),
+      hoveredPoint: hoveredEntity
+        ? {
+            x: hoveredEntity.x,
+            y: hoveredEntity.y,
+          }
+        : null,
+    });
+  }, [hoveredSelectedEntityId, selectedEntities]);
+
   const hoveredTelemetry = hoveredShardId
     ? shardTelemetryById.get(hoveredShardId)
     : undefined;
@@ -162,9 +208,13 @@ export default function MapPage() {
           border: '1px solid #ccc',
           boxSizing: 'border-box',
         }}
+        onPointerDownCapture={onPointerDownCapture}
+        onPointerMoveCapture={onPointerMoveCapture}
+        onPointerUpCapture={onPointerUpCapture}
+        onPointerCancelCapture={onPointerCancelCapture}
         onMouseLeave={clearHoveredShard}
       >
-        {showShardHoverDetails && (
+        {showShardHoverDetails && selectedEntities.length === 0 && (
           <ShardHoverTooltip
             hoveredShardId={hoveredShardId}
             hoveredShardAnchor={hoveredShardAnchor}
@@ -173,6 +223,57 @@ export default function MapPage() {
             outgoingConnectionCount={hoveredShardEdgeLabels.length}
           />
         )}
+
+        {selectedEntities.length === 0 && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 10,
+              bottom: 10,
+              borderRadius: 6,
+              border: '1px solid rgba(148, 163, 184, 0.35)',
+              background: 'rgba(2, 6, 23, 0.78)',
+              color: '#cbd5e1',
+              fontSize: 11,
+              padding: '4px 6px',
+              pointerEvents: 'none',
+            }}
+          >
+            hold Ctrl + drag to select entities
+          </div>
+        )}
+
+        {selectionRect && (
+          <div
+            style={{
+              position: 'absolute',
+              left: selectionRect.left,
+              top: selectionRect.top,
+              width: selectionRect.width,
+              height: selectionRect.height,
+              border: '1px dashed rgba(96, 165, 250, 0.98)',
+              background: 'rgba(59, 130, 246, 0.2)',
+              pointerEvents: 'none',
+              zIndex: 2,
+            }}
+          />
+        )}
+
+        <EntityInspectorPanel
+          selectedEntities={selectedEntities}
+          activeEntityId={activeEntityId}
+          hoveredEntityId={hoveredSelectedEntityId}
+          pollIntervalMs={entityDetailPollIntervalMs}
+          minPollIntervalMs={MIN_ENTITY_DETAIL_POLL_INTERVAL_MS}
+          maxPollIntervalMs={MAX_ENTITY_DETAIL_POLL_INTERVAL_MS}
+          pollDisabledAtMs={ENTITY_DETAIL_POLL_DISABLED_AT_MS}
+          onSetPollIntervalMs={setEntityDetailPollIntervalMs}
+          onSelectEntity={(entityId) =>
+            setActiveEntityId(activeEntityId === entityId ? null : entityId)
+          }
+          onHoverEntity={setHoveredEntityId}
+          onClearSelection={clearSelection}
+        />
       </div>
 
       <MapHud
