@@ -14,7 +14,7 @@ This project provides a distributed, containerized backend architecture designed
 ---
 
 ## ✨ Features
-
+![Preview](docs/assets/preview.gif)
 - Gateway Service (real-time networking)
 - Authentication Service (JWT-based)
 - Session / Match Service

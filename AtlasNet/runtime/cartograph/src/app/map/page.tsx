@@ -3,9 +3,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ShardTelemetry } from '../lib/networkTelemetryTypes';
 import {
-  parseAuthorityRows,
-  type AuthorityEntityTelemetry,
-} from '../lib/authorityTelemetryTypes';
+  parseEntityView,
+  type AtlasEntity,
+} from '../lib/EntityTypes';
 import { createMapRenderer } from '../lib/mapRenderer';
 import type { ShapeJS } from '../lib/types';
 
@@ -74,9 +74,7 @@ export default function MapPage() {
   const rendererRef = useRef<ReturnType<typeof createMapRenderer> | null>(null);
   const [baseShapes, setBaseShapes] = useState<ShapeJS[]>([]);
   const [networkTelemetry, setNetworkTelemetry] = useState<ShardTelemetry[]>([]);
-  const [authorityEntities, setAuthorityEntities] = useState<
-    AuthorityEntityTelemetry[]
-  >([]);
+  const [Entities, setEntityView] = useState<Map<number, AtlasEntity[]>>(new Map());
   const [showGnsConnections, setShowGnsConnections] = useState(true);
   const [showAuthorityEntities, setShowAuthorityEntities] = useState(true);
   const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
@@ -124,14 +122,17 @@ export default function MapPage() {
     let alive = true;
     async function poll() {
       try {
-        const res = await fetch('/api/authoritytelemetry', { cache: 'no-store' });
+        const res = await fetch('/api/entityview', { cache: 'no-store' });
+        console.log('ENTITYVIEW returned ', res);
         if (!res.ok) return;
         const raw = await res.json();
         if (!alive) return;
-        setAuthorityEntities(parseAuthorityRows(raw));
+        setEntityView(parseEntityView(raw));
       } catch {
+        console.log('ENTITYVIEW FAILED ');
+
         if (!alive) return;
-        setAuthorityEntities([]);
+        setEntityView(new Map());
       }
     }
     poll();
@@ -142,9 +143,21 @@ export default function MapPage() {
     };
   }, [pollIntervalMs]);
 
+  // Flattened list of entities for iteration
+  const flatEntities = useMemo(() => {
+    const all: AtlasEntity[] = [];
+    for (const entityList of Entities.values()) {
+      all.push(...entityList);
+    }
+    return all;
+  }, [Entities]);
+
   const ownerPositions = useMemo(() => {
     const acc = new Map<string, { sumX: number; sumY: number; count: number }>();
-    for (const entity of authorityEntities) {
+    console.log('Entity count ', flatEntities.length);
+
+    for (const entity of flatEntities) {
+      console.log('Entity ', entity);
       const ownerId = normalizeShardId(entity.ownerId);
       const current = acc.get(ownerId) ?? { sumX: 0, sumY: 0, count: 0 };
       current.sumX += entity.x;
@@ -152,6 +165,7 @@ export default function MapPage() {
       current.count += 1;
       acc.set(ownerId, current);
     }
+
     const out = new Map<string, { x: number; y: number }>();
     for (const [ownerId, value] of acc) {
       out.set(ownerId, {
@@ -160,15 +174,13 @@ export default function MapPage() {
       });
     }
     return out;
-  }, [authorityEntities]);
+  }, [flatEntities]);
 
   const shardAnchorPositions = useMemo(() => {
     const accumulator = new Map<string, { sumX: number; sumY: number; count: number }>();
     for (const shape of baseShapes) {
       const ownerId = normalizeShardId(shape.ownerId ?? '');
-      if (!isShardIdentity(ownerId)) {
-        continue;
-      }
+      if (!isShardIdentity(ownerId)) continue;
       const shardId = ownerId;
       const current = accumulator.get(shardId) ?? { sumX: 0, sumY: 0, count: 0 };
       const points = getShapeAnchorPoints(shape);
@@ -182,13 +194,8 @@ export default function MapPage() {
 
     const out = new Map<string, { x: number; y: number }>();
     for (const [shardId, value] of accumulator) {
-      if (value.count <= 0) {
-        continue;
-      }
-      out.set(shardId, {
-        x: value.sumX / value.count,
-        y: value.sumY / value.count,
-      });
+      if (value.count <= 0) continue;
+      out.set(shardId, { x: value.sumX / value.count, y: value.sumY / value.count });
     }
 
     return out;
@@ -198,14 +205,10 @@ export default function MapPage() {
     const ids = new Set<string>();
     for (const shard of networkTelemetry) {
       const shardId = normalizeShardId(shard.shardId);
-      if (shardId.length > 0 && isShardIdentity(shardId)) {
-        ids.add(shardId);
-      }
+      if (shardId.length > 0 && isShardIdentity(shardId)) ids.add(shardId);
       for (const connection of shard.connections) {
         const targetId = normalizeShardId(connection.targetId);
-        if (targetId.length > 0 && isShardIdentity(targetId)) {
-          ids.add(targetId);
-        }
+        if (targetId.length > 0 && isShardIdentity(targetId)) ids.add(targetId);
       }
     }
     return Array.from(ids.values());
@@ -214,23 +217,14 @@ export default function MapPage() {
   const projectedShardPositions = useMemo(() => {
     const out = new Map<string, { x: number; y: number }>();
 
-    // Keep node positions shard-centered. Entity links should not re-layout nodes.
     for (const shardId of networkNodeIds) {
       const pos = shardAnchorPositions.get(shardId);
-      if (pos) {
-        out.set(shardId, pos);
-      }
+      if (pos) out.set(shardId, pos);
     }
 
-    const unresolvedIds = networkNodeIds
-      .filter((id: string) => !out.has(id))
-      .sort();
-    if (unresolvedIds.length === 0) {
-      return out;
-    }
+    const unresolvedIds = networkNodeIds.filter((id) => !out.has(id)).sort();
+    if (unresolvedIds.length === 0) return out;
 
-    // Fallback placement for shards missing map anchors.
-    // Deterministic per shard id and independent from entity movement.
     let centerX = 0;
     let centerY = 0;
     let centerCount = 0;
@@ -246,10 +240,7 @@ export default function MapPage() {
 
     for (const unresolvedId of unresolvedIds) {
       const offset = stableOffsetFromId(unresolvedId);
-      out.set(unresolvedId, {
-        x: centerX + offset.x,
-        y: centerY + offset.y,
-      });
+      out.set(unresolvedId, { x: centerX + offset.x, y: centerY + offset.y });
     }
 
     return out;
@@ -259,14 +250,10 @@ export default function MapPage() {
     const seen = new Set<string>();
     for (const shard of networkTelemetry) {
       const fromId = normalizeShardId(shard.shardId);
-      if (!isShardIdentity(fromId)) {
-        continue;
-      }
+      if (!isShardIdentity(fromId)) continue;
       for (const connection of shard.connections) {
         const toId = normalizeShardId(connection.targetId);
-        if (!isShardIdentity(toId)) {
-          continue;
-        }
+        if (!isShardIdentity(toId)) continue;
         const key = fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
         seen.add(key);
       }
@@ -278,8 +265,7 @@ export default function MapPage() {
     const overlays: ShapeJS[] = [];
 
     if (showAuthorityEntities) {
-      for (const entity of authorityEntities) {
-        // Entity dot
+      for (const entity of flatEntities) {
         overlays.push({
           type: 'circle',
           position: { x: entity.x, y: entity.y },
@@ -287,10 +273,7 @@ export default function MapPage() {
           color: 'rgba(255, 240, 80, 1)',
         });
 
-        // Owner link (entity -> owner centroid)
-        const ownerPos = projectedShardPositions.get(
-          normalizeShardId(entity.ownerId)
-        );
+        const ownerPos = projectedShardPositions.get(normalizeShardId(entity.ownerId));
         if (ownerPos) {
           overlays.push({
             type: 'line',
@@ -309,22 +292,15 @@ export default function MapPage() {
       const seen = new Set<string>();
       for (const shard of networkTelemetry) {
         const fromId = normalizeShardId(shard.shardId);
-        if (!isShardIdentity(fromId)) {
-          continue;
-        }
+        if (!isShardIdentity(fromId)) continue;
         const fromPos = projectedShardPositions.get(fromId);
         if (!fromPos) continue;
         for (const connection of shard.connections) {
           const toId = normalizeShardId(connection.targetId);
-          if (!isShardIdentity(toId)) {
-            continue;
-          }
+          if (!isShardIdentity(toId)) continue;
           const toPos = projectedShardPositions.get(toId);
           if (!toPos) continue;
-
-          // Undirected dedupe for display clarity
-          const key =
-            fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
+          const key = fromId < toId ? `${fromId}|${toId}` : `${toId}|${fromId}`;
           if (seen.has(key)) continue;
           seen.add(key);
 
@@ -340,27 +316,22 @@ export default function MapPage() {
         }
       }
 
-      // Draw shard node dots from the same source as network page.
       for (const shardId of networkNodeIds) {
         const anchor = projectedShardPositions.get(shardId);
-        if (!anchor) {
-          continue;
-        }
+        if (!anchor) continue;
         const hasOwnerSample = ownerPositions.has(shardId);
         overlays.push({
           type: 'circle',
           position: anchor,
           radius: hasOwnerSample ? 2.6 : 2.1,
-          color: hasOwnerSample
-            ? 'rgba(80, 200, 255, 0.95)'
-            : 'rgba(120, 170, 220, 0.75)',
+          color: hasOwnerSample ? 'rgba(80, 200, 255, 0.95)' : 'rgba(120, 170, 220, 0.75)',
         });
       }
     }
 
     return overlays;
   }, [
-    authorityEntities,
+    flatEntities,
     networkTelemetry,
     networkNodeIds,
     ownerPositions,
@@ -369,17 +340,11 @@ export default function MapPage() {
     showGnsConnections,
   ]);
 
-  const combinedShapes = useMemo(
-    () => [...baseShapes, ...overlayShapes],
-    [baseShapes, overlayShapes]
-  );
+  const combinedShapes = useMemo(() => [...baseShapes, ...overlayShapes], [baseShapes, overlayShapes]);
 
-  // Init renderer once
   useEffect(() => {
     const container = containerRef.current;
-    if (!container || rendererRef.current) {
-      return;
-    }
+    if (!container || rendererRef.current) return;
     rendererRef.current = createMapRenderer({ container, shapes: [] });
     return () => {
       rendererRef.current = null;
@@ -387,90 +352,35 @@ export default function MapPage() {
     };
   }, []);
 
-  // Push shape updates to renderer
   useEffect(() => {
     rendererRef.current?.setShapes(combinedShapes);
   }, [combinedShapes]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative' }}>
-      <div
-        style={{
-          position: 'absolute',
-          top: 12,
-          left: 12,
-          zIndex: 10,
-          background: 'rgba(15, 23, 42, 0.82)',
-          color: '#e2e8f0',
-          border: '1px solid rgba(148, 163, 184, 0.45)',
-          borderRadius: 10,
-          padding: '8px 10px',
-          display: 'flex',
-          gap: 14,
-          alignItems: 'center',
-          fontSize: 13,
-          backdropFilter: 'blur(4px)',
-        }}
-      >
+      {/* UI panel */}
+      <div style={{ position: 'absolute', top: 12, left: 12, zIndex: 10, background: 'rgba(15, 23, 42, 0.82)', color: '#e2e8f0', border: '1px solid rgba(148, 163, 184, 0.45)', borderRadius: 10, padding: '8px 10px', display: 'flex', gap: 14, alignItems: 'center', fontSize: 13, backdropFilter: 'blur(4px)' }}>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input
-            type="checkbox"
-            checked={showGnsConnections}
-            onChange={() => setShowGnsConnections(!showGnsConnections)}
-          />
+          <input type="checkbox" checked={showGnsConnections} onChange={() => setShowGnsConnections(!showGnsConnections)} />
           GNS connections
         </label>
         <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-          <input
-            type="checkbox"
-            checked={showAuthorityEntities}
-            onChange={() => setShowAuthorityEntities(!showAuthorityEntities)}
-          />
+          <input type="checkbox" checked={showAuthorityEntities} onChange={() => setShowAuthorityEntities(!showAuthorityEntities)} />
           entities + owner links
         </label>
         <span style={{ opacity: 0.8 }}>
-          entities: {authorityEntities.length} | shards: {networkNodeIds.length}
+          entities: {flatEntities.length} | shards: {networkNodeIds.length}
         </span>
         <span style={{ opacity: 0.8 }}>
-          connections: {networkEdgeCount} | claimed entities: {authorityEntities.length}
+          connections: {networkEdgeCount} | claimed entities: {flatEntities.length}
         </span>
-        <label
-          style={{
-            display: 'flex',
-            gap: 8,
-            alignItems: 'center',
-            minWidth: 220,
-          }}
-        >
-          <input
-            type="range"
-            min={MIN_POLL_INTERVAL_MS}
-            max={MAX_POLL_INTERVAL_MS}
-            step={50}
-            value={pollIntervalMs}
-            onChange={(e) =>
-              setPollIntervalMs(
-                Math.max(
-                  MIN_POLL_INTERVAL_MS,
-                  Math.min(MAX_POLL_INTERVAL_MS, Number(e.target.value))
-                )
-              )
-            }
-          />
+        <label style={{ display: 'flex', gap: 8, alignItems: 'center', minWidth: 220 }}>
+          <input type="range" min={MIN_POLL_INTERVAL_MS} max={MAX_POLL_INTERVAL_MS} step={50} value={pollIntervalMs} onChange={(e) => setPollIntervalMs(Math.max(MIN_POLL_INTERVAL_MS, Math.min(MAX_POLL_INTERVAL_MS, Number(e.target.value))))} />
           poll: {pollIntervalMs}ms
         </label>
       </div>
 
-      <div
-        ref={containerRef}
-        style={{
-          width: '100%',
-          height: '100%',
-          overflow: 'hidden',
-          touchAction: 'none',
-          border: '1px solid #ccc',
-        }}
-      />
+      <div ref={containerRef} style={{ width: '100%', height: '100%', overflow: 'hidden', touchAction: 'none', border: '1px solid #ccc' }} />
     </div>
   );
 }

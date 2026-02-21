@@ -24,23 +24,23 @@ class ByteWriter
 	std::string_view as_string_view() const
 	{
 		const auto data = bytes();
-		std::string_view value_view(reinterpret_cast<const char*>(data.data()),
-									data.size());
+		std::string_view value_view(reinterpret_cast<const char*>(data.data()), data.size());
 		return value_view;
 	}
 	std::string as_string_base_64() const
 	{
-		std::size_t encoded_len =
-			boost::beast::detail::base64::encoded_size(buf.size());
+		std::size_t encoded_len = boost::beast::detail::base64::encoded_size(buf.size());
 
 		std::string out;
 		out.resize(encoded_len);
-		
-		boost::beast::detail::base64::encode(out.data(),  // destination buffer
-		buf.data(),  // source raw bytes
-		buf.size()	  // source length
-	);
-	std::cout << std::format("Encoded base64 final size {}, output {} \n",buf.size(),out);
+
+		const size_t written_count =
+			boost::beast::detail::base64::encode(out.data(),  // destination buffer
+												 buf.data(),  // source raw bytes
+												 buf.size()	  // source length
+			);
+		ASSERT(written_count > 0, "BASE64 encode did not write");
+		//std::cout << std::format("Encoded base64 final size {}, output {} \n", buf.size(), out);
 
 		return out;
 	}
@@ -232,8 +232,7 @@ class ByteWriter
 	template <typename T>
 	void push_be(T v)
 	{
-		for (int i = sizeof(T) - 1; i >= 0; --i)
-			buf.push_back(uint8_t(v >> (i * 8)));
+		for (int i = sizeof(T) - 1; i >= 0; --i) buf.push_back(uint8_t(v >> (i * 8)));
 	}
 
 	boost::container::small_vector<uint8_t, 128> buf;

@@ -21,16 +21,12 @@
 #include "Heuristic/IBounds.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "InternalDB/InternalDB.hpp"
+#include "Network/NetworkEnums.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 class HeuristicManifest : public Singleton<HeuristicManifest>
 {
-	Log logger = Log("HeuristicManifest");
-	/*
-	All available bounds are placed in pending.
-	At first or on change. each Shard goes and Pops from the pending list.
-	Adding it to Claimed with their key.
-	*/
+   public:
 	struct PendingBoundStruct
 	{
 		IBounds::BoundsID ID;
@@ -69,6 +65,94 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 			BoundsDataBase64 = j["BoundsData64"];
 		}
 	};
+	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const;
+
+	std::optional<IBounds::BoundsID> BoundIDFromShard(const NetworkIdentity& id)
+	{
+		ASSERT(id.Type == NetworkIdentityType::eShard, "Invalid Networking Identity");
+		ByteWriter bw;
+		id.Serialize(bw);
+
+		std::string owner64 = bw.as_string_base_64();
+		const auto result = InternalDB::Get()->WithSync(
+			[&](auto& r) -> std::optional<IBounds::BoundsID>
+			{
+				std::array<std::string, 3> get_id_cmd = {
+					"JSON.GET", JSONDataTable,
+					std::format("$.{}.[?(@.Owner64=='{}')]", JSONClaimedEntry, owner64)};
+				std::optional<std::string> response =
+					r.template command<std::optional<std::string>>(get_id_cmd.begin(),
+																   get_id_cmd.end());
+
+				const Json json = response.has_value() ? Json::parse(*response) : Json();
+
+				{
+					std::string cmd;
+					for (const auto& arg : get_id_cmd) cmd += arg + " ";
+					//logger.DebugFormatted("The Command [{}] responded with [\"{}\"] [{}]", cmd,
+					//					  json.dump(4), response.value_or("NO RESPONSE"));
+				}
+
+				if (json.is_null() || !json.is_array() || (json.size() == 0) ||
+					json.front().is_null())
+				{
+					return std::nullopt;
+				}
+				ASSERT(json.is_array(), "Invalid response");
+				ASSERT(json.size() <= 1, "This should never occur");
+				ASSERT(json.front().contains("ID"), "Invalid entry");
+				return json.front()["ID"].get<IBounds::BoundsID>();
+			});
+		if (!result.has_value())
+		{
+			logger.WarningFormatted("BoundIDFromShard returned nothing");
+		}
+		else
+		{
+			//logger.DebugFormatted("BoundIDFromShard returned {}", *result);
+		}
+		return result;
+	}
+	template <typename BoundType, typename KeyType = std::string>
+	void GetAllPendingBounds(std::vector<BoundType>& out_bounds);
+
+	template <typename BoundType, typename KeyType = std::string>
+	void StorePendingBounds(const std::vector<BoundType>& in_bounds);
+
+	[[nodiscard]] std::unique_ptr<IBounds> ClaimNextPendingBound(const NetworkIdentity& claim_key);
+
+	void StorePendingBoundsFromByteWriters(
+		const std::unordered_map<IBounds::BoundsID, ByteWriter>& in_writers);
+
+	void GetPendingBoundsAsByteReaders(std::vector<std::string>& data_for_readers,
+									   std::unordered_map<IBounds::BoundsID, ByteReader>& brs);
+
+	void GetClaimedBoundsAsByteReaders(
+		std::vector<std::string>& data_for_readers,
+		std::unordered_map<NetworkIdentity, std::pair<IBounds::BoundsID, ByteReader>>& brs);
+
+	std::optional<ClaimedBoundStruct> GetClaimedBound(IBounds::BoundsID);
+	[[nodiscard]] long long GetPendingBoundsCount() const;
+
+	[[nodiscard]] long long GetClaimedBoundsCount() const;
+
+	bool RequeueClaimedBound(const std::string_view& claim_key);
+
+	template <typename BoundType>
+	void GetAllClaimedBounds(std::unordered_map<NetworkIdentity, BoundType>& out_bounds);
+
+	[[nodiscard]] std::unique_ptr<IHeuristic> PullHeuristic();
+	void PushHeuristic(const IHeuristic& h);
+	[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(const Transform& t);
+
+	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const IBounds::BoundsID id);
+
+	Log logger = Log("HeuristicManifest");
+	/*
+	All available bounds are placed in pending.
+	At first or on change. each Shard goes and Pops from the pending list.
+	Adding it to Claimed with their key.
+	*/
 
 	const std::string HeuristicTypeKey = "Heuristic_Type";
 	const std::string HeuristicSerializeDataKey = "Heuristic_Data";
@@ -80,68 +164,24 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 	const std::string JSONPendingEntry = "Pending";
 	const std::string JSONClaimedEntry = "Claimed";
 	const std::string JSONHeuristicData64Entry = "HeuristicData64";
+	const std::string JSONHeuristicTypeEntry = "HeuristicType";
 
 	/*HashTable of claimed Bounds*/
 	const std::string ClaimedTableJson = "{Heuristic_Bounds}:Claimed";
-	const std::string ClaimedHashTableNID2BoundData =
-		"{Heuristic_Bounds}:Claimed_NID2BID";
-	const std::string ClaimedHashTableBoundID2NID =
-		"{Heuristic_Bounds}:Claimed_BID2NID";
+	const std::string ClaimedHashTableNID2BoundData = "{Heuristic_Bounds}:Claimed_NID2BID";
+	const std::string ClaimedHashTableBoundID2NID = "{Heuristic_Bounds}:Claimed_BID2NID";
 
 	IHeuristic::Type ActiveHeuristic = IHeuristic::Type::eNone;
 	std::shared_ptr<IHeuristic> Heuristic;
-
+	void Internal_SetActiveHeuristicType(IHeuristic::Type type);
 	void Internal_InsertPendingBound(const PendingBoundStruct& p);
 	void Internal_InsertClaimedBound(const ClaimedBoundStruct& p);
+	void Internal_EnsureJsonTable();
+	std::unique_ptr<IBounds> Internal_CreateIBoundInst();
 	ClaimedBoundStruct Internal_PullClaimedBound(IBounds::BoundsID id);
-
-   public:
-	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const;
-	void SetActiveHeuristicType(IHeuristic::Type type);
-
-	template <typename BoundType, typename KeyType = std::string>
-	void GetAllPendingBounds(std::vector<BoundType>& out_bounds);
-
-	template <typename BoundType, typename KeyType = std::string>
-	void StorePendingBounds(const std::vector<BoundType>& in_bounds);
-
-	template <typename BoundType>
-	bool ClaimNextPendingBound(const NetworkIdentity& claim_key,
-							   BoundType& out_bound);
-
-	void StorePendingBoundsFromByteWriters(
-		const std::unordered_map<IBounds::BoundsID, ByteWriter>& in_writers);
-
-	void GetPendingBoundsAsByteReaders(
-		std::vector<std::string>& data_for_readers,
-		std::unordered_map<IBounds::BoundsID, ByteReader>& brs);
-
-	void GetClaimedBoundsAsByteReaders(
-		std::vector<std::string>& data_for_readers,
-		std::unordered_map<NetworkIdentity,
-						   std::pair<IBounds::BoundsID, ByteReader>>& brs);
-
-	[[nodiscard]] long long GetPendingBoundsCount() const;
-
-	[[nodiscard]] long long GetClaimedBoundsCount() const;
-
-	bool RequeueClaimedBound(const std::string_view& claim_key);
-
-	template <typename BoundType>
-	void GetAllClaimedBounds(
-		std::unordered_map<NetworkIdentity, BoundType>& out_bounds);
-
-	[[nodiscard]] std::unique_ptr<IHeuristic> PullHeuristic();
-	void PushHeuristic(const IHeuristic& h);
-	[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(
-		const Transform& t);
-
-	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(
-		const IBounds::BoundsID id);
 };
 template <typename BoundType, typename KeyType>
-inline void HeuristicManifest::GetAllPendingBounds(
-	std::vector<BoundType>& out_bounds)
+inline void HeuristicManifest::GetAllPendingBounds(std::vector<BoundType>& out_bounds)
 {
 	out_bounds.clear();
 	std::vector<std::string> data_for_readers;
@@ -157,8 +197,7 @@ inline void HeuristicManifest::GetAllPendingBounds(
 	}
 }
 template <typename BoundType, typename KeyType>
-void HeuristicManifest::StorePendingBounds(
-	const std::vector<BoundType>& in_bounds)
+void HeuristicManifest::StorePendingBounds(const std::vector<BoundType>& in_bounds)
 {
 	// std::string_view s_b, s_id;
 	for (int i = 0; i < in_bounds.size(); i++)
@@ -177,115 +216,11 @@ void HeuristicManifest::StorePendingBounds(
 }
 
 template <typename BoundType>
-bool HeuristicManifest::ClaimNextPendingBound(const NetworkIdentity& claim_key,
-											  BoundType& out_bound)
-{
-	/**
-	 * @brief Atomically claim one field/value from a pending hash into a
-	 * claimed hash.
-	 * @details In Redis Cluster, both keys must share the same hash slot (use a
-	 * hash tag).
-	 * @return std::optional<std::string> with claimed value, or empty if no
-	 * pending entries exist.
-	 static const char* kLuaScript = R"lua(
-local pending = KEYS[1]
-local claimed = KEYS[2]
-local claim_field = ARGV[1]
-
-local existing = redis.call('HGET', claimed, claim_field)
-if existing then
-  return existing
-end
-
-local cursor = '0'
-repeat
-  local scan = redis.call('HSCAN', pending, cursor, 'COUNT', 1)
-  cursor = scan[1]
-  local entries = scan[2]
-  if #entries > 0 then
-	local field = entries[1]
-	local value = entries[2]
-	redis.call('HDEL', pending, field)
-	redis.call('HSET', claimed, claim_field, value)
-	return value
-  end
-until cursor == '0'
-
-return false
-)lua";
-	 */
-	static const char* kLuaScript = R"lua(
--- KEYS[1] = JSON key
--- ARGV[1] = Pending field name
--- ARGV[2] = Claimed field name
--- ARGV[3] = Owner Base64
--- ARGV[4] = Owner Name
-
-local key = KEYS[1]
-local pending_field = ARGV[1]
-local claimed_field = ARGV[2]
-local owner_base64 = ARGV[3]
-local owner_name = ARGV[4]
-
--- Ensure Claimed object exists
-local claimed_type = redis.call("JSON.TYPE", key, claimed_field)
-if claimed_type == false or claimed_type[1] == nil then
-    redis.call("JSON.SET", key, claimed_field, "{}","NX")
-end
-
--- Get all keys in Pending
-local pending_keys = redis.call("JSON.OBJKEYS", key, pending_field)
-
-if not pending_keys or #pending_keys == 0 then
-    return nil
-end
-
--- Pick the first key (any entry)
-local id = tostring(pending_keys[1])  -- <-- force string
-
--- Get the entry directly
-local entry = redis.call("JSON.GET", key, pending_field .. "." .. id)
-
--- Set it in Claimed
-redis.call("JSON.SET", key, claimed_field .. "." .. id, entry)
-
--- Add Owner and OwnerName fields
-redis.call("JSON.SET", key, claimed_field .. "." .. id .. ".Owner64", "\"" .. owner_base64 .. "\"")
-redis.call("JSON.SET", key, claimed_field .. "." .. id .. ".OwnerName", "\"" .. owner_name .. "\"")
-
--- Remove from Pending
-redis.call("JSON.DEL", key, pending_field .. "." .. id)
-
--- Return the claimed entry
-return redis.call("JSON.GET", key, claimed_field .. "." .. id)
-
-)lua";
-	ByteWriter bw;
-	claim_key.Serialize(bw);
-	const auto claimed = InternalDB::Get()->WithSync(
-		[&](auto& r) -> auto
-		{
-			const auto result = r.template command<std::optional<std::string>>(
-				"EVAL", kLuaScript, "1", JSONDataTable, JSONPendingEntry,
-				JSONClaimedEntry, bw.as_string_base_64(), claim_key.ToString());
-			return result;
-		});
-
-	if (!claimed)
-		return false;
-
-	ByteReader br(claimed.value());
-	out_bound.Deserialize(br);
-	return true;
-}
-
-template <typename BoundType>
 void HeuristicManifest::GetAllClaimedBounds(
 	std::unordered_map<NetworkIdentity, BoundType>& out_bounds)
 {
 	out_bounds.clear();
-	const auto BoundsTable =
-		InternalDB::Get()->HGetAll(ClaimedHashTableNID2BoundData);
+	const auto BoundsTable = InternalDB::Get()->HGetAll(ClaimedHashTableNID2BoundData);
 	out_bounds.reserve(BoundsTable.size());
 
 	for (const auto& [key, boundsString] : BoundsTable)

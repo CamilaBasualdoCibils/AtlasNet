@@ -8,7 +8,7 @@
 
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
-#include "Entity/EntityList.hpp"
+
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
@@ -21,7 +21,8 @@ class IHeuristic
 		eNone,
 		eGridCell,
 		eOctree,
-		eQuadtree
+		eQuadtree,
+		eInvalid
 	};
 	static constexpr const char* TypeToString(Type type) noexcept
 	{
@@ -35,6 +36,8 @@ class IHeuristic
 				return "Octree";
 			case Type::eQuadtree:
 				return "Quadtree";
+			case Type::eInvalid:
+				return "Invalid";
 			default:
 				return "Unknown";
 		}
@@ -62,7 +65,11 @@ class IHeuristic
 			outType = Type::eQuadtree;
 			return true;
 		}
-
+		if (str == "Invalid")
+		{
+			outType = Type::eInvalid;
+			return true;
+		}
 		outType = Type::eNone;
 		return false;
 	}
@@ -77,7 +84,7 @@ class IHeuristic
 	[[nodiscard]] virtual Type GetType() const = 0;
 
 	virtual void Compute(
-		const AtlasEntitySpan<const AtlasEntityMinimal>& span) = 0;
+		const std::span<const AtlasEntityMinimal>& span) = 0;
 
 	virtual uint32_t GetBoundsCount() const = 0;
 	/** */

@@ -29,7 +29,7 @@ void Proxy::Init()
 {
 	CrashHandler::Get().Init();
 	ID = NetworkIdentity(NetworkIdentityType::eProxy, UUIDGen::Gen());
-	Interlink::Get().Init(InterlinkProperties{.ThisID = ID, .logger = logger});
+	Interlink::Get().Init(InterlinkProperties{.ThisID = ID});
 	NetworkManifest::Get().ScheduleNetworkPings(ID);
 	HealthManifest::Get().ScheduleHealthPings(ID);
 	EventSystem::Get().Init(ID);

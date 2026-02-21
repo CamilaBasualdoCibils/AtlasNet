@@ -28,7 +28,7 @@ class GridHeuristic : public THeuristic<GridShape>
 	GridHeuristic();
 	std::vector<GridShape> quads;
 
-	void Compute(const AtlasEntitySpan<const AtlasEntityMinimal>&) override;
+	void Compute(const std::span<const AtlasEntityMinimal>&) override;
 	uint32_t GetBoundsCount() const override;
 	void GetBounds(std::vector<GridShape>& out_bounds) const override;
 	void GetBoundDeltas(std::vector<TBoundDelta<GridShape>>& out_deltas) const override;

@@ -1,9 +1,12 @@
+
 // native-server.js
 const express = require('express');
 const cors = require('cors');
 const addon = require('../nextjs/native/Web.node');
 const { HeuristicDraw, IBoundsDrawShape, std_vector_IBoundsDrawShape_ } = addon; // your .node file
-
+global.nodeJsWrapper = addon.NodeJSWrapper
+  ? new addon.NodeJSWrapper()
+  : null;
 function decodeConnectionRow(row) {
   const hasShardId = row.length >= 14;
   const offset = hasShardId ? 1 : 0;
@@ -45,23 +48,21 @@ function computeShardAverages(connections) {
 }
 
 function inspectObject(name, obj) {
-    console.log(`${name} keys:`, Object.keys(obj));
-    if (obj.prototype) {
-        console.log(`${name} prototype functions:`, Object.getOwnPropertyNames(obj.prototype));
-    }
+  console.log(`${name} keys:`, Object.keys(obj));
+  if (obj.prototype) {
+    console.log(`${name} prototype functions:`, Object.getOwnPropertyNames(obj.prototype));
+  }
 }
 for (const [key, value] of Object.entries(addon)) {
-    console.log(`\n--- Inspecting ${key} ---`);
-    inspectObject(key, value);
+  console.log(`\n--- Inspecting ${key} ---`);
+  inspectObject(key, value);
 }
 
 const app = express();
 app.use(cors()); // allow your frontend to call it
 
 const nt = new addon.NetworkTelemetry();
-const authorityTelemetry = addon.AuthorityTelemetry
-  ? new addon.AuthorityTelemetry()
-  : null;
+
 app.get('/networktelemetry', (req, res) => {
   try {
     const { NetworkTelemetry, std_vector_std_string_, std_vector_std_vector_std_string__ } = addon;
@@ -79,11 +80,11 @@ app.get('/networktelemetry', (req, res) => {
 
     const count = Math.min(idsVec.size(), healthVec.size());
     for (let i = 0; i < count; i++) {
-    const shardId = String(idsVec.get(i));
-    const health = Number(healthVec.get(i)); // ping ms
+      const shardId = String(idsVec.get(i));
+      const health = Number(healthVec.get(i)); // ping ms
 
-    ids.push(shardId);
-    healthByShard.set(shardId, health);
+      ids.push(shardId);
+      healthByShard.set(shardId, health);
     }
 
 
@@ -92,8 +93,7 @@ app.get('/networktelemetry', (req, res) => {
     for (let i = 0; i < telemetryVec.size(); i++) {
       const rowVec = telemetryVec.get(i);
       const row = [];
-      for (let j = 0; j < rowVec.size(); j++) 
-      {
+      for (let j = 0; j < rowVec.size(); j++) {
         row.push(String(rowVec.get(j)));
       }
       allRows.push(row);
@@ -106,31 +106,31 @@ app.get('/networktelemetry', (req, res) => {
      */
     const rowsByShard = new Map();
     for (const row of allRows) {
-    if (row.length < 13) {
+      if (row.length < 13) {
         continue;
-    }
+      }
 
-    const decoded = decodeConnectionRow(row);
-    const shardId = decoded.shardId ?? decoded.IdentityId;
+      const decoded = decodeConnectionRow(row);
+      const shardId = decoded.shardId ?? decoded.IdentityId;
 
-    if (!rowsByShard.has(shardId)) {
+      if (!rowsByShard.has(shardId)) {
         rowsByShard.set(shardId, []);
-    }
-    rowsByShard.get(shardId).push(decoded);
-    //console.log(`Decoded row for shard ${shardId}:`, decoded);
+      }
+      rowsByShard.get(shardId).push(decoded);
+      //console.log(`Decoded row for shard ${shardId}:`, decoded);
     }
 
     // Upload/Download: average from connections
     const telemetry = ids.map((id) => {
-    const connections = rowsByShard.get(id) ?? [];
-    const { inAvg, outAvg } = computeShardAverages(connections);
+      const connections = rowsByShard.get(id) ?? [];
+      const { inAvg, outAvg } = computeShardAverages(connections);
 
-    return {
+      return {
         shardId: id,
         downloadKbps: inAvg,   // avg inBytesPerSec
         uploadKbps: outAvg,   // avg outBytesPerSec
         connections,
-    };
+      };
     });
 
 
@@ -142,16 +142,69 @@ app.get('/networktelemetry', (req, res) => {
   }
 });
 
+const entityLedgersView = addon.EntityLedgersView
+  ? new addon.EntityLedgersView()
+  : null;
+const authorityTelemetry = addon.AuthorityTelemetry
+  ? new addon.AuthorityTelemetry()
+  : null;
 app.get('/authoritytelemetry', (req, res) => {
   try {
+    if (!entityLedgersView || !addon.std_vector_EntityLedgerEntry_) {
+      res.json([]);
+      return;
+    }
+    console.log(`EntityLedgersView Init`);
+
+    const EntityList = new addon.std_vector_EntityLedgerEntry_();
+
+    // Call native function
+    console.log(`EntityLedgersView Fetch`);
+
+    entityLedgersView.GetEntityLists(EntityList);
+
+    console.log(`EntityLedgersView returned ${EntityList.size()} entries `);
+
+    const result = {}; // This will hold BoundID -> list of entities
+
+    for (let j = 0; j < EntityList.size(); j++) {
+      const e = EntityList.get(j);
+
+      const entityData = {
+        EntityID: e.EntityID,
+        ClientID: e.ClientID,
+        ISClient: e.ISClient,
+        BoundID: e.BoundID,
+        WorldID: e.WorldID,
+        position: { x: e.positionx, y: e.positiony, z: e.positionz }
+      };
+
+      // Use BoundID as the key
+      const boundID = Number(e.BoundID);
+
+      if (!result[boundID]) {
+        result[boundID] = []; // initialize array if doesn't exist
+      }
+      result[boundID].push(entityData); // append entity to its BoundID list
+    }
+
+    console.log('AUTHORITYTELEMETRY RESULT ', result);
+    res.json(result);
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Authority telemetry fetch failed' });
+  }
+});
+/*  try {
     if (!authorityTelemetry || !addon.std_vector_std_vector_std_string__) {
       res.json([]);
       return;
     }
-
+ 
     const telemetryVec = new addon.std_vector_std_vector_std_string__();
     authorityTelemetry.GetAllTelemetry(telemetryVec);
-
+ 
     const rows = [];
     for (let i = 0; i < telemetryVec.size(); i++) {
       const rowVec = telemetryVec.get(i);
@@ -161,60 +214,58 @@ app.get('/authoritytelemetry', (req, res) => {
       }
       rows.push(row);
     }
-
+ 
     // Expected row schema:
     // [entityId, ownerId, world, x, y, z, isClient, clientId]
     res.json(rows);
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Authority telemetry fetch failed' });
-  }
-});
-
+  } */
 app.get('/heuristic', (req, res) => {
-    try {
-        const hd = new HeuristicDraw();
+  try {
+    const hd = new HeuristicDraw();
 
-        // ✅ Create SWIG-compatible vector
-        const shapesVector = new std_vector_IBoundsDrawShape_();
+    // ✅ Create SWIG-compatible vector
+    const shapesVector = new std_vector_IBoundsDrawShape_();
 
-        // Call native function
-        hd.DrawCurrentHeuristic(shapesVector);
+    // Call native function
+    hd.DrawCurrentHeuristic(shapesVector);
 
-        // Convert to plain JS
-        const shapes = [];
-        for (let i = 0; i < shapesVector.size(); i++) {
-            const shape = shapesVector.get(i);
+    // Convert to plain JS
+    const shapes = [];
+    for (let i = 0; i < shapesVector.size(); i++) {
+      const shape = shapesVector.get(i);
 
-            // Convert vertices from std_vector_std_pair_float_float__ to array of vec2
-            const vertices = [];
-            for (let j = 0; j < shape.verticies.size(); j++) {
-                const pair = shape.verticies.get(j); // std_pair_float_float_
-                vertices.push({
-                    x: Number(pair.first),   // convert to JS float
-                    y: Number(pair.second),  // convert to JS float
-                });
-            }
+      // Convert vertices from std_vector_std_pair_float_float__ to array of vec2
+      const vertices = [];
+      for (let j = 0; j < shape.verticies.size(); j++) {
+        const pair = shape.verticies.get(j); // std_pair_float_float_
+        vertices.push({
+          x: Number(pair.first),   // convert to JS float
+          y: Number(pair.second),  // convert to JS float
+        });
+      }
 
 
-            shapes.push({
-                id: shape.id,
-                ownerId: shape.owner_id,
-                type: shape.type,
-                position: { x: shape.pos_x, y: shape.pos_y },
-                radius: shape.radius,
-                size: { x: shape.size_x, y: shape.size_y },
-                color: shape.color,
-                vertices, // converted array of {x,y}
-            });
-        }
-
-        console.log("Successful heuristic fetch");
-        res.json(shapes);
-    } catch (err) {
-        console.error(err);
-        res.status(500).json({ error: 'Native addon failed' });
+      shapes.push({
+        id: shape.id,
+        ownerId: shape.owner_id,
+        type: shape.type,
+        position: { x: shape.pos_x, y: shape.pos_y },
+        radius: shape.radius,
+        size: { x: shape.size_x, y: shape.size_y },
+        color: shape.color,
+        vertices, // converted array of {x,y}
+      });
     }
+
+    console.log("Successful heuristic fetch");
+    res.json(shapes);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Native addon failed' });
+  }
 });
 
 const PORT = 4000;

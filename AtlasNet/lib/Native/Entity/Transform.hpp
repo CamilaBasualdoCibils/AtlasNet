@@ -9,8 +9,8 @@
 struct Transform : AtlasObject
 {
 	using WorldIndex = uint16_t;
-	WorldIndex world;
-	vec3 position;
+	WorldIndex world = 0;
+	vec3 position = vec3(0.0f);
 	AABB3f boundingBox;	 // In Model Space
 
 	void Serialize(ByteWriter& bw) const override
@@ -27,8 +27,7 @@ struct Transform : AtlasObject
 	}
 	std::string ToString() const
 	{
-		return std::format("Pos: {}, World: {}, AABB: [{}]",
-						   glm::to_string(position), world,
+		return std::format("Pos: {}, World: {}, AABB: [{}]", glm::to_string(position), world,
 						   boundingBox.ToString());
 	}
 };

@@ -3,9 +3,12 @@
 #include <thread>
 #include <unordered_set>
 
+#include "Client/Client.hpp"
 #include "Debug/Log.hpp"
 #include "Docker/DockerEvents.hpp"
 #include "Entity/Entity.hpp"
+#include "Entity/EntityHandle.hpp"
+#include "Entity/EntityLedger.hpp"
 #include "Global/AtlasNet.hpp"
 #include "Global/AtlasNetApi.hpp"
 #include "Global/AtlasNetInterface.hpp"
@@ -25,8 +28,7 @@ struct KDServerRequest
 };
 using KDServerResponseType = std::vector<std::byte>;
 
-class ATLASNET_API AtlasNetServer : public AtlasNetInterface,
-									public Singleton<AtlasNetServer>
+class ATLASNET_API AtlasNetServer : public AtlasNetInterface, public Singleton<AtlasNetServer>
 {
 	std::shared_ptr<Log> logger = std::make_shared<Log>("AtlasNetServer");
 	std::unordered_map<AtlasEntityID, AtlasEntity> CachedEntities;
@@ -36,6 +38,7 @@ class ATLASNET_API AtlasNetServer : public AtlasNetInterface,
 	NetworkIdentity identity;
 
 	std::jthread ShardLogicThread;
+
    public:
 	AtlasNetServer(){};
 	/**
@@ -44,8 +47,7 @@ class ATLASNET_API AtlasNetServer : public AtlasNetInterface,
 	 */
 	struct InitializeProperties
 	{
-		std::function<KDServerRequestType(KDServerRequest)>
-			RequestHandleFunction;
+		std::function<KDServerRequestType(KDServerRequest)> RequestHandleFunction;
 		// std::string ExePath;
 		std::function<void(SignalType signal)> OnShutdownRequest;
 	};
@@ -56,19 +58,27 @@ class ATLASNET_API AtlasNetServer : public AtlasNetInterface,
 	void Initialize(InitializeProperties& properties);
 
 	/**
-	 * @brief Update tick for AtlasNet.
+	 * @brief Syncronise entity lists with your own fuck you
 	 *
 	 * @param entities Your current Entity information.
 	 * @param IncomingEntities Entities incoming that you must store and keep
 	 * track of.
 	 * @param OutgoingEntities Entity IDs of entities you should get rid of.
 	 */
-	void Update(std::span<AtlasEntity> entities,
-				std::vector<AtlasEntity>& IncomingEntities,
-				std::vector<AtlasEntityID>& OutgoingEntities);
+	void SyncEntities(std::span<const AtlasEntityID> ActiveEntities,
+					  std::span<const AtlasEntityID>& ReleasedEntities,
+					  std::span<const AtlasEntityHandle>& AcquiredEntities);
+	/**
+	Simple get local entities
+	*/
+	auto ViewLocalEntities() { return EntityLedger::Get().ViewLocalEntities(); }
 
-	AtlasEntity CreateEntity();
+	[[nodiscard]] AtlasEntityHandle CreateEntity(const Transform& t,
+												 std::span<const uint8_t> metadata = {});
+	[[nodiscard]] AtlasEntityHandle CreateClientEntity(ClientID c_id, const Transform& t,
+													   std::span<const uint8_t> metadata = {});
 
-	private:
-	 void ShardLogicEntry(std::stop_token st);
+   private:
+	AtlasEntity Internal_CreateEntity(const Transform& t, std::span<const uint8_t> metadata = {});
+	void ShardLogicEntry(std::stop_token st);
 };

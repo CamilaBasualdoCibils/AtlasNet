@@ -24,8 +24,25 @@ sed "s|SHARD_IMAGE_NAME|$SHARD_IMAGE_NAME|g" "$STACK_FILE" > "$TEMP_STACK_FILE"
 
 # Check if the stack is already running
 if docker stack ls --format '{{.Name}}' | grep -w "$STACK_NAME" > /dev/null; then
-    echo "Removing existing stack '$STACK_NAME'..."
-    docker stack rm "$STACK_NAME"
+    echo "Forcefully removing existing stack '$STACK_NAME'..."
+
+    # Kill all services in the stack
+    for svc in $(docker stack services --format '{{.Name}}' "$STACK_NAME"); do
+        echo "Removing service $svc..."
+        docker service rm "$svc" 2>/dev/null
+    done
+
+    # Kill all containers in the stack (in case services linger)
+    for ctr in $(docker ps -q --filter "label=com.docker.stack.namespace=$STACK_NAME"); do
+        echo "Killing container $ctr..."
+        docker kill "$ctr" 2>/dev/null
+        docker rm -f "$ctr" 2>/dev/null
+    done
+
+    # Finally, remove the stack
+    docker stack rm "$STACK_NAME" 2>/dev/null
+
+    # Wait until the stack is gone
     echo "Waiting for stack to be fully removed..."
     while docker stack ls --format '{{.Name}}' | grep -w "$STACK_NAME" > /dev/null; do
         sleep 1
