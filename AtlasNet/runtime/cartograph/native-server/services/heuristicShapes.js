@@ -1,4 +1,8 @@
 function readHeuristicShapes(addon) {
+  if (!addon || !addon.HeuristicDraw || !addon.std_vector_IBoundsDrawShape_) {
+    return [];
+  }
+
   const { HeuristicDraw, std_vector_IBoundsDrawShape_ } = addon;
   const hd = new HeuristicDraw();
   const shapesVector = new std_vector_IBoundsDrawShape_();

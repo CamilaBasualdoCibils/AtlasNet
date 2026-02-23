@@ -2,28 +2,71 @@
 // native-server.js
 const express = require('express');
 const cors = require('cors');
-const addon = require('../nextjs/native/Web.node');
-global.nodeJsWrapper = addon.NodeJSWrapper
-  ? new addon.NodeJSWrapper()
-  : null;
 const { DEFAULT_PORT, getDatabaseTargets } = require('./config');
+const {
+  COLLECTION_MODE_INTERLINK_HYBRID,
+  normalizeCollectionMode,
+  resolveCollectionMode,
+} = require('./services/collectionMode');
 const {
   probeDatabase,
   readDatabaseRecords,
   resolveSelectedSource,
 } = require('./services/databaseSnapshot');
-const { readNetworkTelemetry } = require('./services/networkTelemetry');
-const { readAuthorityTelemetry } = require('./services/authorityTelemetry');
-const { readHeuristicShapes } = require('./services/heuristicShapes');
+const {
+  collectNetworkTelemetry,
+  collectAuthorityTelemetry,
+  collectHeuristicShapes,
+} = require('./services/telemetryCollection');
+const { readHeuristicTypeFromDatabase } = require('./services/pureDatabaseTelemetry');
 const { readWorkersSnapshot } = require('./services/workersSnapshot');
 
 const app = express();
 app.use(cors());
 
-const networkTelemetry = new addon.NetworkTelemetry();
-const authorityTelemetry = addon.AuthorityTelemetry
-  ? new addon.AuthorityTelemetry()
-  : null;
+let addon = null;
+let addonLoadError = null;
+try {
+  // eslint-disable-next-line global-require
+  addon = require('../nextjs/native/Web.node');
+} catch (err) {
+  addonLoadError = err;
+  console.warn(
+    '[cartograph] Native addon unavailable; pure_database mode will be used when possible.'
+  );
+}
+
+let nodeJsWrapper = null;
+let networkTelemetry = null;
+let entityLedgersView = null;
+global.nodeJsWrapper = null;
+
+function ensureHybridCollectors() {
+  if (!addon) {
+    return {
+      addon: null,
+      networkTelemetry: null,
+      entityLedgersView: null,
+    };
+  }
+
+  if (!nodeJsWrapper && addon.NodeJSWrapper) {
+    nodeJsWrapper = new addon.NodeJSWrapper();
+    global.nodeJsWrapper = nodeJsWrapper;
+  }
+  if (!networkTelemetry && addon.NetworkTelemetry) {
+    networkTelemetry = new addon.NetworkTelemetry();
+  }
+  if (!entityLedgersView && addon.EntityLedgersView) {
+    entityLedgersView = new addon.EntityLedgersView();
+  }
+
+  return {
+    addon,
+    networkTelemetry,
+    entityLedgersView,
+  };
+}
 
 function parseBooleanQueryFlag(value, defaultValue) {
   if (value == null) {
@@ -52,33 +95,103 @@ function parseBooleanQueryFlag(value, defaultValue) {
   return defaultValue;
 }
 
-app.get('/networktelemetry', (_req, res) => {
+function getRequestedCollectionMode(query) {
+  if (!query || typeof query !== 'object') {
+    return null;
+  }
+
+  const rawCollectionMode =
+    typeof query.collectionMode === 'string'
+      ? query.collectionMode
+      : typeof query.mode === 'string'
+      ? query.mode
+      : '';
+
+  const normalized = normalizeCollectionMode(rawCollectionMode);
+  return normalized || null;
+}
+
+app.get('/networktelemetry', async (req, res) => {
   try {
-    const telemetry = readNetworkTelemetry(addon, networkTelemetry);
-    res.json(telemetry);
+    const requestedMode = getRequestedCollectionMode(req.query);
+    const mode = resolveCollectionMode(requestedMode);
+    const hybridCollectors =
+      mode === COLLECTION_MODE_INTERLINK_HYBRID
+        ? ensureHybridCollectors()
+        : { addon: null, networkTelemetry: null };
+    const { modeUsed, data } = await collectNetworkTelemetry({
+      addon: hybridCollectors.addon,
+      networkTelemetry: hybridCollectors.networkTelemetry,
+      requestedMode: mode,
+    });
+    res.set('x-cartograph-collection-mode', String(modeUsed));
+    res.json(data);
   } catch (err) {
+    if (addonLoadError) {
+      console.error(addonLoadError);
+    }
     console.error(err);
-    res.status(500).json({ error: 'Native addon failed' });
+    res.status(500).json({ error: 'Network telemetry fetch failed' });
   }
 });
 
-app.get('/authoritytelemetry', (_req, res) => {
+app.get('/authoritytelemetry', async (req, res) => {
   try {
-    const rows = readAuthorityTelemetry(addon, authorityTelemetry);
-    res.json(rows);
+    const requestedMode = getRequestedCollectionMode(req.query);
+    const mode = resolveCollectionMode(requestedMode);
+    const hybridCollectors =
+      mode === COLLECTION_MODE_INTERLINK_HYBRID
+        ? ensureHybridCollectors()
+        : { addon: null, entityLedgersView: null };
+    const { modeUsed, data } = await collectAuthorityTelemetry({
+      addon: hybridCollectors.addon,
+      entityLedgersView: hybridCollectors.entityLedgersView,
+      requestedMode: mode,
+    });
+    res.set('x-cartograph-collection-mode', String(modeUsed));
+    res.json(data);
   } catch (err) {
+    if (addonLoadError) {
+      console.error(addonLoadError);
+    }
     console.error(err);
     res.status(500).json({ error: 'Authority telemetry fetch failed' });
   }
 });
 
-app.get('/heuristic', (_req, res) => {
+app.get('/heuristic', async (req, res) => {
   try {
-    const shapes = readHeuristicShapes(addon);
-    res.json(shapes);
+    const requestedMode = getRequestedCollectionMode(req.query);
+    const mode = resolveCollectionMode(requestedMode);
+    const hybridCollectors =
+      mode === COLLECTION_MODE_INTERLINK_HYBRID
+        ? ensureHybridCollectors()
+        : { addon: null };
+    const { modeUsed, data } = await collectHeuristicShapes({
+      addon: hybridCollectors.addon,
+      requestedMode: mode,
+    });
+    res.set('x-cartograph-collection-mode', String(modeUsed));
+    res.json(data);
   } catch (err) {
+    if (addonLoadError) {
+      console.error(addonLoadError);
+    }
     console.error(err);
-    res.status(500).json({ error: 'Native addon failed' });
+    res.status(500).json({ error: 'Heuristic shape fetch failed' });
+  }
+});
+
+app.get('/heuristictype', async (_req, res) => {
+  try {
+    const heuristicType = await readHeuristicTypeFromDatabase();
+    res.json({ heuristicType: heuristicType || null });
+  } catch (err) {
+    if (addonLoadError) {
+      console.error(addonLoadError);
+    }
+    console.error(err);
+    res.status(500).json({ error: 'Heuristic type fetch failed' });
   }
 });
 

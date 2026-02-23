@@ -52,7 +52,75 @@ function toStringRows(telemetryVec) {
   return rows;
 }
 
+function buildNetworkTelemetry(ids, rows) {
+  const normalizedIds = [];
+  if (Array.isArray(ids)) {
+    for (const id of ids) {
+      const shardId = String(id ?? '').trim();
+      if (shardId.length > 0) {
+        normalizedIds.push(shardId);
+      }
+    }
+  }
+
+  const rowsByShard = new Map();
+  if (Array.isArray(rows)) {
+    for (const row of rows) {
+      if (!Array.isArray(row) || row.length < 13) {
+        continue;
+      }
+
+      const decoded = decodeConnectionRow(row);
+      const shardId = String(decoded.shardId ?? decoded.IdentityId ?? '').trim();
+      if (shardId.length === 0) {
+        continue;
+      }
+      if (!rowsByShard.has(shardId)) {
+        rowsByShard.set(shardId, []);
+      }
+      rowsByShard.get(shardId).push(decoded);
+    }
+  }
+
+  const orderedShardIds = [];
+  const seen = new Set();
+  for (const id of normalizedIds) {
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    orderedShardIds.push(id);
+  }
+  for (const shardId of Array.from(rowsByShard.keys()).sort()) {
+    if (seen.has(shardId)) {
+      continue;
+    }
+    seen.add(shardId);
+    orderedShardIds.push(shardId);
+  }
+
+  return orderedShardIds.map((id) => {
+    const connections = rowsByShard.get(id) ?? [];
+    const { inAvg, outAvg } = computeShardAverages(connections);
+    return {
+      shardId: id,
+      downloadKbps: inAvg,
+      uploadKbps: outAvg,
+      connections,
+    };
+  });
+}
+
 function readNetworkTelemetry(addon, networkTelemetry) {
+  if (
+    !addon ||
+    !networkTelemetry ||
+    !addon.std_vector_std_string_ ||
+    !addon.std_vector_std_vector_std_string__
+  ) {
+    return [];
+  }
+
   const {
     std_vector_std_string_,
     std_vector_std_vector_std_string__,
@@ -71,32 +139,10 @@ function readNetworkTelemetry(addon, networkTelemetry) {
     ids.push(String(idsVec.get(i)));
   }
 
-  const rowsByShard = new Map();
-  for (const row of toStringRows(telemetryVec)) {
-    if (row.length < 13) {
-      continue;
-    }
-
-    const decoded = decodeConnectionRow(row);
-    const shardId = decoded.shardId ?? decoded.IdentityId;
-    if (!rowsByShard.has(shardId)) {
-      rowsByShard.set(shardId, []);
-    }
-    rowsByShard.get(shardId).push(decoded);
-  }
-
-  return ids.map((id) => {
-    const connections = rowsByShard.get(id) ?? [];
-    const { inAvg, outAvg } = computeShardAverages(connections);
-    return {
-      shardId: id,
-      downloadKbps: inAvg,
-      uploadKbps: outAvg,
-      connections,
-    };
-  });
+  return buildNetworkTelemetry(ids, toStringRows(telemetryVec));
 }
 
 module.exports = {
+  buildNetworkTelemetry,
   readNetworkTelemetry,
 };

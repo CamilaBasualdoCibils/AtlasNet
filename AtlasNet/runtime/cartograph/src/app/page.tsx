@@ -24,6 +24,10 @@ interface DatabaseSummary {
   errorText: string | null;
 }
 
+interface HeuristicTypeResponse {
+  heuristicType: string | null;
+}
+
 const EMPTY_DATABASE_SUMMARY: DatabaseSummary = {
   activeSources: 0,
   totalKeys: 0,
@@ -37,6 +41,34 @@ function parseHeuristicType(records: DatabaseSnapshotResponse['records']): strin
     return null;
   }
 
+  const heuristicManifestRecord = records.find(
+    (record) => String(record.key ?? '').trim().toLowerCase() === 'heuristicmanifest'
+  );
+  if (heuristicManifestRecord) {
+    const payload = String(heuristicManifestRecord.payload ?? '').trim();
+    if (payload) {
+      try {
+        let parsed = JSON.parse(payload) as unknown;
+        if (Array.isArray(parsed)) {
+          parsed = parsed[0];
+        }
+        if (
+          parsed &&
+          typeof parsed === 'object' &&
+          typeof (parsed as Record<string, unknown>).HeuristicType === 'string'
+        ) {
+          const text = String(
+            (parsed as Record<string, unknown>).HeuristicType
+          ).trim();
+          if (text.length > 0) {
+            return text;
+          }
+        }
+      } catch {}
+    }
+  }
+
+  // Backward-compat fallback for legacy key.
   const heuristicRecord = records.find(
     (record) => String(record.key ?? '').trim().toLowerCase() === 'heuristic_type'
   );
@@ -144,6 +176,21 @@ export default function OverviewPage() {
           return;
         }
 
+        let heuristicType: string | null = null;
+        try {
+          const heuristicTypeResponse = await fetch('/api/heuristictype', {
+            cache: 'no-store',
+          });
+          if (heuristicTypeResponse.ok) {
+            const heuristicTypePayload =
+              (await heuristicTypeResponse.json()) as HeuristicTypeResponse;
+            if (typeof heuristicTypePayload.heuristicType === 'string') {
+              const text = heuristicTypePayload.heuristicType.trim();
+              heuristicType = text.length > 0 ? text : null;
+            }
+          }
+        } catch {}
+
         const sources = Array.isArray(payload.sources)
           ? payload.sources.filter((source) => source.running)
           : [];
@@ -151,7 +198,7 @@ export default function OverviewPage() {
         setDatabaseSummary({
           activeSources: sources.length,
           totalKeys: records.length,
-          heuristicType: parseHeuristicType(records),
+          heuristicType: heuristicType ?? parseHeuristicType(records),
           lastUpdatedMs: Date.now(),
           errorText: null,
         });
@@ -261,7 +308,7 @@ export default function OverviewPage() {
         <MetricCard
           label="Curr Bounds Heuristic"
           value={databaseSummary.heuristicType ?? 'unknown'}
-          hint="from Heuristic_Type"
+          hint="from HeuristicManifest.HeuristicType"
         />
       </section>
 

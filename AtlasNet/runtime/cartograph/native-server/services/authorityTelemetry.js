@@ -1,5 +1,9 @@
 function readAuthorityTelemetry(addon, authorityTelemetry) {
-  if (!authorityTelemetry || !addon.std_vector_std_vector_std_string__) {
+  if (
+    !addon ||
+    !authorityTelemetry ||
+    !addon.std_vector_std_vector_std_string__
+  ) {
     return [];
   }
 
