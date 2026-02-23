@@ -3,6 +3,7 @@
 #include <thread>
 #include <utility>
 
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "InternalDB/InternalDB.hpp"
 #include "Global/Misc/Singleton.hpp"
@@ -19,14 +20,14 @@ class HealthManifest : public Singleton<HealthManifest>
 	std::jthread HealthCheckOnFailureFunc;
 
    public:
-	void ScheduleHealthPings(const NetworkIdentity& id)
+	void ScheduleHealthPings()
 	{
 		HealthPingIntervalFunc = std::jthread(
-			[ id = id](std::stop_token st)
+			[ ](std::stop_token st)
 			{
 				while (!st.stop_requested())
 				{
-					HealthManifest::Get().HealthUpdate(id);
+					HealthManifest::Get().HealthUpdate(NetworkCredentials::Get().GetID());
 					std::this_thread::sleep_for(
 						std::chrono::milliseconds(_HEALTH_PING_INTERVAL_MS));
 				}

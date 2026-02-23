@@ -23,6 +23,7 @@
 #include "Interlink/Interlink.hpp"
 #include "Interlink/InterlinkEnums.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
 /* 
 namespace
@@ -95,9 +96,9 @@ void WatchDog::Run()
 void WatchDog::Init()
 {
 	logger->Debug("Init");
-
-	NetworkManifest::Get().ScheduleNetworkPings(ID);
-	HealthManifest::Get().ScheduleHealthPings(ID);
+	NetworkCredentials::Make(NetworkIdentity::MakeIDWatchDog());
+	NetworkManifest::Get().ScheduleNetworkPings();
+	HealthManifest::Get().ScheduleHealthPings();
 	HealthManifest::Get().ScheduleHealthChecks(
 		[&](const NetworkIdentity &ID_fail, const std::string &key)
 		{
@@ -113,10 +114,8 @@ void WatchDog::Init()
 			}
 			HealthManifest::Get().RemovePing(key);
 		});
-	InterlinkProperties InterLinkProps;
-	InterLinkProps.ThisID = ID;
-	Interlink::Get().Init(InterLinkProps);
-	EventSystem::Get().Init(ID);
+	Interlink::Get().Init();
+	EventSystem::Get().Init();
 
 	SwitchHeuristic(IHeuristic::Type::eGridCell);
 	ComputeHeuristic();	 // compute once

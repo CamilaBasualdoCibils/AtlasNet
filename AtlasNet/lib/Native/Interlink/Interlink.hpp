@@ -75,7 +75,6 @@ class Interlink : public Singleton<Interlink>
 		QueuedPacketsOnConnect;
 	Log logger = Log("Interlink");
 	ISteamNetworkingSockets *networkInterface;
-	NetworkIdentity MyIdentity;
 	std::optional<HSteamListenSocket> ListeningSocket;
 	std::optional<HSteamNetPollGroup> PollGroup;
 	PacketManager packet_manager;
@@ -114,7 +113,7 @@ class Interlink : public Singleton<Interlink>
 	std::jthread TickThread;
 
    public:
-	void Init(const InterlinkProperties &properties);
+	void Init();
 	void Shutdown();
 
 	void OnSteamNetConnectionStatusChanged(SteamNetConnectionStatusChangedCallback_t *pInfo);

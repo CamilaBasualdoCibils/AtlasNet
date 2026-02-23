@@ -25,7 +25,9 @@ struct IBounds
 
 	virtual bool Contains(vec3 p) const = 0;
 	auto GetID() const { return ID; }
-		protected:
+	[[nodiscard]] virtual vec3 GetCenter() const = 0;
+
+   protected:
 	virtual void Internal_SerializeData(ByteWriter& bw) const = 0;
 	virtual void Internal_DeserializeData(ByteReader& br) = 0;
 };

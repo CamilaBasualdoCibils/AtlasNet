@@ -26,7 +26,7 @@ public:
 	std::jthread HealthCheckOnFailureFunc;
 
 public:
- void ScheduleNetworkPings(const NetworkIdentity& id);
+ void ScheduleNetworkPings();
 
  void TelemetryUpdate(const NetworkIdentity& identifier);
 

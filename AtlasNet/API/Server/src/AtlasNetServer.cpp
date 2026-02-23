@@ -21,6 +21,7 @@
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
 
 // namespace
@@ -34,16 +35,16 @@
 void AtlasNetServer::Initialize(AtlasNetServer::InitializeProperties &properties)
 {
 	CrashHandler::Get().Init();
-	identity = NetworkIdentity(NetworkIdentityType::eShard, UUIDGen::Gen());
-	Interlink::Get().Init({.ThisID = identity});
-	NetworkManifest::Get().ScheduleNetworkPings(identity);
-	HealthManifest::Get().ScheduleHealthPings(identity);
-	EventSystem::Get().Init(identity);
+	NetworkCredentials::Make(NetworkIdentity(NetworkIdentityType::eShard, UUIDGen::Gen()));
+	Interlink::Get().Init();
+	NetworkManifest::Get().ScheduleNetworkPings();
+	HealthManifest::Get().ScheduleHealthPings();
+	EventSystem::Get().Init();
 	DockerEvents::Get().Init(DockerEventsInit{.OnShutdownRequest = properties.OnShutdownRequest});
 	EventSystem::Get().Subscribe<LogEvent>(
 		[&](const LogEvent &e) { logger->DebugFormatted("Received LogEvent: {}", e.message); });
 
-	BoundLeaser::Get().Init(identity);
+	BoundLeaser::Get().Init();
 	// --- Interlink setup ---
 
 	EntityLedger::Get().Init();

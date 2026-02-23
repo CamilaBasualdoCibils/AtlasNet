@@ -23,6 +23,7 @@
 #include "Handshake/HandshakeService.hpp"
 #include "InterlinkEnums.hpp"
 #include "Network/Connection.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkEnums.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/Client/ClientIDAssignPacket.hpp"
@@ -410,19 +411,18 @@ void Interlink::ReceiveMessages()
 
 		logger.DebugFormatted(
 			"Message from ({}{}) of {} bytes", !sender.IsInternal() ? "External " : "",
-			!sender.IsInternal() ? sender.address.ToString() : sender.target.ToString(),span.size());
+			!sender.IsInternal() ? sender.address.ToString() : sender.target.ToString(),
+			span.size());
 
 		msg->Release();
 	}
 }
 
-void Interlink::Init(const InterlinkProperties &Properties)
+void Interlink::Init()
 {
-	MyIdentity = Properties.ThisID;
-
 	logger.Debug("Interlink init");
-	ASSERT(MyIdentity.Type != NetworkIdentityType::eInvalid, "Invalid Interlink Type");
-	ASSERT(MyIdentity.IsInternal(), "Interlink is for internal only");
+	ASSERT(NetworkCredentials::Get().GetID().Type != NetworkIdentityType::eInvalid, "Invalid Interlink Type");
+	ASSERT(NetworkCredentials::Get().GetID().IsInternal(), "Interlink is for internal only");
 
 	// Single init per process (no repeated warnings)
 	if (!EnsureGNSInitialized())
@@ -437,7 +437,7 @@ void Interlink::Init(const InterlinkProperties &Properties)
 
 	// Identity setup (unchanged)
 	ByteWriter bw;
-	MyIdentity.Serialize(bw);
+	NetworkCredentials::Get().GetID().Serialize(bw);
 	const auto IdentityByteStream = std::string(bw.as_string_view());
 	logger.Debug("Settings Networking Identity");
 	SteamNetworkingIdentity identity;
@@ -456,27 +456,27 @@ void Interlink::Init(const InterlinkProperties &Properties)
 
 	// registering to database + opening listen sockets
 	IPAddress ipAddress;
-	if (MyIdentity.Type == NetworkIdentityType::eProxy)
+	if (NetworkCredentials::Get().GetID().Type == NetworkIdentityType::eProxy)
 	{
 		// Register Demigod in ProxyRegistry
 		ipAddress.Parse(DockerIO::Get().GetSelfContainerIP() + ":" +
 						std::to_string(_PORT_INTERLINK));
-		// ProxyRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
-		ServerRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
+		// ProxyRegistry::Get().RegisterSelf(NetworkCredentials::Get().GetID(), ipAddress);
+		ServerRegistry::Get().RegisterSelf(NetworkCredentials::Get().GetID(), ipAddress);
 
 		// Register public address
 		// pubIP =
 		// DockerIO::Get().GetServiceNodePublicIP(_PROXY_SERVICE_NAME);
 		// pubPort = _PORT_PROXY;
 		// pub.Parse(*pubIP + ":" + std::to_string(*pubPort));
-		// ProxyRegistry::Get().RegisterPublicAddress(MyIdentity, pub);
-		ServerRegistry::Get().RegisterPublicAddress(MyIdentity, pub);
+		// ProxyRegistry::Get().RegisterPublicAddress(NetworkCredentials::Get().GetID(), pub);
+		ServerRegistry::Get().RegisterPublicAddress(NetworkCredentials::Get().GetID(), pub);
 
 		logger.DebugFormatted("[Demigod] Public Swarm address = {}", pub.ToString());
 
 		// logger.DebugFormatted("[Interlink]Registered in ProxyRegistry as
 		// {}:{}",
-		//					   MyIdentity.ToString(), ipAddress.ToString());
+		//					   NetworkCredentials::Get().GetID().ToString(), ipAddress.ToString());
 	}
 	else
 	{
@@ -484,13 +484,13 @@ void Interlink::Init(const InterlinkProperties &Properties)
 		IPAddress ipAddress;
 		ipAddress.Parse(DockerIO::Get().GetSelfContainerIP() + ":" +
 						std::to_string(_PORT_INTERLINK));
-		ServerRegistry::Get().RegisterSelf(MyIdentity, ipAddress);
+		ServerRegistry::Get().RegisterSelf(NetworkCredentials::Get().GetID(), ipAddress);
 		logger.DebugFormatted("[Interlink]Registered in ServerRegistry as {}:{}",
-							  MyIdentity.ToString(), ipAddress.ToString());
+							  NetworkCredentials::Get().GetID().ToString(), ipAddress.ToString());
 	}
 
 	// Existing post-init behavior (unchanged)
-	switch (MyIdentity.Type)
+	switch (NetworkCredentials::Get().GetID().Type)
 	{
 		case NetworkIdentityType::eShard:
 		{
@@ -597,7 +597,7 @@ bool Interlink::EstablishConnectionAtIP(const NetworkIdentity &id, const IPAddre
 
 bool Interlink::EstablishConnectionTo(const NetworkIdentity &id)
 {
-	ASSERT(MyIdentity.Type != NetworkIdentityType::eGameClient, "Game client must use the ip one");
+	ASSERT(NetworkCredentials::Get().GetID().Type != NetworkIdentityType::eGameClient, "Game client must use the ip one");
 	// Prevent duplicate attempts
 	if (Connections.get<IndexByTarget>().contains(id))
 	{
@@ -665,13 +665,13 @@ bool Interlink::EstablishConnectionTo(const NetworkIdentity &id)
 		// For now, external clients are expected to connect INBOUND to God.
 		// Outbound from inside to a GameClient is not required.
 		logger.WarningFormatted("Skipping registry lookup for external client {}",
-								MyIdentity.ToString());
+								NetworkCredentials::Get().GetID().ToString());
 		return true;
 	}
 
 	// Default case (unknown type)
 	logger.WarningFormatted("Unknown interlink type for {} - skipping connection",
-							MyIdentity.ToString());
+							NetworkCredentials::Get().GetID().ToString());
 	return false;
 }
 
@@ -747,7 +747,7 @@ void Interlink::GetConnectionTelemetry(std::vector<ConnectionTelemetry> &out)
 		t.qualityRemote = status.m_flConnectionQualityRemote;
 		t.state = status.m_eState;
 
-		t.IdentityId = MyIdentity.ToString();
+		t.IdentityId = NetworkCredentials::Get().GetID().ToString();
 		t.targetId = conn.target.ToString();
 
 		out.push_back(std::move(t));
@@ -774,11 +774,11 @@ void Interlink::OnClientConnected(const Connection &c)
 		client.ID = newIdentity.ID;
 		client.ip = c.address;
 		ClientManifest::Get().RegisterClient(client);
-		ClientManifest::Get().AssignProxyClient(client.ID, MyIdentity);
+		ClientManifest::Get().AssignProxyClient(client.ID, NetworkCredentials::Get().GetID());
 
 		ClientConnectEvent cce;
 		cce.client = client;
-		cce.ConnectedProxy = MyIdentity;
+		cce.ConnectedProxy = NetworkCredentials::Get().GetID();
 		EventSystem::Get().Dispatch(cce);
 
 		HandshakeService::Get().OnClientConnect(client);

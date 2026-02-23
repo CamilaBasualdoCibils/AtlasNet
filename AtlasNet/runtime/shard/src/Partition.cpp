@@ -25,9 +25,9 @@ void Partition::Init()
 
 	logger = std::make_shared<Log>(partitionIdentifier.ToString());
 
-	HealthManifest::Get().ScheduleHealthPings(partitionIdentifier);
-	NetworkManifest::Get().ScheduleNetworkPings(partitionIdentifier);
-	Interlink::Get().Init(InterlinkProperties{.ThisID = partitionIdentifier});
+	HealthManifest::Get().ScheduleHealthPings();
+	NetworkManifest::Get().ScheduleNetworkPings();
+	Interlink::Get().Init();
 	/*
 		auto tryClaimBound = [&]() -> bool
 		{

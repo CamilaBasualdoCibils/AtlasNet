@@ -89,7 +89,7 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 				{
 					std::string cmd;
 					for (const auto& arg : get_id_cmd) cmd += arg + " ";
-					//logger.DebugFormatted("The Command [{}] responded with [\"{}\"] [{}]", cmd,
+					// logger.DebugFormatted("The Command [{}] responded with [\"{}\"] [{}]", cmd,
 					//					  json.dump(4), response.value_or("NO RESPONSE"));
 				}
 
@@ -109,7 +109,7 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 		}
 		else
 		{
-			//logger.DebugFormatted("BoundIDFromShard returned {}", *result);
+			// logger.DebugFormatted("BoundIDFromShard returned {}", *result);
 		}
 		return result;
 	}
@@ -121,11 +121,11 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 
 	[[nodiscard]] std::unique_ptr<IBounds> ClaimNextPendingBound(const NetworkIdentity& claim_key);
 
-	 void StorePendingBoundsFromByteWriters(
+	void StorePendingBoundsFromByteWriters(
 		const std::unordered_map<IBounds::BoundsID, ByteWriter>& in_writers);
 
 	void GetPendingBoundsAsByteReaders(std::vector<std::string>& data_for_readers,
-									   std::unordered_map<IBounds::BoundsID, ByteReader>& brs); 
+									   std::unordered_map<IBounds::BoundsID, ByteReader>& brs);
 
 	void GetClaimedBoundsAsByteReaders(
 		std::vector<std::string>& data_for_readers,

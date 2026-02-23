@@ -11,6 +11,7 @@ struct GridShape : public IBounds
 	void Internal_SerializeData(ByteWriter& bw) const override { aabb.Serialize(bw); }
 	void Internal_DeserializeData(ByteReader& br) override { aabb.Deserialize(br); }
 	bool Contains(vec3 p) const override { return aabb.contains(p); }
+	vec3 GetCenter() const override { return aabb.center(); }
 };
 class GridHeuristic : public THeuristic<GridShape>
 {

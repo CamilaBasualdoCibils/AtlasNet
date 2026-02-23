@@ -1,13 +1,14 @@
 #include "NetworkManifest.hpp"
-void NetworkManifest::ScheduleNetworkPings(const NetworkIdentity& id)
+#include "Network/NetworkCredentials.hpp"
+void NetworkManifest::ScheduleNetworkPings()
 {
 	//
 	HealthPingIntervalFunc = std::jthread(
-		[id = id](std::stop_token st)
+		[](std::stop_token st)
 		{
 			while (!st.stop_requested())
 			{
-				NetworkManifest::Get().TelemetryUpdate(id);
+				NetworkManifest::Get().TelemetryUpdate(NetworkCredentials::Get().GetID());
 				std::this_thread::sleep_for(
 					std::chrono::milliseconds(_NETWORK_TELEMETRY_PING_INTERVAL_MS));
 			}

@@ -16,10 +16,14 @@ using AtlasEntityID = UUID;
 
 struct AtlasEntityMinimal : AtlasObject
 {
+	virtual ~AtlasEntityMinimal() = default;
+
+	
 	AtlasEntityID Entity_ID;
 	bool IsClient = false;
 	ClientID Client_ID;
-
+	uint64_t PacketSeq = 0; //Sequence ID of last update packet
+	uint64_t TransferGeneration = 0;
 	struct Data
 	{
 		Transform transform;
@@ -33,6 +37,8 @@ struct AtlasEntityMinimal : AtlasObject
 		bw.uuid(Entity_ID);
 		bw.u8(IsClient);
 		bw.uuid(Client_ID);
+		bw.u64(PacketSeq);
+		bw.u64(TransferGeneration);
 		data.Serialize(bw);
 	}
 	void Deserialize(ByteReader& br) override
@@ -40,12 +46,15 @@ struct AtlasEntityMinimal : AtlasObject
 		Entity_ID = br.uuid();
 		IsClient = br.u8();
 		Client_ID = br.uuid();
+		PacketSeq = br.u64();
+		TransferGeneration = br.u64();
 		data.Deserialize(br);
 	}
 	static AtlasEntityID CreateUniqueID() { return UUIDGen::Gen(); }
 };
 struct AtlasEntity : AtlasEntityMinimal
 {
+
 	boost::container::small_vector<uint8, 32> Metadata;
 
 	void Serialize(ByteWriter& bw) const override

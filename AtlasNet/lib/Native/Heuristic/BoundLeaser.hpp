@@ -13,7 +13,6 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	Log logger = Log("BoundLeaser");
 	std::unique_ptr<IBounds> ClaimedBound;
 	IBounds::BoundsID ClaimedBoundID;
-	NetworkIdentity ID;
 
 	std::jthread LoopThread;
 
@@ -33,10 +32,12 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	void ClaimBound();
 
    public:
-	void Init(const NetworkIdentity& _ID)
+	void Init()
 	{
-		ID = _ID;
 		logger.Debug("Init");
 		LoopThread = std::jthread([this](std::stop_token st) { LoopEntry(st); });
 	}
+	[[nodiscard]] constexpr bool HasBound() const { return ClaimedBound != nullptr; }
+	[[nodiscard]] constexpr const IBounds& GetBound() const { return *ClaimedBound; }
+	
 };

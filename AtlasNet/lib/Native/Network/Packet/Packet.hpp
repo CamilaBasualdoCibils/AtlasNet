@@ -125,11 +125,15 @@ public:
     {
         return Name.value;
     }
+    static const std::string_view GetPacketNameStatic()  
+    {
+        return Name.value;
+    }
 };
 
 #define ATLASNET_REGISTER_PACKET(Type, Name)                     \
     static const bool Type##_registered = []() -> bool {         \
-        PacketRegistry::Get().Register(HashString(Name),         \
+        PacketRegistry::Get().Register(HashString(Type::GetPacketNameStatic().data()),         \
                                        &Type::Create);           \
         return true;                                             \
     }()
