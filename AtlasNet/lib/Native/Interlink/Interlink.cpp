@@ -375,7 +375,7 @@ void Interlink::OpenListenSocket(PortType port)
 			   (void *)SteamNetConnectionStatusChanged);
 
 	SteamNetworkingIPAddr addr;
-	addr.ParseString("0.0.0.0");
+	addr.SetIPv4(0,0);
 	addr.m_port = port;
 
 	ListeningSocket = networkInterface->CreateListenSocketIP(addr, 1, &opt);

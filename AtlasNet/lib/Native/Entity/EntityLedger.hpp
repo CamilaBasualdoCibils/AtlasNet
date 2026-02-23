@@ -17,8 +17,6 @@
 class EntityLedger : public Singleton<EntityLedger>
 {
 	boost::container::flat_map<AtlasEntityID, AtlasEntity> entities;
-
-	std::unordered_set<AtlasEntityID> entitiesMarkedForTransfer;
 	PacketManager::Subscription sub_EntityListRequestPacket, sub_EntityTransferPacket,
 		sub_ClientTransferPacket;
 	Log logger = Log("EntityLedger");
@@ -46,6 +44,7 @@ class EntityLedger : public Singleton<EntityLedger>
 		ASSERT(it != entities.end(), "Invalid ID");
 		return it->second.IsClient;
 	}
+	[[nodiscard]] const AtlasEntity& GetEntity(AtlasEntityID ID) const { return entities.at(ID); }
 
    private:
 	void OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,

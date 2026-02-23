@@ -8,7 +8,7 @@
 #include "Entity/Entity.hpp"
 #include "Entity/Packet/EntityTransferPacket.hpp"
 #include "Entity/Packet/LocalEntityListRequestPacket.hpp"
-#include "Entity/TransferCoordinator.hpp"
+#include "Entity/Transfer/TransferCoordinator.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Interlink/Interlink.hpp"
@@ -73,12 +73,9 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 			continue;
 		for (const auto& [ID, entity] : entities)
 		{
-			if (entitiesMarkedForTransfer.contains(ID))
-				continue;
 			if (!BoundLeaser::Get().GetBound().Contains(entity.data.transform.position))
 			{
 				EntitiesNewlyOutOfBounds.push_back(ID);
-				entitiesMarkedForTransfer.insert(ID);
 			}
 		}
 		if (!EntitiesNewlyOutOfBounds.empty())
