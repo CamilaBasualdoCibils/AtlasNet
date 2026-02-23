@@ -22,7 +22,6 @@
 #include "Network/NetworkIdentity.hpp"
 class EventSystem : public Singleton<EventSystem>
 {
-	NetworkIdentity ID;
 	Log logger = Log("EventSystem");
 	std::jthread ConsumeThread;
 	std::atomic_bool HasSubscription = false;
@@ -35,9 +34,8 @@ class EventSystem : public Singleton<EventSystem>
 		event_subscriptions;
 	EventSystem() = default;
 	sw::redis::Subscriber redisSubscriber = InternalDB::Get()->Subscriber();
-	void Init(const NetworkIdentity& _ID)
+	void Init()
 	{
-		ID = _ID;
 		logger.Debug("Event System Init");
 
 		redisSubscriber.on_message(

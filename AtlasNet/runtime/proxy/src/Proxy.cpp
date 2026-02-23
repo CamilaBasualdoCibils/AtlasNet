@@ -4,10 +4,11 @@
 
 #include "Debug/Crash/CrashHandler.hpp"
 #include "Events/EventSystem.hpp"
+#include "Global/Misc/UUID.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Interlink/Interlink.hpp"
-#include "Global/Misc/UUID.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 void Proxy::Run()
 {
 	logger->Debug("Init");	// hello
@@ -28,11 +29,12 @@ void Proxy::Run()
 void Proxy::Init()
 {
 	CrashHandler::Get().Init();
-	ID = NetworkIdentity(NetworkIdentityType::eProxy, UUIDGen::Gen());
-	Interlink::Get().Init(InterlinkProperties{.ThisID = ID, .logger = logger});
-	NetworkManifest::Get().ScheduleNetworkPings(ID);
-	HealthManifest::Get().ScheduleHealthPings(ID);
-	EventSystem::Get().Init(ID);
+	NetworkCredentials::Make(NetworkIdentity(NetworkIdentityType::eProxy, UUIDGen::Gen()));
+
+	Interlink::Get().Init();
+	NetworkManifest::Get().ScheduleNetworkPings();
+	HealthManifest::Get().ScheduleHealthPings();
+	EventSystem::Get().Init();
 }
 void Proxy::Shutdown()
 {
@@ -48,7 +50,4 @@ bool Proxy::OnAcceptConnection(const Connection& c)
 }
 void Proxy::OnConnected(const NetworkIdentity& id) {}
 void Proxy::OnDisconnected(const NetworkIdentity& id) {}
-void Proxy::OnMessageReceived(const Connection& from,
-							  std::span<const std::byte> data)
-{
-}
+void Proxy::OnMessageReceived(const Connection& from, std::span<const std::byte> data) {}

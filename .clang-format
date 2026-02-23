@@ -6,7 +6,7 @@ TabWidth: 4           # how wide a literal '\t' displays
 UseTab: Always         # Never | ForIndentation | AlignWithSpaces | Always
 
 # Line breaking
-ColumnLimit: 80
+ColumnLimit: 100
 
 # Braces / layout (tasteful defaults)
 BreakBeforeBraces: Allman   # or Attach, Stroustrup, Linux

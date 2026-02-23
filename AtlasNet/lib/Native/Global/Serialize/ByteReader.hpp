@@ -27,13 +27,11 @@ class ByteReader
 	void DecodeBase64()
 	{
 		size_t real_len = std::strlen(reinterpret_cast<const char*>(p));
-		std::size_t decoded_size =
-			boost::beast::detail::base64::decoded_size(real_len);
+		std::size_t decoded_size = boost::beast::detail::base64::decoded_size(real_len);
 		DecodedBase64Data.resize(decoded_size);
 
 		const auto result = boost::beast::detail::base64::decode(
-			DecodedBase64Data.data(), reinterpret_cast<const char*>(p),
-			real_len);
+			DecodedBase64Data.data(), reinterpret_cast<const char*>(p), real_len);
 		DecodedBase64Data.resize(result.first);
 		p = DecodedBase64Data.data();
 		n = DecodedBase64Data.size();
@@ -59,8 +57,10 @@ class ByteReader
 	uint32_t u32() { return read_be<uint32_t>(); }
 	uint64_t u64() { return read_be<uint64_t>(); }
 
-	int32_t i32() { return int32_t(u32()); }
-	int64_t i64() { return int64_t(u64()); }
+	int32_t i8() { return read_be<int8_t>(); }
+	int32_t i16() { return read_be<int16_t>(); }
+	int32_t i32() { return read_be<int32_t>(); }
+	int64_t i64() { return read_be<int64_t>(); }
 
 	// ---------------- Floats --------------------------------------
 
@@ -100,8 +100,7 @@ class ByteReader
 	T read_vector()
 	{
 		T out;
-		for (uint32_t d = 0; d < Dim; ++d)
-			out[d] = read_scalar<typename T::value_type>();
+		for (uint32_t d = 0; d < Dim; ++d) out[d] = read_scalar<typename T::value_type>();
 		return out;
 	}
 	// ---------------- glm -----------------------------------------

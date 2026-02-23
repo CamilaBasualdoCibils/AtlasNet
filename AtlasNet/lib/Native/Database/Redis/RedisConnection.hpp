@@ -70,7 +70,7 @@ class RedisConnection
 
    public:
    template <class F>
-	decltype(auto) WithSync(F&& f) const
+	[[nodiscard]]decltype(auto) WithSync(F&& f) const
 	{
 		if (IsCluster)
 			return std::forward<F>(f)(*HandleCluster);
@@ -78,7 +78,7 @@ class RedisConnection
 	}
 
 	template <class F>
-	decltype(auto) WithAsync(F&& f) const
+	[[nodiscard]] decltype(auto) WithAsync(F&& f) const
 	{
 		if (IsCluster)
 			return std::forward<F>(f)(*HandleAsyncCluster);

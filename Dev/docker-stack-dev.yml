@@ -52,6 +52,8 @@ services:
     ports:
       - "3000:3000"   # Next.js default
       - "9229:9229"   # Node inspector
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # REQUIRED
     deploy:
       placement:
           constraints:

@@ -7,13 +7,12 @@
 #include <thread>
 #include <unordered_set>
 
-#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
+//#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Docker/DockerIO.hpp"
 #include "Entity/Entity.hpp"
-#include "Entity/EntityList.hpp"
 #include "Entity/Transform.hpp"
 #include "Events/EventSystem.hpp"
 #include "Events/Events/Debug/LogEvent.hpp"
@@ -24,8 +23,9 @@
 #include "Interlink/Interlink.hpp"
 #include "Interlink/InterlinkEnums.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
-
+/* 
 namespace
 {
 constexpr auto kHandoffAuditInterval = std::chrono::milliseconds(250);
@@ -62,7 +62,7 @@ std::unordered_set<std::string> GetLiveShardIds()
 	}
 	return live;
 }
-}  // namespace
+}  // namespace */
 
 WatchDog::WatchDog() {}
 
@@ -78,15 +78,15 @@ void WatchDog::ClearAllDatabaseState()
 void WatchDog::Run()
 {
 	Init();
-	auto nextHandoffAudit = std::chrono::steady_clock::now() + kHandoffAuditInterval;
+	//auto nextHandoffAudit = std::chrono::steady_clock::now() + kHandoffAuditInterval;
 	while (!ShouldShutdown)
-	{
+	{/* 
 		const auto now = std::chrono::steady_clock::now();
 		if (now >= nextHandoffAudit)
 		{
 			AuditActiveHandoffTransfers();
 			nextHandoffAudit = now + kHandoffAuditInterval;
-		}
+		} */
 		std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	}
 	logger->Debug("Shutting down");
@@ -96,9 +96,9 @@ void WatchDog::Run()
 void WatchDog::Init()
 {
 	logger->Debug("Init");
-
-	NetworkManifest::Get().ScheduleNetworkPings(ID);
-	HealthManifest::Get().ScheduleHealthPings(ID);
+	NetworkCredentials::Make(NetworkIdentity::MakeIDWatchDog());
+	NetworkManifest::Get().ScheduleNetworkPings();
+	HealthManifest::Get().ScheduleHealthPings();
 	HealthManifest::Get().ScheduleHealthChecks(
 		[&](const NetworkIdentity &ID_fail, const std::string &key)
 		{
@@ -114,11 +114,8 @@ void WatchDog::Init()
 			}
 			HealthManifest::Get().RemovePing(key);
 		});
-	InterlinkProperties InterLinkProps;
-	InterLinkProps.logger = logger;
-	InterLinkProps.ThisID = ID;
-	Interlink::Get().Init(InterLinkProps);
-	EventSystem::Get().Init(ID);
+	Interlink::Get().Init();
+	EventSystem::Get().Init();
 
 	SwitchHeuristic(IHeuristic::Type::eGridCell);
 	ComputeHeuristic();	 // compute once
@@ -185,24 +182,24 @@ void WatchDog::SetShardCount(uint32 NewCount)
 }
 void WatchDog::ComputeHeuristic()
 {
-	AtlasEntityList<AtlasEntityMinimal> entities;
+	std::vector<AtlasEntityMinimal> entities;
 	for (int i = 0; i < 4; i++)
 	{
 		AtlasEntityMinimal e;
-		e.transform.position = {10 * ((i / 2) ? 1 : -1),
+		e.data.transform.position = {10 * ((i / 2) ? 1 : -1),
 								10 * ((i % 2) ? 1 : -1), 0};
 		entities.push_back(e);
 	}
 	logger->DebugFormatted("Computing Heuristic: {}",
 						   IHeuristic::TypeToString(ActiveHeuristic));
 
-	HeuristicManifest::Get().SetActiveHeuristicType(ActiveHeuristic);
+
 	logger->Debug("IHeuristic::Compute");
-	Heuristic->Compute(entities.span());
+	Heuristic->Compute(std::span(entities));
+	HeuristicManifest::Get().PushHeuristic(*Heuristic);
 	std::unordered_map<IBounds::BoundsID, ByteWriter> bws;
 	logger->Debug("IHeuristic::SerializeBounds");
 	Heuristic->SerializeBounds(bws);
-	HeuristicManifest::Get().PushHeuristic(*Heuristic);
 	logger->Debug("HeuristicManifest::GetPendingBoundsCount");
 	const long long pending_count =
 		HeuristicManifest::Get().GetPendingBoundsCount();
@@ -265,7 +262,7 @@ void WatchDog::HeuristicThreadEntry(std::stop_token st)
 	}
 }
 
-void WatchDog::AuditActiveHandoffTransfers()
+/* void WatchDog::AuditActiveHandoffTransfers()
 {
 	std::vector<HandoffTransferManifest::ActiveTransferRecord> activeTransfers;
 	HandoffTransferManifest::Get().GetAllActiveTransfers(activeTransfers);
@@ -353,4 +350,4 @@ void WatchDog::AuditActiveHandoffTransfers()
 			transfer.entityId, transfer.source, transfer.target, transfer.state,
 			overdueMs, holders.size(), liveHolderCount);
 	}
-}
+} */

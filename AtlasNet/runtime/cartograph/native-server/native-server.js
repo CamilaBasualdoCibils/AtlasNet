@@ -1,7 +1,11 @@
+
+// native-server.js
 const express = require('express');
 const cors = require('cors');
 const addon = require('../nextjs/native/Web.node');
-
+global.nodeJsWrapper = addon.NodeJSWrapper
+  ? new addon.NodeJSWrapper()
+  : null;
 const { DEFAULT_PORT, getDatabaseTargets } = require('./config');
 const {
   probeDatabase,

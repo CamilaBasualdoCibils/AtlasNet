@@ -5,7 +5,7 @@
 #include "Global/Serialize/ByteWriter.hpp"
 GridHeuristic::GridHeuristic() {}
 void GridHeuristic::Compute(
-	const AtlasEntitySpan<const AtlasEntityMinimal>& span)
+	const std::span<const AtlasEntityMinimal>& span)
 {
 	quads.resize(4);
 	for (int i = 0; i < 4; i++)

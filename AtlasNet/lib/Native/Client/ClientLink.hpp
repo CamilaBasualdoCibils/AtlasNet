@@ -36,14 +36,14 @@ class ClientLink : public Singleton<ClientLink>
 
 	void ReceiveMessages();
 
-	void OnClientIDAssignedPacket(const ClientIDAssignPacket& clientIDPacket);
+	void OnClientIDAssignedPacket(const ClientIDAssignPacket& clientIDPacket,const PacketManager::PacketInfo&);
 
 	PacketManager packet_manager;
 	
 	PacketManager::Subscription ClientIDAssignSub =
 		packet_manager.Subscribe<ClientIDAssignPacket>(
-			[&](const ClientIDAssignPacket& clientIDPacket)
-			{ OnClientIDAssignedPacket(clientIDPacket); });
+			[&](const ClientIDAssignPacket& clientIDPacket,const PacketManager::PacketInfo& info)
+			{ OnClientIDAssignedPacket(clientIDPacket,info); });
 	Log logger = Log("ClientLink");
 	struct IndexByState
 	{

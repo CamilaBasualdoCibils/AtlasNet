@@ -30,7 +30,6 @@ const DEFAULT_INTERACTION_SENSITIVITY = 1;
 export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<ReturnType<typeof createMapRenderer> | null>(null);
-
   const [showGnsConnections, setShowGnsConnections] = useState(true);
   const [showAuthorityEntities, setShowAuthorityEntities] = useState(true);
   const [showShardHoverDetails, setShowShardHoverDetails] = useState(true);
