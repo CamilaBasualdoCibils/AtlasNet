@@ -43,7 +43,9 @@ class EntityLedgersView
 										const PacketManager::PacketInfo& info)
 	{
 		if (p.status != LocalEntityListRequestPacket::MsgStatus::eResponse)
+		{
 			return;
+		}
 
 		std::unique_lock<std::mutex> lock(mtx);
 

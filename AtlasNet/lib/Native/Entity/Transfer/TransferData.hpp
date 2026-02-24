@@ -5,11 +5,16 @@
 #include "Global/Misc/UUID.hpp"
 #include "Network/NetworkIdentity.hpp"
 using TransferID = UUID;
+enum class TransferMode
+{
+	eReceiving,eSending
+};
 struct EntityTransferData
 {
 	TransferID ID;
-	NetworkIdentity receiver;
+	NetworkIdentity shard;
+	TransferMode transferMode;
 	EntityTransferStage stage = EntityTransferStage::eNone;
 	boost::container::small_vector<AtlasEntityID, 32> entityIDs;
-	bool WaitingOnResponse = false;
+	//bool WaitingOnResponse = false;
 };

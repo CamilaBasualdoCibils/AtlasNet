@@ -4,6 +4,7 @@
 
 #include <boost/describe/enum_to_string.hpp>
 
+#include "Entity/EntityEnums.hpp"
 #include "Entity/Transfer/TransferData.hpp"
 #include "Global/Misc/Singleton.hpp"
 #include "Global/Misc/UUID.hpp"
@@ -29,6 +30,20 @@ class TransferManifest : public Singleton<TransferManifest>
 	}
 
    public:
+	void UpdateEntityTransferStage(TransferID ID, EntityTransferStage stage)
+	{
+		const std::string path = ".EntityTransfers." + UUIDGen::ToString(ID) + "." + "Stage";
+		(void)InternalDB::Get()->WithSync(
+			[&](auto& r)
+			{
+				std::array<std::string, 4> cmd = {
+					"JSON.SET", TransferManifestTableName, path,
+					std::format("\"{}\"", boost::describe::enum_to_string(stage, "Invalid"))};
+
+				return r.command(cmd.begin(), cmd.end());
+			});
+	}
+
 	void PushTransferInfo(const EntityTransferData& data)
 	{
 		EnsureJsonTable();
@@ -43,12 +58,12 @@ class TransferManifest : public Singleton<TransferManifest>
 		fromID.Serialize(FromWrite);
 		json["From(64)"] = FromWrite.as_string_base_64();
 
-		json["To"] = data.receiver.ToString();
+		json["To"] = data.shard.ToString();
 		ByteWriter ToWrite;
-		data.receiver.Serialize(ToWrite);
+		data.shard.Serialize(ToWrite);
 		json["To(64)"] = ToWrite.as_string_base_64();
 
-		json["stage"] = boost::describe::enum_to_string(data.stage, "INVALID");
+		json["Stage"] = boost::describe::enum_to_string(data.stage, "INVALID");
 
 		for (const auto& EntityId : data.entityIDs)
 		{

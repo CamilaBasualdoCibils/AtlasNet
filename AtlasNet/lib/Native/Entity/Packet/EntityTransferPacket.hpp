@@ -4,13 +4,12 @@
 #include <cstdint>
 
 #include "Entity/Entity.hpp"
+#include "Entity/EntityEnums.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Network/Packet/Packet.hpp"
-#include "Entity/EntityEnums.hpp"
 class EntityTransferPacket : public TPacket<EntityTransferPacket, "EntityTransferPacket">
 {
-    public:
-
+   public:
 	struct StageData
 	{
 		virtual ~StageData() = default;
@@ -37,6 +36,8 @@ class EntityTransferPacket : public TPacket<EntityTransferPacket, "EntityTransfe
 			}
 		}
 	};
+	const PrepareStageData& GetAsPrepareStage() const { return std::get<PrepareStageData>(Data); }
+	PrepareStageData& SetAsPrepareStage() { return Data.emplace<PrepareStageData>(); }
 	struct ReadyStageData : StageData
 	{
 		// boost::container::small_vector<AtlasEntityID, 10> entityIDs;
@@ -57,6 +58,9 @@ class EntityTransferPacket : public TPacket<EntityTransferPacket, "EntityTransfe
 			// }
 		}
 	};
+	const ReadyStageData& GetAsReadyStage() const { return std::get<ReadyStageData>(Data); }
+	ReadyStageData& SetAsReadyStage() { return Data.emplace<ReadyStageData>(); }
+
 	struct CommitStageData : StageData
 	{
 		struct Data
@@ -86,6 +90,9 @@ class EntityTransferPacket : public TPacket<EntityTransferPacket, "EntityTransfe
 			}
 		}
 	};
+	const CommitStageData& GetAsCommitStage() const { return std::get<CommitStageData>(Data); }
+	CommitStageData& SetAsCommitStage() { return Data.emplace<CommitStageData>(); }
+
 	struct CompleteStageData : StageData
 	{
 		// boost::container::small_vector<AtlasEntityID, 10> entityIDs;
@@ -106,11 +113,16 @@ class EntityTransferPacket : public TPacket<EntityTransferPacket, "EntityTransfe
 			// }
 		}
 	};
+	const CompleteStageData& GetAsCompleteStage() const
+	{
+		return std::get<CompleteStageData>(Data);
+	}
+	CompleteStageData& SetAsCompleteStage() { return Data.emplace<CompleteStageData>(); }
+
 	UUID TransferID;
 	EntityTransferStage stage;
 	std::variant<PrepareStageData, ReadyStageData, CommitStageData, CompleteStageData> Data;
 
-   
 	void SerializeData(ByteWriter& bw) const override
 	{
 		bw.uuid(TransferID);

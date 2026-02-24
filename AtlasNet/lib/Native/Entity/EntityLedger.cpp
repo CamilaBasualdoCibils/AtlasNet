@@ -9,6 +9,7 @@
 #include "Entity/Packet/EntityTransferPacket.hpp"
 #include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Entity/Transfer/TransferCoordinator.hpp"
+#include "Global/Misc/UUID.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Interlink/Interlink.hpp"
@@ -28,19 +29,13 @@ void EntityLedger::Init()
 				{
 				}
 			});
-	sub_ClientTransferPacket = Interlink::Get().GetPacketManager().Subscribe<ClientTransferPacket>(
-		[this](const ClientTransferPacket& p, const PacketManager::PacketInfo& info)
-		{ onClientTransferPacket(p, info); });
-
-	sub_EntityTransferPacket = Interlink::Get().GetPacketManager().Subscribe<EntityTransferPacket>(
-		[this](const EntityTransferPacket& p, const PacketManager::PacketInfo& info)
-		{ onEntityTransferPacket(p, info); });
+	TransferCoordinator::Get();
 	LoopThread = std::jthread([this](std::stop_token st) { LoopThreadEntry(st); });
 };
 void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,
 											const PacketManager::PacketInfo& info)
 {
-	logger.DebugFormatted("received a EntityList request from {}", info.sender.ToString());
+	// logger.DebugFormatted("received a EntityList request from {}", info.sender.ToString());
 	LocalEntityListRequestPacket response;
 	response.status = LocalEntityListRequestPacket::MsgStatus::eResponse;
 
@@ -61,7 +56,7 @@ void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& 
 		}
 	}
 	response.Request_IncludeMetadata = p.Request_IncludeMetadata;
-	logger.DebugFormatted("responding:", info.sender.ToString());
+	// logger.DebugFormatted("responding:", info.sender.ToString());
 	Interlink::Get().SendMessage(info.sender, response, NetworkMessageSendFlag::eReliableNow);
 }
 void EntityLedger::LoopThreadEntry(std::stop_token st)
@@ -73,9 +68,18 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 			continue;
 		for (const auto& [ID, entity] : entities)
 		{
-			if (!BoundLeaser::Get().GetBound().Contains(entity.data.transform.position))
+			if (const auto& Bound = BoundLeaser::Get().GetBound();
+				!Bound.Contains(entity.data.transform.position))
 			{
+				if (TransferCoordinator::Get().IsEntityInTransfer(ID))
+				{
+					continue;
+				}
 				EntitiesNewlyOutOfBounds.push_back(ID);
+				logger.DebugFormatted(
+					"Entity out of bounds:\n - ID {}\n - EntityPos: {}\n - bounds {}",
+					UUIDGen::ToString(ID), glm::to_string(entity.data.transform.position),
+					Bound.ToDebugString());
 			}
 		}
 		if (!EntitiesNewlyOutOfBounds.empty())
@@ -85,13 +89,4 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
 	}
-}
-
-void EntityLedger::onClientTransferPacket(const ClientTransferPacket& packet,
-										  const PacketManager::PacketInfo& info)
-{
-}
-void EntityLedger::onEntityTransferPacket(const EntityTransferPacket& packet,
-										  const PacketManager::PacketInfo& info)
-{
 }
