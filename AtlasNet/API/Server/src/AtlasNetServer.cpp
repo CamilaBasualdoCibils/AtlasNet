@@ -132,8 +132,8 @@ AtlasEntity AtlasNetServer::Internal_CreateEntity(const Transform &t,
 {
 	AtlasEntity e;
 	e.Entity_ID = AtlasEntity::CreateUniqueID();
-	e.data.transform = t;
-	e.Metadata.assign(metadata.begin(), metadata.end());
+	e.transform = t;
+	e.payload.assign(metadata.begin(), metadata.end());
 	return e;
 }
 void AtlasNetServer::SyncEntities(std::span<const AtlasEntityID> ActiveEntities,

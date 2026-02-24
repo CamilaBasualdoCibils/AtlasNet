@@ -38,7 +38,7 @@ void SandboxServer::Run()
 	{
 		std::mt19937 rng(std::random_device{}());
 		std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-		for (int i = 0; i < 4; i++)
+		for (int i = 0; i < 50; i++)
 		{
 			float z = dist(rng) * 2.0f - 1.0f;					// z in [-1, 1]
 			float theta = dist(rng) * 2.0f * glm::pi<float>();	// angle around Z
@@ -50,7 +50,7 @@ void SandboxServer::Run()
 
 			vec3 velocityVec = vec3(x, y, 0);
 			Transform t;
-			t.position = vec3(0,0, 0);
+			t.position = vec3(0, 0, 0);
 			ByteWriter metadataWriter;
 			metadataWriter.vec3(velocityVec);
 			AtlasEntityHandle e = AtlasNetServer::Get().CreateEntity(t, metadataWriter.bytes());
@@ -59,57 +59,90 @@ void SandboxServer::Run()
 
 	using Clock = std::chrono::steady_clock;
 
-	auto lastTime = Clock::now();
-	constexpr float MinX = -100.f;
-	constexpr float MaxX = 100.f;
-	constexpr float MinY = -100.f;
-	constexpr float MaxY = 100.f;
-	while (!ShouldShutdown)
-	{
-		const auto now = Clock::now();
-		const std::chrono::duration<double> delta = now - lastTime;
-		lastTime = now;
+auto lastTime = Clock::now();
+auto fpsTimer = Clock::now();
 
-		const float dt = delta.count();	 // seconds as double
+constexpr double TargetFPS = 60.0;
+constexpr std::chrono::duration<double> TargetFrameTime(1.0 / TargetFPS);
 
-		EntityLedger::Get().ForEachEntity(
-			std::execution::par_unseq,
-			[&](AtlasEntity& e)
-			{
-				vec3 velocity = ByteReader(e.Metadata).vec3();
+constexpr float MinX = -100.f;
+constexpr float MaxX = 100.f;
+constexpr float MinY = -100.f;
+constexpr float MaxY = 100.f;
 
-				// Integrate
-				e.data.transform.position += velocity * dt;
+uint64_t frameCount = 0;
+double accumulatedTime = 0.0;
 
-				vec3& pos = e.data.transform.position;
+while (!ShouldShutdown)
+{
+    const auto frameStart = Clock::now();
 
-				// ---- X Axis ----
-				if (pos.x > MaxX)
-				{
-					pos.x = MaxX;
-					velocity.x *= -1.f;
-				}
-				else if (pos.x < MinX)
-				{
-					pos.x = MinX;
-					velocity.x *= -1.f;
-				}
+    const std::chrono::duration<double> delta = frameStart - lastTime;
+    lastTime = frameStart;
 
-				// ---- Y Axis ----
-				if (pos.y > MaxY)
-				{
-					pos.y = MaxY;
-					velocity.y *= -1.f;
-				}
-				else if (pos.y < MinY)
-				{
-					pos.y = MinY;
-					velocity.y *= -1.f;
-				}
+    const double dt = delta.count(); // seconds
+    accumulatedTime += dt;
+    frameCount++;
 
-				// Write velocity back if needed
-				ByteWriter metadataWriter = ByteWriter().vec3(velocity);
-				e.Metadata.assign(metadataWriter.bytes().begin(), metadataWriter.bytes().end());
-			});
-	}
+    EntityLedger::Get().ForEachEntityWrite(
+        std::execution::par_unseq,
+        [&](AtlasEntity& e)
+        {
+            vec3 velocity = ByteReader(e.payload).vec3();
+
+            // Integrate
+            e.transform.position += velocity * static_cast<float>(dt);
+            vec3& pos = e.transform.position;
+
+            // ---- X Axis ----
+            if (pos.x > MaxX)
+            {
+                pos.x = MaxX;
+                velocity.x *= -1.f;
+            }
+            else if (pos.x < MinX)
+            {
+                pos.x = MinX;
+                velocity.x *= -1.f;
+            }
+
+            // ---- Y Axis ----
+            if (pos.y > MaxY)
+            {
+                pos.y = MaxY;
+                velocity.y *= -1.f;
+            }
+            else if (pos.y < MinY)
+            {
+                pos.y = MinY;
+                velocity.y *= -1.f;
+            }
+
+            ByteWriter metadataWriter = ByteWriter().vec3(velocity);
+            e.payload.assign(metadataWriter.bytes().begin(), metadataWriter.bytes().end());
+        });
+
+    // ---- FPS print every second ----
+    const auto now = Clock::now();
+    const std::chrono::duration<double> fpsElapsed = now - fpsTimer;
+
+    if (fpsElapsed.count() >= 1.0)
+    {
+        const double avgFPS = frameCount / accumulatedTime;
+        std::cout << "Active FPS: " << avgFPS << std::endl;
+
+        frameCount = 0;
+        accumulatedTime = 0.0;
+        fpsTimer = now;
+    }
+
+    // ---- Frame limiting to 60 FPS ----
+    const auto frameEnd = Clock::now();
+    const std::chrono::duration<double> frameTime = frameEnd - frameStart;
+
+    if (frameTime < TargetFrameTime)
+    {
+        std::this_thread::sleep_for(TargetFrameTime - frameTime);
+    }
+}
 }

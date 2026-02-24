@@ -131,7 +131,7 @@ public:
     }
 };
 
-#define ATLASNET_REGISTER_PACKET(Type, Name)                     \
+#define ATLASNET_REGISTER_PACKET(Type)                     \
     static const bool Type##_registered = []() -> bool {         \
         PacketRegistry::Get().Register(HashString(Type::GetPacketNameStatic().data()),         \
                                        &Type::Create);           \

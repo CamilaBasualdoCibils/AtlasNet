@@ -35,7 +35,6 @@ void EntityLedger::Init()
 void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,
 											const PacketManager::PacketInfo& info)
 {
-			std::lock_guard<std::mutex> lock(EntityListMutex);
 	// logger.DebugFormatted("received a EntityList request from {}", info.sender.ToString());
 	LocalEntityListRequestPacket response;
 	response.status = LocalEntityListRequestPacket::MsgStatus::eResponse;
@@ -43,18 +42,24 @@ void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& 
 	if (p.Request_IncludeMetadata)
 	{
 		auto& vec = response.Response_Entities.emplace<std::vector<AtlasEntity>>();
-		for (const auto& [ID, entity] : entities)
-		{
-			vec.emplace_back(entity);
-		}
+		 _ReadLock([&]()
+        {
+            for (const auto& [ID, entity] : entities)
+            {
+                vec.emplace_back(entity);
+            }
+        });
 	}
 	else
 	{
 		auto& vec = response.Response_Entities.emplace<std::vector<AtlasEntityMinimal>>();
-		for (const auto& [ID, entity] : entities)
-		{
-			vec.emplace_back((AtlasEntityMinimal)entity);
-		}
+		_ReadLock([&]()
+        {
+            for (const auto& [ID, entity] : entities)
+            {
+                vec.emplace_back(static_cast<AtlasEntityMinimal>(entity));
+            }
+        });
 	}
 	response.Request_IncludeMetadata = p.Request_IncludeMetadata;
 	// logger.DebugFormatted("responding:", info.sender.ToString());
@@ -73,12 +78,12 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 
         // copy entity IDs + positions under lock, then release
         std::vector<std::pair<AtlasEntityID, glm::vec3>> snapshot;
+         _ReadLock([&]()
         {
-            std::lock_guard<std::mutex> lock(EntityListMutex);
             snapshot.reserve(entities.size());
             for (const auto& [ID, entity] : entities)
-                snapshot.emplace_back(ID, entity.data.transform.position);
-        }
+                snapshot.emplace_back(ID, entity.transform.position);
+        });
 
         const auto& Bound = BoundLeaser::Get().GetBound();
         for (const auto& [ID, pos] : snapshot)
