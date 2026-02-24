@@ -1,6 +1,7 @@
 #include "SandboxServer.hpp"
 
 #include <chrono>
+#include <execution>
 #include <thread>
 
 #include "AtlasNetServer.hpp"
@@ -37,19 +38,19 @@ void SandboxServer::Run()
 	{
 		std::mt19937 rng(std::random_device{}());
 		std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-		for (int i = 0; i < 1; i++)
+		for (int i = 0; i < 4; i++)
 		{
 			float z = dist(rng) * 2.0f - 1.0f;					// z in [-1, 1]
 			float theta = dist(rng) * 2.0f * glm::pi<float>();	// angle around Z
 
-			float r = std::sqrt(1.0f - z * z) * 30.0f;
+			float r = std::sqrt(1.0f - z * z) * 120.0f;
 
 			float x = r * std::cos(theta);
 			float y = r * std::sin(theta);
 
 			vec3 velocityVec = vec3(x, y, 0);
 			Transform t;
-			t.position = vec3((vec2)Bound.GetCenter(), 0);
+			t.position = vec3(0,0, 0);
 			ByteWriter metadataWriter;
 			metadataWriter.vec3(velocityVec);
 			AtlasEntityHandle e = AtlasNetServer::Get().CreateEntity(t, metadataWriter.bytes());
@@ -72,6 +73,7 @@ void SandboxServer::Run()
 		const float dt = delta.count();	 // seconds as double
 
 		EntityLedger::Get().ForEachEntity(
+			std::execution::par_unseq,
 			[&](AtlasEntity& e)
 			{
 				vec3 velocity = ByteReader(e.Metadata).vec3();

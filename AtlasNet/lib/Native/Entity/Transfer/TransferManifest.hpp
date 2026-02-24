@@ -78,6 +78,18 @@ class TransferManifest : public Singleton<TransferManifest>
 				return r.command(cmd.begin(), cmd.end());
 			});
 	}
+	void DeleteTransferInfo(TransferID ID)
+	{
+		const std::string path = ".EntityTransfers." + UUIDGen::ToString(ID);
+
+		(void)InternalDB::Get()->WithSync(
+			[&](auto& r)
+			{
+				std::array<std::string, 3> cmd = {"JSON.DEL", TransferManifestTableName, path};
+
+				return r.command(cmd.begin(), cmd.end());
+			});
+	}
 };
 
 /*

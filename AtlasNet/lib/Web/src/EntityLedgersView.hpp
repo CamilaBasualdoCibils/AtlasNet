@@ -111,7 +111,7 @@ class EntityLedgersView
 				p.status = LocalEntityListRequestPacket::MsgStatus::eQuery;
 				p.Request_IncludeMetadata = false;
 
-				Interlink::Get().SendMessage(netID, p, NetworkMessageSendFlag::eReliableNow);
+				Interlink::Get().SendMessage(netID, p, NetworkMessageSendFlag::eUnreliableNow);
 
 				++RequestsUnanswered;
 			}

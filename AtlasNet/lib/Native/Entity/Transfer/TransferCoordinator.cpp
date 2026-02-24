@@ -29,8 +29,8 @@ void TransferCoordinator::ParseEntitiesForTargets()
 		// transfered
 		if (EntitiesInTransfer.contains(entityID))
 		{
-			logger.ErrorFormatted("Entiy {} already marked as in transfer",
-								  UUIDGen::ToString(entityID));
+		//	logger.ErrorFormatted("Entiy {} already marked as in transfer",
+		//						  UUIDGen::ToString(entityID));
 			continue;
 		}
 
@@ -47,12 +47,12 @@ void TransferCoordinator::ParseEntitiesForTargets()
 		// if not a bound, aka outside any bound then continue
 		if (!boundsID.has_value())
 		{
-			logger.ErrorFormatted("Entiy {}, was not able to find a correspoinding bound",
-								  UUIDGen::ToString(entityID));
+		//	logger.ErrorFormatted("Entiy {}, was not able to find a correspoinding bound",
+		//						  UUIDGen::ToString(entityID));
 			continue;
 		}
-		logger.ErrorFormatted("Entiy {} scheduled for transfer to {}", UUIDGen::ToString(entityID),
-							  *boundsID);
+		//logger.ErrorFormatted("Entiy {} scheduled for transfer to {}", UUIDGen::ToString(entityID),
+		//					  *boundsID);
 		NewEntityTransfers[*boundsID].entityIDs.push_back(entityID);
 
 		// heuristic->QueryPosition(vec3 p)
@@ -185,6 +185,13 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 			for (const AtlasEntityID EntityID : TransferEntryIt->entityIDs)
 			{
 				EntityTransferPacket::CommitStageData::Data d;
+				if (!EntityLedger::Get().ExistsEntity(EntityID))
+				{
+					logger.WarningFormatted(
+						"Entity {}  was scheduled for transfer {} but its gone?!?",
+						UUIDGen::ToString(EntityID), UUIDGen::ToString(p.TransferID));
+					continue;
+				}
 				d.Snapshot = EntityLedger::Get().GetAndEraseEntity(EntityID);
 				commitData.entitySnapshots.push_back(d);
 			}
@@ -238,6 +245,7 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 			EntityTransfers.erase(EntityTransfers.get<TransferByID>().find(p.TransferID));
 			logger.DebugFormatted("Entity Transfer Complete\n - ID:{}",
 								  UUIDGen::ToString(p.TransferID));
+								  TransferManifest::Get().DeleteTransferInfo(p.TransferID);
 		}
 		break;
 	}

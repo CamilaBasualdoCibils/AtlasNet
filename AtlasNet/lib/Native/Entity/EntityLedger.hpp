@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <boost/container/flat_map.hpp>
 #include <mutex>
 #include <queue>
@@ -26,18 +27,17 @@ class EntityLedger : public Singleton<EntityLedger>
    private:
 	const AtlasEntity& _GetEntity(AtlasEntityID ID) const { return entities.at(ID); }
 	void _EraseEntity(AtlasEntityID ID) { entities.erase(ID); }
+	bool _ExistsEntity(AtlasEntityID ID) const { return entities.contains(ID); }
 
    public:
 	void Init();
-	template <typename Func>
-	void ForEachEntity(Func&& fn)
+	template <typename ExecutionPolicy, typename Func>
+	void ForEachEntity(ExecutionPolicy&& policy, Func&& fn)
 	{
 		std::lock_guard<std::mutex> lock(EntityListMutex);
 
-		for (auto& [id, entity] : entities)
-		{
-			fn(entity);
-		}
+		std::for_each(std::forward<ExecutionPolicy>(policy), entities.begin(), entities.end(),
+					  [fn = fn](auto& e) { fn(e.second); });
 	}
 	void RegisterNewEntity(const AtlasEntity& e)
 	{
@@ -64,6 +64,11 @@ class EntityLedger : public Singleton<EntityLedger>
 
 		_EraseEntity(ID);
 	}
+	bool ExistsEntity(AtlasEntityID ID) const
+	{
+		std::lock_guard<std::mutex> lock(EntityListMutex);
+		return _ExistsEntity(ID);
+	}
 	[[nodiscard]] AtlasEntity GetAndEraseEntity(AtlasEntityID ID)
 	{
 		std::lock_guard<std::mutex> lock(EntityListMutex);
@@ -72,7 +77,12 @@ class EntityLedger : public Singleton<EntityLedger>
 		return e;
 	}
 
-	void AddEntity(const AtlasEntity& e) { entities.insert(std::make_pair(e.Entity_ID, e)); }
+	void AddEntity(const AtlasEntity& e)
+	{
+		std::lock_guard<std::mutex> lock(EntityListMutex);
+
+		entities.insert(std::make_pair(e.Entity_ID, e));
+	}
 
    private:
 	void OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,
