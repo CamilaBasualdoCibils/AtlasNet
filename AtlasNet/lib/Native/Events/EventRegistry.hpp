@@ -99,9 +99,9 @@ class EventRegistry : public Singleton<EventRegistry>
     }
 };
 
-#define ATLASNET_REGISTER_EVENT(Type, Name)                  \
-	static const bool Event_Type##_registered = []() -> bool \
-	{                                                        \
-		EventRegistry::Get().RegisterEvent<Type>(Name);      \
-		return true;                                         \
+#define ATLASNET_REGISTER_EVENT(Type)                         \
+	static const bool Type##_registered = []() -> bool        \
+	{                                                         \
+		EventRegistry::Get().RegisterEvent<Type>(#Type);      \
+		return true;                                          \
 	}()

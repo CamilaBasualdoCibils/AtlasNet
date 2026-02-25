@@ -33,7 +33,6 @@ void TransferCoordinator::ParseEntitiesForTargets()
 			//						  UUIDGen::ToString(entityID));
 			continue;
 		}
-
 		if (EntityLedger::Get()._ReadLock(
 				[&]()
 				{

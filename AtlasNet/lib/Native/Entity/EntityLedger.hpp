@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <boost/container/flat_map.hpp>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <shared_mutex>
@@ -63,15 +64,6 @@ class EntityLedger : public Singleton<EntityLedger>
 			{
 				std::for_each(std::forward<ExecutionPolicy>(policy), entities.begin(),
 							  entities.end(), [fn = fn](const auto& e) { fn(e.second); });
-			});
-	}
-	void RegisterNewEntity(const AtlasEntity& e)
-	{
-		_WriteLock(
-			[&]()
-			{
-				ASSERT(!entities.contains(e.Entity_ID), "Duplicate Entities");
-				entities.insert(std::make_pair(e.Entity_ID, e));
 			});
 	}
 	[[nodiscard]] bool IsEntityClient(AtlasEntityID ID) const

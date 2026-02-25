@@ -2,10 +2,12 @@
 
 #include <SandboxWorld.hpp>
 
+#include "AtlasNetServer.hpp"
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
 #include "Entity/EntityHandle.hpp"
-class SandboxServer
+
+class SandboxServer : IAtlasNetServer
 {
 	Log logger = Log("Sandbox");
 	SandboxWorld world;
@@ -14,5 +16,6 @@ class SandboxServer
    public:
 	void Run();
 
-	
+	private:
+	 void OnClientSpawn(const ClientSpawnInfo& c) override;
 };

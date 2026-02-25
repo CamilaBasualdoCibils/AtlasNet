@@ -27,7 +27,7 @@ struct ClientSpawnPacket : public TPacket<ClientSpawnPacket, "ClientSpawnPacket"
 	{
 		struct NewClientData
 		{
-			ClientID clientID;
+			Client client;
 			Transform spawn_Location;
 		};
 		boost::container::small_vector<NewClientData, 10> incomingClients;
@@ -36,7 +36,7 @@ struct ClientSpawnPacket : public TPacket<ClientSpawnPacket, "ClientSpawnPacket"
 			bw.u64(incomingClients.size());
 			for (const auto& cd : incomingClients)
 			{
-				bw.uuid(cd.clientID);
+				cd.client.Serialize(bw);
 				cd.spawn_Location.Serialize(bw);
 			}
 		}
@@ -46,7 +46,7 @@ struct ClientSpawnPacket : public TPacket<ClientSpawnPacket, "ClientSpawnPacket"
 			for (uint64 i = 0; i < incomingClients.size(); i++)
 			{
 				NewClientData& d = incomingClients[i];
-				d.clientID = br.uuid();
+				d.client.Deserialize(br);
 				d.spawn_Location.Deserialize(br);
 			}
 		}

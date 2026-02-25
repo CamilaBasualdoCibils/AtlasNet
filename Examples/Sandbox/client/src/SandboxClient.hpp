@@ -19,6 +19,6 @@ class SandboxClient
     void RenderView();
 public:
 
-    void Run();
+    void Run(const IPAddress& address);
     Log &GetLogger() const { return logger; }
 };

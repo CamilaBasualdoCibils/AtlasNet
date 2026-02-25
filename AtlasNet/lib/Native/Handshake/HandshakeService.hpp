@@ -45,7 +45,7 @@ class HandshakeService : public Singleton<HandshakeService>
 		csp.stage = ClientSpawnPacket::eNotification;
 		csp.SetAsNotification().incomingClients.push_back(
 			ClientSpawnPacket::NotificationData::NewClientData{
-				.clientID = c.ID, .spawn_Location = r.SpawnWorldLocation});
+				.client = c, .spawn_Location = r.SpawnWorldLocation});
 		Interlink::Get().SendMessage(*targetShard, csp, NetworkMessageSendFlag::eReliableBatched);
 	}
 	[[nodiscard]] ClientVerifyReply VerifyClient(const Client& c)

@@ -774,7 +774,7 @@ void Interlink::OnClientConnected(const Connection &c)
 		ClientManifest::Get().RegisterClient(client);
 		ClientManifest::Get().AssignProxyClient(client.ID, NetworkCredentials::Get().GetID());
 
-		ClientConnectEvent cce;
+		ClientHandshakeEvent cce;
 		cce.client = client;
 		cce.ConnectedProxy = NetworkCredentials::Get().GetID();
 		EventSystem::Get().Dispatch(cce);
