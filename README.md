@@ -224,9 +224,13 @@ networks:
 
 The repo includes a **dev container** (`.devcontainer/`) with:
 
-- vcpkg, Docker-in-Docker, Node.js (LTS)
+- vcpkg, Docker-outside-of-Docker (host socket), Node.js (LTS)
 - Extensions: CMake, Clangd, Docker, etc.
 
 Use it in VS Code/Cursor with “Reopen in Container” to get a consistent build and run environment.
 
+To build images and spawn a runtime container on the host daemon from CMake:
+```bash
+cmake --build build --target AtlasnetDockerRun_Host
+```
 
