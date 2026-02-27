@@ -90,6 +90,27 @@ export function MapHud({
     2,
     Math.ceil(interactionSensitivity + INTERACTION_SENSITIVITY_SLIDER_HEADROOM)
   );
+  const pollDisabled = pollIntervalMs >= maxPollIntervalMs;
+  const pollSupportsOneMsSpecialCase = minPollIntervalMs === 1;
+  const pollSliderMin = pollSupportsOneMsSpecialCase ? 0 : minPollIntervalMs;
+  const pollSliderStep = 5;
+  const pollSliderValue =
+    pollSupportsOneMsSpecialCase && pollIntervalMs <= minPollIntervalMs
+      ? 0
+      : pollIntervalMs;
+  function handlePollIntervalChange(rawValue: string): void {
+    const nextValue = parseBoundedNumber(
+      rawValue,
+      pollSliderMin,
+      maxPollIntervalMs,
+      pollSliderMin
+    );
+    if (pollSupportsOneMsSpecialCase && nextValue <= pollSliderMin) {
+      onSetPollIntervalMs(minPollIntervalMs);
+      return;
+    }
+    onSetPollIntervalMs(nextValue);
+  }
 
   return (
     <div
@@ -230,22 +251,13 @@ export function MapHud({
       >
         <input
           type="range"
-          min={minPollIntervalMs}
+          min={pollSliderMin}
           max={maxPollIntervalMs}
-          step={50}
-          value={pollIntervalMs}
-          onChange={(event) =>
-            onSetPollIntervalMs(
-              parseBoundedNumber(
-                event.target.value,
-                minPollIntervalMs,
-                maxPollIntervalMs,
-                minPollIntervalMs
-              )
-            )
-          }
+          step={pollSliderStep}
+          value={pollSliderValue}
+          onChange={(event) => handlePollIntervalChange(event.target.value)}
         />
-        poll: {pollIntervalMs}ms
+        poll: {pollDisabled ? 'off' : `${pollIntervalMs}ms`}
       </label>
     </div>
   );

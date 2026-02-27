@@ -22,6 +22,7 @@ import { ShardHoverTooltip } from './components/ShardHoverTooltip';
 const DEFAULT_POLL_INTERVAL_MS = 50;
 const MIN_POLL_INTERVAL_MS = 1;
 const MAX_POLL_INTERVAL_MS = 1000;
+const POLL_DISABLED_AT_MS = MAX_POLL_INTERVAL_MS;
 const DEFAULT_ENTITY_DETAIL_POLL_INTERVAL_MS = 1000;
 const MIN_ENTITY_DETAIL_POLL_INTERVAL_MS = 250;
 const MAX_ENTITY_DETAIL_POLL_INTERVAL_MS = 5000;
@@ -50,23 +51,26 @@ export default function MapPage() {
     DEFAULT_ENTITY_DETAIL_POLL_INTERVAL_MS
   );
 
+  const telemetryPollIntervalMs =
+    pollIntervalMs >= POLL_DISABLED_AT_MS ? 0 : pollIntervalMs;
   const baseShapes = useHeuristicShapes({
-    intervalMs: pollIntervalMs,
+    intervalMs: telemetryPollIntervalMs,
     resetOnException: true,
     resetOnHttpError: false,
   });
   const networkTelemetry = useNetworkTelemetry({
-    intervalMs: pollIntervalMs,
+    intervalMs: telemetryPollIntervalMs,
     resetOnException: true,
     resetOnHttpError: false,
   });
   const authorityEntities = useAuthorityEntities({
-    intervalMs: pollIntervalMs,
+    intervalMs: telemetryPollIntervalMs,
     resetOnException: true,
     resetOnHttpError: false,
   });
   const shardPlacement = useShardPlacement({
-    intervalMs: Math.max(1000, pollIntervalMs),
+    intervalMs:
+      telemetryPollIntervalMs <= 0 ? 0 : Math.max(1000, telemetryPollIntervalMs),
     enabled: true,
     resetOnException: false,
     resetOnHttpError: false,

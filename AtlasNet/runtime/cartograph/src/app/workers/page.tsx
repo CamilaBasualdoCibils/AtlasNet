@@ -10,8 +10,9 @@ import type {
 import { useShardPlacement, useWorkersSnapshot } from '../lib/hooks/useTelemetryFeeds';
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
-const MIN_POLL_INTERVAL_MS = 0;
+const MIN_POLL_INTERVAL_MS = 1000;
 const MAX_POLL_INTERVAL_MS = 30000;
+const POLL_DISABLED_AT_MS = MAX_POLL_INTERVAL_MS;
 const POLL_STEP_MS = 1000;
 
 interface WorkerNodeView {
@@ -495,15 +496,18 @@ export default function WorkersPage() {
   const [pollIntervalMs, setPollIntervalMs] = useState(DEFAULT_POLL_INTERVAL_MS);
   const [selectedNodeKey, setSelectedNodeKey] = useState<string | null>(null);
   const [selectedContainerByWorker, setSelectedContainerByWorker] = useState<Record<string, string>>({});
+  const telemetryPollIntervalMs =
+    pollIntervalMs >= POLL_DISABLED_AT_MS ? 0 : pollIntervalMs;
 
   const snapshot = useWorkersSnapshot({
-    intervalMs: pollIntervalMs,
+    intervalMs: telemetryPollIntervalMs,
     enabled: true,
     resetOnException: false,
     resetOnHttpError: false,
   });
   const shardPlacement = useShardPlacement({
-    intervalMs: Math.max(1000, pollIntervalMs),
+    intervalMs:
+      telemetryPollIntervalMs === 0 ? 0 : Math.max(1000, telemetryPollIntervalMs),
     enabled: true,
     resetOnException: false,
     resetOnHttpError: false,
@@ -755,7 +759,11 @@ export default function WorkersPage() {
                 )
               }
             />
-            <span>{pollIntervalMs <= 0 ? 'off' : `${pollIntervalMs}ms`}</span>
+            <span>
+              {pollIntervalMs >= POLL_DISABLED_AT_MS
+                ? 'off'
+                : `${pollIntervalMs}ms`}
+            </span>
           </label>
         </div>
 
