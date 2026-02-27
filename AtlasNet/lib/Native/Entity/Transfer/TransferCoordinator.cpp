@@ -1,6 +1,7 @@
 #include "TransferCoordinator.hpp"
 
 #include <algorithm>
+#include <exception>
 
 #include "Entity/Entity.hpp"
 #include "Entity/EntityEnums.hpp"
@@ -17,7 +18,21 @@ void TransferCoordinator::ParseEntitiesForTargets()
 {
 	std::lock_guard<std::mutex> lock(EntityTransferMutex);
 
-	const std::unique_ptr<IHeuristic> heuristic = HeuristicManifest::Get().PullHeuristic();
+	std::unique_ptr<IHeuristic> heuristic;
+	try
+	{
+		heuristic = HeuristicManifest::Get().PullHeuristic();
+	}
+	catch (const std::exception& e)
+	{
+		logger.WarningFormatted("Skipping transfer parse; heuristic unavailable: {}", e.what());
+		return;
+	}
+	if (!heuristic)
+	{
+		logger.Warning("Skipping transfer parse; heuristic is null.");
+		return;
+	}
 	std::unordered_map<IBounds::BoundsID, EntityTransferData> NewEntityTransfers;
 
 	while (!EntitiesToParseForReceiver.empty())

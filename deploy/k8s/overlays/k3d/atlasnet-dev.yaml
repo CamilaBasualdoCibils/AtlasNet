@@ -3,6 +3,75 @@ kind: Namespace
 metadata:
   name: __NAMESPACE__
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-watchdog
+  namespace: __NAMESPACE__
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: atlasnet-watchdog-scaler
+  namespace: __NAMESPACE__
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/scale
+    verbs:
+      - get
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: atlasnet-watchdog-scaler
+  namespace: __NAMESPACE__
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-watchdog
+    namespace: __NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: atlasnet-watchdog-scaler
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: atlasnet-cartograph-reader
+  namespace: __NAMESPACE__
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: atlasnet-cartograph-reader
+  namespace: __NAMESPACE__
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-cartograph
+    namespace: __NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: atlasnet-cartograph-reader
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -22,18 +91,30 @@ spec:
         app: atlasnet-watchdog
         atlasnet.role: watchdog
     spec:
+      serviceAccountName: atlasnet-watchdog
       containers:
         - name: watchdog
           image: watchdog:latest
           imagePullPolicy: IfNotPresent
-          volumeMounts:
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
-      volumes:
-        - name: docker-sock
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ATLASNET_SHARD_DEPLOYMENT
+              value: atlasnet-shard
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+          ports:
+            - name: interlink
+              containerPort: 25555
+              protocol: TCP
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -58,6 +139,19 @@ spec:
         - name: shard
           image: __SHARD_IMAGE__
           imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+          ports:
+            - name: interlink
+              containerPort: 25555
+              protocol: TCP
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -123,10 +217,24 @@ spec:
       labels:
         app: atlasnet-cartograph
     spec:
+      serviceAccountName: atlasnet-cartograph
       containers:
         - name: cartograph
           image: cartograph:latest
           imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
           ports:
             - name: http
               containerPort: 3000
@@ -134,14 +242,6 @@ spec:
             - name: inspect
               containerPort: 9229
               protocol: TCP
-          volumeMounts:
-            - name: docker-sock
-              mountPath: /var/run/docker.sock
-      volumes:
-        - name: docker-sock
-          hostPath:
-            path: /var/run/docker.sock
-            type: Socket
 ---
 apiVersion: v1
 kind: Service
@@ -188,6 +288,14 @@ spec:
               value: "1"
             - name: HANDSHAKE_SERVICE_IP
               value: postgres
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
           ports:
             - name: proxy-tcp
               containerPort: 25568
@@ -195,6 +303,9 @@ spec:
             - name: proxy-udp
               containerPort: 25568
               protocol: UDP
+            - name: interlink
+              containerPort: 25555
+              protocol: TCP
 ---
 apiVersion: v1
 kind: Service

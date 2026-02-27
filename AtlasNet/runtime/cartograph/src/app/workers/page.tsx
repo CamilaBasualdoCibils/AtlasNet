@@ -65,7 +65,7 @@ function WorkerDaemonCard({ daemon }: { daemon: WorkerDaemonTelemetry | null }) 
   if (!daemon) {
     return (
       <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 text-sm text-slate-400">
-        Daemon details unavailable for this worker.
+        Runtime details unavailable for this worker.
       </div>
     );
   }
@@ -73,7 +73,7 @@ function WorkerDaemonCard({ daemon }: { daemon: WorkerDaemonTelemetry | null }) 
   return (
     <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
       <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-        Docker Daemon
+        Runtime Control Plane
       </h2>
       <dl className="grid grid-cols-[140px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm">
         <WorkerDetailRow label="Name" value={daemon.name} />
@@ -83,7 +83,7 @@ function WorkerDaemonCard({ daemon }: { daemon: WorkerDaemonTelemetry | null }) 
         <WorkerDetailRow label="Arch" value={daemon.architecture} />
         <WorkerDetailRow label="CPUs" value={String(daemon.cpuCount)} />
         <WorkerDetailRow label="Memory" value={formatBytes(daemon.memoryTotalBytes)} />
-        <WorkerDetailRow label="Swarm State" value={daemon.swarmState || 'inactive'} />
+        <WorkerDetailRow label="Orchestrator State" value={daemon.swarmState || 'inactive'} />
         <WorkerDetailRow
           label="Node Address"
           value={daemon.swarmNodeAddress || '-'}
@@ -100,7 +100,7 @@ function WorkerNodesTable({ nodes }: { nodes: WorkerSwarmNodeTelemetry[] }) {
         Connected Nodes
       </div>
       {nodes.length === 0 ? (
-        <div className="px-4 py-4 text-sm text-slate-500">No swarm node data reported.</div>
+        <div className="px-4 py-4 text-sm text-slate-500">No node data reported.</div>
       ) : (
         <div className="overflow-x-auto">
           <table className="min-w-full text-left text-sm">
@@ -257,7 +257,7 @@ export default function WorkersPage() {
           ))}
           {contexts.length === 0 && (
             <div className="rounded border border-slate-700 bg-slate-950 px-2 py-2 text-xs text-slate-500">
-              No Docker workers detected.
+              No worker contexts detected.
             </div>
           )}
         </div>
@@ -267,7 +267,7 @@ export default function WorkersPage() {
         <div>
           <h1 className="text-2xl font-semibold text-slate-100">Workers</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Full Docker context, machine, and container details for connected workers.
+            Full worker context, node, and workload details for connected runtimes.
           </p>
           <p className="mt-1 text-xs text-slate-500">
             Last updated: {formatUpdatedAt(snapshot.collectedAtMs)}

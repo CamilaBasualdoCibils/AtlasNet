@@ -241,8 +241,29 @@ kctl -n "$NAMESPACE" delete svc atlasnet-internaldb --ignore-not-found >/dev/nul
 
 echo "==> Waiting for core deployments..."
 kctl -n "$NAMESPACE" rollout status deployment/atlasnet-internaldb --timeout=180s
+kctl -n "$NAMESPACE" rollout status deployment/atlasnet-watchdog --timeout=180s
 kctl -n "$NAMESPACE" rollout status deployment/atlasnet-proxy --timeout=180s
 kctl -n "$NAMESPACE" rollout status deployment/atlasnet-cartograph --timeout=180s
+
+echo "==> Waiting for watchdog-driven shard scale-up..."
+shard_ready=false
+for _attempt in {1..90}; do
+    desired="$(kctl -n "$NAMESPACE" get deployment atlasnet-shard -o jsonpath='{.spec.replicas}' 2>/dev/null || echo 0)"
+    ready="$(kctl -n "$NAMESPACE" get deployment atlasnet-shard -o jsonpath='{.status.readyReplicas}' 2>/dev/null || echo 0)"
+    desired="${desired:-0}"
+    ready="${ready:-0}"
+
+    if [[ "$desired" =~ ^[0-9]+$ && "$ready" =~ ^[0-9]+$ && "$desired" -gt 0 && "$ready" -ge 1 ]]; then
+        echo "   - shard deployment desired=${desired}, ready=${ready}"
+        shard_ready=true
+        break
+    fi
+    sleep 2
+done
+
+if [[ "$shard_ready" != true ]]; then
+    echo "Warning: shard deployment did not report a ready replica within timeout."
+fi
 
 echo
 echo "Kubernetes services in namespace '$NAMESPACE':"
