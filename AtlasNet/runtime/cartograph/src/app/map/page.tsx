@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useMapDerivedData } from '../lib/hooks/useMapDerivedData';
 import { useShardHoverState } from '../lib/hooks/useShardHoverState';
 import {
   useAuthorityEntities,
   useHeuristicShapes,
   useNetworkTelemetry,
+  useShardPlacement,
 } from '../lib/hooks/useTelemetryFeeds';
 import {
   createMapRenderer,
@@ -62,6 +63,12 @@ export default function MapPage() {
   const authorityEntities = useAuthorityEntities({
     intervalMs: pollIntervalMs,
     resetOnException: true,
+    resetOnHttpError: false,
+  });
+  const shardPlacement = useShardPlacement({
+    intervalMs: Math.max(1000, pollIntervalMs),
+    enabled: true,
+    resetOnException: false,
     resetOnHttpError: false,
   });
   const {
@@ -189,6 +196,21 @@ export default function MapPage() {
   const hoveredTelemetry = hoveredShardId
     ? shardTelemetryById.get(hoveredShardId)
     : undefined;
+  const shardWorkerNodeById = useMemo(() => {
+    const out = new Map<string, string>();
+    for (const row of shardPlacement) {
+      const shardId = String(row.shardId || '').trim();
+      const nodeName = String(row.nodeName || '').trim();
+      if (!shardId || !nodeName || out.has(shardId)) {
+        continue;
+      }
+      out.set(shardId, nodeName);
+    }
+    return out;
+  }, [shardPlacement]);
+  const hoveredShardWorkerNode = hoveredShardId
+    ? shardWorkerNodeById.get(String(hoveredShardId).trim()) ?? null
+    : null;
 
   return (
     <div
@@ -227,6 +249,7 @@ export default function MapPage() {
             downloadBytesPerSec={hoveredTelemetry?.downloadKbps ?? 0}
             uploadBytesPerSec={hoveredTelemetry?.uploadKbps ?? 0}
             outgoingConnectionCount={hoveredShardEdgeLabels.length}
+            workerNodeName={hoveredShardWorkerNode}
           />
         )}
 

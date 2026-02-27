@@ -38,6 +38,13 @@ export interface ShardTelemetry {
   connections: ConnectionTelemetry[];
 }
 
+export interface ShardPlacementTelemetry {
+  shardId: string;
+  nodeName: string | null;
+  podName: string | null;
+  podIp: string | null;
+}
+
 export interface AuthorityEntityTelemetry {
   entityId: string;
   ownerId: string;

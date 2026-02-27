@@ -7,6 +7,7 @@ const AUTHORITY_TELEMETRY_KEY = 'Authority_Telemetry';
 const HEALTH_PING_KEY = 'Health_Ping';
 const NETWORK_TELEMETRY_KEY = 'Network_Telemetry';
 const HEURISTIC_MANIFEST_KEY = 'HeuristicManifest';
+const NODE_MANIFEST_SHARD_NODE_KEY = 'Node Manifest Shard_Node';
 
 const AUTHORITY_TELEMETRY_COLUMN_COUNT = 7;
 const NETWORK_TELEMETRY_COLUMN_COUNT = 13;
@@ -140,6 +141,46 @@ function normalizeRedisJsonPayload(payload) {
   } catch {
     return null;
   }
+}
+
+function parseNodeManifestPayload(payload) {
+  if (payload == null) {
+    return null;
+  }
+
+  let parsed = null;
+  if (Buffer.isBuffer(payload)) {
+    try {
+      parsed = JSON.parse(payload.toString('utf8'));
+    } catch {
+      return null;
+    }
+  } else if (typeof payload === 'string') {
+    try {
+      parsed = JSON.parse(payload);
+    } catch {
+      return null;
+    }
+  } else if (payload && typeof payload === 'object') {
+    parsed = payload;
+  }
+
+  if (!parsed || typeof parsed !== 'object') {
+    return null;
+  }
+
+  const nodeName = typeof parsed.nodeName === 'string' ? parsed.nodeName.trim() : '';
+  const podName = typeof parsed.podName === 'string' ? parsed.podName.trim() : '';
+  const podIp = typeof parsed.podIp === 'string' ? parsed.podIp.trim() : '';
+  if (!nodeName && !podName && !podIp) {
+    return null;
+  }
+
+  return {
+    nodeName: nodeName || null,
+    podName: podName || null,
+    podIp: podIp || null,
+  };
 }
 
 function decodeGridShapeBounds(base64Value) {
@@ -280,6 +321,61 @@ async function readNetworkTelemetryFromDatabase() {
       }
 
       return buildNetworkTelemetry(liveShardIds, rows);
+    })) || []
+  );
+}
+
+async function readShardPlacementFromDatabase() {
+  return (
+    (await withInternalDatabase(async (client) => {
+      const liveIdsRaw =
+        typeof client.hkeysBuffer === 'function'
+          ? await client.hkeysBuffer(HEALTH_PING_KEY)
+          : await client.hkeys(HEALTH_PING_KEY);
+      const liveShardSet = new Set();
+      if (Array.isArray(liveIdsRaw)) {
+        for (const rawId of liveIdsRaw) {
+          const shardId = decodeNetworkIdentity(rawId).trim();
+          if (shardId.startsWith('eShard ')) {
+            liveShardSet.add(shardId);
+          }
+        }
+      }
+
+      const fieldKeys =
+        typeof client.hkeysBuffer === 'function'
+          ? await client.hkeysBuffer(NODE_MANIFEST_SHARD_NODE_KEY)
+          : await client.hkeys(NODE_MANIFEST_SHARD_NODE_KEY);
+      if (!Array.isArray(fieldKeys) || fieldKeys.length === 0) {
+        return [];
+      }
+
+      const rows = [];
+      for (const rawField of fieldKeys) {
+        const shardId = decodeNetworkIdentity(rawField).trim();
+        if (!shardId.startsWith('eShard ') || !liveShardSet.has(shardId)) {
+          continue;
+        }
+
+        const rawPayload =
+          typeof client.hgetBuffer === 'function'
+            ? await client.hgetBuffer(NODE_MANIFEST_SHARD_NODE_KEY, rawField)
+            : await client.hget(NODE_MANIFEST_SHARD_NODE_KEY, rawField);
+        const placement = parseNodeManifestPayload(rawPayload);
+        if (!placement) {
+          continue;
+        }
+
+        rows.push({
+          shardId,
+          nodeName: placement.nodeName,
+          podName: placement.podName,
+          podIp: placement.podIp,
+        });
+      }
+
+      rows.sort((left, right) => left.shardId.localeCompare(right.shardId));
+      return rows;
     })) || []
   );
 }
@@ -436,6 +532,7 @@ async function readHeuristicTypeFromDatabase() {
 module.exports = {
   readAuthorityTelemetryFromDatabase,
   readNetworkTelemetryFromDatabase,
+  readShardPlacementFromDatabase,
   readHeuristicShapesFromDatabase,
   readHeuristicClaimedOwnersFromDatabase,
   readHeuristicTypeFromDatabase,

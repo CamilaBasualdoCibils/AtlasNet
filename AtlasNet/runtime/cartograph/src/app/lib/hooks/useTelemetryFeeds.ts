@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type {
   AuthorityEntityTelemetry,
+  ShardPlacementTelemetry,
   ShapeJS,
   ShardTelemetry,
   WorkersSnapshotResponse,
@@ -51,6 +52,10 @@ function toWorkersSnapshot(raw: unknown): WorkersSnapshotResponse {
       : null,
     contexts: Array.isArray(payload.contexts) ? payload.contexts : [],
   };
+}
+
+function toShardPlacementArray(raw: unknown): ShardPlacementTelemetry[] {
+  return Array.isArray(raw) ? (raw as ShardPlacementTelemetry[]) : [];
 }
 
 function usePolledResource<T>({
@@ -233,6 +238,27 @@ export function useWorkersSnapshot({
       contexts: [],
     }),
     mapResponse: toWorkersSnapshot,
+    resetOnException,
+    resetOnHttpError,
+    onException,
+    onHttpError,
+  });
+}
+
+export function useShardPlacement({
+  intervalMs,
+  enabled = true,
+  resetOnException = false,
+  resetOnHttpError = false,
+  onException,
+  onHttpError,
+}: TelemetryPollingOptions): ShardPlacementTelemetry[] {
+  return usePolledResource<ShardPlacementTelemetry[]>({
+    url: '/api/shard-placement',
+    intervalMs,
+    enabled,
+    createInitialValue: () => [],
+    mapResponse: toShardPlacementArray,
     resetOnException,
     resetOnHttpError,
     onException,

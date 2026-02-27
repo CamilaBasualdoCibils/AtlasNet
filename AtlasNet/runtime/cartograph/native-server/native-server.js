@@ -18,7 +18,10 @@ const {
   collectAuthorityTelemetry,
   collectHeuristicShapes,
 } = require('./services/telemetryCollection');
-const { readHeuristicTypeFromDatabase } = require('./services/pureDatabaseTelemetry');
+const {
+  readHeuristicTypeFromDatabase,
+  readShardPlacementFromDatabase,
+} = require('./services/pureDatabaseTelemetry');
 const { readWorkersSnapshot } = require('./services/workersSnapshot');
 
 const app = express();
@@ -230,6 +233,16 @@ app.get('/workers', async (_req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Workers snapshot failed' });
+  }
+});
+
+app.get('/shard-placement', async (_req, res) => {
+  try {
+    const placement = await readShardPlacementFromDatabase();
+    res.json(placement);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Shard placement fetch failed' });
   }
 });
 

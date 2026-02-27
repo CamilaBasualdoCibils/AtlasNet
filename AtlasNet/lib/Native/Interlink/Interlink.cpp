@@ -13,6 +13,7 @@
 // #include "Database/ProxyRegistry.hpp"
 #include "Client/Client.hpp"
 #include "Client/ClientManifest.hpp"
+#include "Database/NodeManifest.hpp"
 #include "Database/ServerRegistry.hpp"
 #include "Docker/DockerIO.hpp"
 #include "Events/EventSystem.hpp"
@@ -526,6 +527,29 @@ void Interlink::Init()
 		ServerRegistry::Get().RegisterSelf(NetworkCredentials::Get().GetID(), ipAddress);
 		logger.DebugFormatted("[Interlink]Registered in ServerRegistry as {}:{}",
 							  NetworkCredentials::Get().GetID().ToString(), ipAddress.ToString());
+	}
+
+	if (NetworkCredentials::Get().GetID().Type == NetworkIdentityType::eShard)
+	{
+		NodeManifestEntry entry;
+		if (const auto nodeName = GetNonEmptyEnv("NODE_NAME"); nodeName.has_value())
+		{
+			entry.nodeName = *nodeName;
+		}
+		if (const auto podName = GetNonEmptyEnv("POD_NAME"); podName.has_value())
+		{
+			entry.podName = *podName;
+		}
+		if (const auto podIp = GetNonEmptyEnv("POD_IP"); podIp.has_value())
+		{
+			entry.podIP = *podIp;
+		}
+		else
+		{
+			entry.podIP = advertiseIp;
+		}
+
+		NodeManifest::Get().RegisterShardNode(NetworkCredentials::Get().GetID(), entry);
 	}
 
 	// Existing post-init behavior (unchanged)

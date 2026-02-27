@@ -2,11 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import type {
+  ShardPlacementTelemetry,
   WorkerContainerTelemetry,
   WorkerContextTelemetry,
   WorkerSwarmNodeTelemetry,
 } from '../lib/cartographTypes';
-import { useWorkersSnapshot } from '../lib/hooks/useTelemetryFeeds';
+import { useShardPlacement, useWorkersSnapshot } from '../lib/hooks/useTelemetryFeeds';
 
 const DEFAULT_POLL_INTERVAL_MS = 5000;
 const MIN_POLL_INTERVAL_MS = 0;
@@ -126,6 +127,32 @@ function containerSelectionKey(container: WorkerContainerTelemetry, index: numbe
     return `name:${name}:${index}`;
   }
   return `idx:${index}`;
+}
+
+function extractPodName(container: WorkerContainerTelemetry): string | null {
+  const fullName = String(container.name || '').trim();
+  if (!fullName) {
+    return null;
+  }
+  const slashIndex = fullName.indexOf('/');
+  if (slashIndex <= 0) {
+    return null;
+  }
+  const podName = fullName.slice(0, slashIndex).trim();
+  return podName || null;
+}
+
+function buildShardIdByPodName(placement: ShardPlacementTelemetry[]): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const row of placement) {
+    const podName = String(row.podName || '').trim();
+    const shardId = String(row.shardId || '').trim();
+    if (!podName || !shardId || out.has(podName)) {
+      continue;
+    }
+    out.set(podName, shardId);
+  }
+  return out;
 }
 
 function parseAggregateLogsBySource(aggregateLogs: string): Map<string, string> {
@@ -324,10 +351,12 @@ function WorkerContainerList({
   containers,
   selectedContainerKey,
   onSelectContainer,
+  resolveShardId,
 }: {
   containers: WorkerContainerTelemetry[];
   selectedContainerKey: string | null;
   onSelectContainer: (containerKey: string) => void;
+  resolveShardId: (container: WorkerContainerTelemetry) => string | null;
 }) {
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
@@ -345,6 +374,7 @@ function WorkerContainerList({
             const isSelected = selectedContainerKey === key;
             const title = container.name || container.id || `container-${index + 1}`;
             const stateLabel = container.state || 'unknown';
+            const shardId = resolveShardId(container);
             const hasCpuMetrics =
               Number.isFinite(container.cpuUsageCores) || Number.isFinite(container.cpuUsagePct);
             const hasMemoryMetrics =
@@ -381,6 +411,14 @@ function WorkerContainerList({
 
                 {isSelected && (
                   <div className="rounded-b-lg border border-t-0 border-sky-700/70 bg-slate-950/85 px-3 py-3 text-xs text-slate-300">
+                    <div className="mb-2 rounded border border-slate-700 bg-slate-900/60 px-2 py-2">
+                      <div className="text-[11px] uppercase tracking-wide text-slate-500">
+                        Shard ID
+                      </div>
+                      <div className="break-all font-mono text-slate-200" title={shardId || '-'}>
+                        {shardId || '-'}
+                      </div>
+                    </div>
                     <div className="grid grid-cols-1 gap-2 md:grid-cols-2">
                       <div>
                         <div className="text-[11px] uppercase tracking-wide text-slate-500">
@@ -464,6 +502,12 @@ export default function WorkersPage() {
     resetOnException: false,
     resetOnHttpError: false,
   });
+  const shardPlacement = useShardPlacement({
+    intervalMs: Math.max(1000, pollIntervalMs),
+    enabled: true,
+    resetOnException: false,
+    resetOnHttpError: false,
+  });
 
   const contexts = useMemo(() => {
     return [...snapshot.contexts].sort((left, right) => {
@@ -475,6 +519,10 @@ export default function WorkersPage() {
   }, [snapshot.contexts]);
 
   const workerNodes = useMemo(() => buildNodeViews(contexts), [contexts]);
+  const shardIdByPodName = useMemo(
+    () => buildShardIdByPodName(shardPlacement),
+    [shardPlacement]
+  );
 
   useEffect(() => {
     if (workerNodes.length === 0) {
@@ -604,6 +652,14 @@ export default function WorkersPage() {
 
       return next;
     });
+  }
+
+  function resolveShardId(container: WorkerContainerTelemetry): string | null {
+    const podName = extractPodName(container);
+    if (!podName) {
+      return null;
+    }
+    return shardIdByPodName.get(podName) || null;
   }
 
   return (
@@ -738,6 +794,7 @@ export default function WorkersPage() {
               containers={selectedWorker.containers}
               selectedContainerKey={selectedContainerKey}
               onSelectContainer={onSelectContainer}
+              resolveShardId={resolveShardId}
             />
 
             <div className="overflow-hidden rounded-2xl border border-slate-800 bg-slate-900/70">
