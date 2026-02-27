@@ -344,7 +344,32 @@ for image in "${IMAGES[@]}"; do
 done
 
 if ((${#IMAGES_TO_IMPORT[@]} > 0)); then
-    k3d image import -c "$CLUSTER_NAME" "${IMAGES_TO_IMPORT[@]}" >/dev/null
+    IMPORT_MODE="${ATLASNET_K3D_IMAGE_IMPORT_MODE:-serial}"
+    IMPORT_TIMEOUT="${ATLASNET_K3D_IMAGE_IMPORT_TIMEOUT:-0}"
+    echo "   - importing ${#IMAGES_TO_IMPORT[@]} image(s) (mode: ${IMPORT_MODE})..."
+
+    if [[ "$IMPORT_MODE" == "batch" ]]; then
+        import_start="$(date +%s)"
+        if [[ "$IMPORT_TIMEOUT" =~ ^[0-9]+$ ]] && ((IMPORT_TIMEOUT > 0)) && command -v timeout >/dev/null 2>&1; then
+            timeout "${IMPORT_TIMEOUT}s" k3d image import -c "$CLUSTER_NAME" "${IMAGES_TO_IMPORT[@]}"
+        else
+            k3d image import -c "$CLUSTER_NAME" "${IMAGES_TO_IMPORT[@]}"
+        fi
+        import_elapsed="$(( $(date +%s) - import_start ))"
+        echo "   - batch import complete (${import_elapsed}s)"
+    else
+        for image in "${IMAGES_TO_IMPORT[@]}"; do
+            image_start="$(date +%s)"
+            echo "   - importing $image ..."
+            if [[ "$IMPORT_TIMEOUT" =~ ^[0-9]+$ ]] && ((IMPORT_TIMEOUT > 0)) && command -v timeout >/dev/null 2>&1; then
+                timeout "${IMPORT_TIMEOUT}s" k3d image import -c "$CLUSTER_NAME" "$image"
+            else
+                k3d image import -c "$CLUSTER_NAME" "$image"
+            fi
+            image_elapsed="$(( $(date +%s) - image_start ))"
+            echo "   - imported $image (${image_elapsed}s)"
+        done
+    fi
 else
     echo "   - no image imports required"
 fi
