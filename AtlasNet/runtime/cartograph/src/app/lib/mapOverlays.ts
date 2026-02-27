@@ -47,11 +47,12 @@ function buildAuthorityEntityOverlays(
 ): ShapeJS[] {
   const overlays: ShapeJS[] = [];
   for (const entity of authorityEntities) {
+    const isClient = Boolean(entity.isClient);
     overlays.push({
       type: 'circle',
       position: { x: entity.x, y: entity.y },
       radius: 1.8,
-      color: 'rgba(255, 240, 80, 1)',
+      color: isClient ? 'rgba(255, 72, 72, 1)' : 'rgba(255, 240, 80, 1)',
     });
 
     const ownerPos = projectedShardPositions.get(normalizeShardId(entity.ownerId));
@@ -66,7 +67,7 @@ function buildAuthorityEntityOverlays(
         { x: entity.x, y: entity.y },
         { x: ownerPos.x, y: ownerPos.y },
       ],
-      color: 'rgba(255, 255, 0, 0.9)',
+      color: isClient ? 'rgba(255, 96, 96, 0.9)' : 'rgba(255, 255, 0, 0.9)',
     });
   }
   return overlays;
