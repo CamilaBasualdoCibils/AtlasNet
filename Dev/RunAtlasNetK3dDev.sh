@@ -344,12 +344,13 @@ for image in "${IMAGES[@]}"; do
 done
 
 if ((${#IMAGES_TO_IMPORT[@]} > 0)); then
-    IMPORT_MODE="${ATLASNET_K3D_IMAGE_IMPORT_MODE:-serial}"
+    IMPORT_MODE="${ATLASNET_K3D_IMAGE_IMPORT_MODE:-batch}"
     IMPORT_TIMEOUT="${ATLASNET_K3D_IMAGE_IMPORT_TIMEOUT:-0}"
     echo "   - importing ${#IMAGES_TO_IMPORT[@]} image(s) (mode: ${IMPORT_MODE})..."
 
     if [[ "$IMPORT_MODE" == "batch" ]]; then
         import_start="$(date +%s)"
+        printf '   - batch image set: %s\n' "${IMAGES_TO_IMPORT[*]}"
         if [[ "$IMPORT_TIMEOUT" =~ ^[0-9]+$ ]] && ((IMPORT_TIMEOUT > 0)) && command -v timeout >/dev/null 2>&1; then
             timeout "${IMPORT_TIMEOUT}s" k3d image import -c "$CLUSTER_NAME" "${IMAGES_TO_IMPORT[@]}"
         else
