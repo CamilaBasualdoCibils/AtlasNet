@@ -218,7 +218,21 @@ networks:
     name: AtlasNet
 ```
 ### <img src="docs/assets/Kubernetes_logo.svg" width="24" height="24"/> Kubernetes
----
+Local k3d dev deployment is available via:
+
+```bash
+cmake --build build --target sandbox_atlasnet_run
+```
+
+This now:
+- frees AtlasNet runtime ports
+- creates/uses k3d cluster `atlasnet-dev`
+- imports locally built images (`watchdog`, `proxy`, `cartograph`, `sandbox-server`)
+- deploys Kubernetes manifests from `deploy/k8s/overlays/k3d/`
+
+Default host endpoints:
+- Cartograph: `http://127.0.0.1:3000`
+- Proxy: `127.0.0.1:2555` (TCP/UDP)
 
 ## Dev container
 

@@ -1,0 +1,216 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __NAMESPACE__
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-watchdog
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-watchdog
+    atlasnet.role: watchdog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-watchdog
+  template:
+    metadata:
+      labels:
+        app: atlasnet-watchdog
+        atlasnet.role: watchdog
+    spec:
+      containers:
+        - name: watchdog
+          image: watchdog:latest
+          imagePullPolicy: IfNotPresent
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-shard
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-shard
+    atlasnet.role: shard
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: atlasnet-shard
+  template:
+    metadata:
+      labels:
+        app: atlasnet-shard
+        atlasnet.role: shard
+    spec:
+      containers:
+        - name: shard
+          image: __SHARD_IMAGE__
+          imagePullPolicy: IfNotPresent
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-internaldb
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-internaldb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-internaldb
+  template:
+    metadata:
+      labels:
+        app: atlasnet-internaldb
+    spec:
+      containers:
+        - name: internaldb
+          image: valkey/valkey-bundle:latest
+          imagePullPolicy: IfNotPresent
+          command:
+            - valkey-server
+            - --appendonly
+            - "yes"
+            - --port
+            - "6379"
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: internaldb
+  namespace: __NAMESPACE__
+spec:
+  type: ClusterIP
+  selector:
+    app: atlasnet-internaldb
+  ports:
+    - name: redis
+      protocol: TCP
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-cartograph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-cartograph
+  template:
+    metadata:
+      labels:
+        app: atlasnet-cartograph
+    spec:
+      containers:
+        - name: cartograph
+          image: cartograph:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: inspect
+              containerPort: 9229
+              protocol: TCP
+          volumeMounts:
+            - name: docker-sock
+              mountPath: /var/run/docker.sock
+      volumes:
+        - name: docker-sock
+          hostPath:
+            path: /var/run/docker.sock
+            type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+spec:
+  type: LoadBalancer
+  selector:
+    app: atlasnet-cartograph
+  ports:
+    - name: http
+      protocol: TCP
+      port: 3000
+      targetPort: http
+    - name: inspect
+      protocol: TCP
+      port: 9229
+      targetPort: inspect
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-proxy
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-proxy
+  template:
+    metadata:
+      labels:
+        app: atlasnet-proxy
+    spec:
+      containers:
+        - name: proxy
+          image: proxy:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HANDSHAKE_SERVICE_ENABLE
+              value: "1"
+            - name: HANDSHAKE_SERVICE_IP
+              value: postgres
+          ports:
+            - name: proxy-tcp
+              containerPort: 25568
+              protocol: TCP
+            - name: proxy-udp
+              containerPort: 25568
+              protocol: UDP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlasnet-proxy
+  namespace: __NAMESPACE__
+spec:
+  type: LoadBalancer
+  selector:
+    app: atlasnet-proxy
+  ports:
+    - name: proxy-tcp
+      protocol: TCP
+      port: 2555
+      targetPort: proxy-tcp
+    - name: proxy-udp
+      protocol: UDP
+      port: 2555
+      targetPort: proxy-udp
