@@ -225,6 +225,7 @@ cmake --build build --target sandbox_atlasnet_run
 ```
 
 This now:
+- prunes unused Docker images and volumes after deployment finishes (set `ATLASNET_SKIP_DOCKER_PRUNE=1` to skip)
 - frees AtlasNet runtime ports
 - creates/uses k3d cluster `atlasnet-dev`
 - imports locally built images (`watchdog`, `proxy`, `cartograph`, `sandbox-server`)
