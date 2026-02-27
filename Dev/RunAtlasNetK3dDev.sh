@@ -159,6 +159,22 @@ KUBECTL_MODE=""
 FORCE_INCLUSTER_KUBECTL="${ATLASNET_FORCE_INCLUSTER_KUBECTL:-0}"
 KUBECTL=()
 
+external_endpoint_tcp_reachable() {
+    local server_url="$1"
+    if ! [[ "$server_url" =~ ^https://([^/:]+):([0-9]+)$ ]]; then
+        return 0
+    fi
+
+    # Skip this preflight if `timeout` is unavailable to avoid blocking sockets.
+    if ! command -v timeout >/dev/null 2>&1; then
+        return 0
+    fi
+
+    local host="${BASH_REMATCH[1]}"
+    local port="${BASH_REMATCH[2]}"
+    timeout 1 bash -c "cat </dev/null >/dev/tcp/${host}/${port}" >/dev/null 2>&1
+}
+
 setup_external_kubectl() {
     if [[ "$FORCE_INCLUSTER_KUBECTL" == "1" ]]; then
         return 1
@@ -186,18 +202,26 @@ setup_external_kubectl() {
         kubectl --kubeconfig "$TEMP_KUBECONFIG" config set-cluster "$cluster" --server "$fixed_server" >/dev/null
     fi
 
+    local endpoint probe_timeout_s
+    endpoint="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+
+    if ! external_endpoint_tcp_reachable "$endpoint"; then
+        echo "==> External kube API endpoint not reachable via TCP from this environment."
+        echo "==> Endpoint tried: $endpoint"
+        return 1
+    fi
+
+    probe_timeout_s="${ATLASNET_EXTERNAL_KUBECTL_PROBE_TIMEOUT:-2s}"
+
     KUBECTL=(kubectl --kubeconfig "$TEMP_KUBECONFIG" --context "$context")
     echo "==> Using kubectl context '$context'..."
-    for i in $(seq 1 60); do
-        if "${KUBECTL[@]}" --request-timeout=3s get --raw=/readyz >/dev/null 2>&1; then
-            KUBECTL_MODE="external"
-            return 0
-        fi
-        sleep 1
-    done
+    if "${KUBECTL[@]}" --request-timeout="$probe_timeout_s" get --raw=/readyz >/dev/null 2>&1; then
+        KUBECTL_MODE="external"
+        return 0
+    fi
 
     echo "==> External kube API endpoint not reachable from this environment."
-    echo "==> Endpoint tried: $(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+    echo "==> Endpoint tried: $endpoint"
     return 1
 }
 
@@ -234,6 +258,39 @@ kctl() {
 
 kctl wait --for=condition=Ready nodes --all --timeout=120s >/dev/null
 
+ATLASNET_FORCE_IMAGE_IMPORT="${ATLASNET_FORCE_IMAGE_IMPORT:-0}"
+IMAGE_CACHE_FILE="${ATLASNET_K3D_IMAGE_CACHE_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-image-cache.txt}"
+server_node="k3d-${CLUSTER_NAME}-server-0"
+current_cluster_id="$(docker inspect --format '{{.Id}}' "$server_node" 2>/dev/null || true)"
+current_cluster_id="${current_cluster_id:-unknown}"
+
+declare -A PREV_IMAGE_IDS=()
+cached_cluster_id=""
+if [[ -f "$IMAGE_CACHE_FILE" ]]; then
+    while IFS='|' read -r image cached_id; do
+        [[ -z "${image:-}" ]] && continue
+        if [[ "$image" == "__cluster_id__" ]]; then
+            cached_cluster_id="$cached_id"
+            continue
+        fi
+        PREV_IMAGE_IDS["$image"]="$cached_id"
+    done <"$IMAGE_CACHE_FILE"
+fi
+if [[ "$cached_cluster_id" != "$current_cluster_id" ]]; then
+    PREV_IMAGE_IDS=()
+fi
+
+declare -a ROLLOUT_RESTART_DEPLOYMENTS=()
+declare -A RESTART_SEEN=()
+add_restart() {
+    local deployment="$1"
+    if [[ -n "${RESTART_SEEN[$deployment]:-}" ]]; then
+        return
+    fi
+    RESTART_SEEN["$deployment"]=1
+    ROLLOUT_RESTART_DEPLOYMENTS+=("$deployment")
+}
+
 echo "==> Importing local Docker images into k3d..."
 declare -a IMAGES=(
     "watchdog:latest"
@@ -244,6 +301,8 @@ declare -a IMAGES=(
     "$SHARD_IMAGE_NAME"
 )
 declare -A SEEN=()
+declare -A CURRENT_IMAGE_IDS=()
+declare -a IMAGES_TO_IMPORT=()
 for image in "${IMAGES[@]}"; do
     if [[ -n "${SEEN[$image]:-}" ]]; then
         continue
@@ -251,12 +310,52 @@ for image in "${IMAGES[@]}"; do
     SEEN["$image"]=1
 
     if docker image inspect "$image" >/dev/null 2>&1; then
-        echo "   - importing $image"
-        k3d image import -c "$CLUSTER_NAME" "$image" >/dev/null
+        image_id="$(docker image inspect --format '{{.Id}}' "$image" 2>/dev/null || true)"
+        if [[ -z "$image_id" ]]; then
+            echo "   - skipping $image (unable to inspect image id)"
+            continue
+        fi
+
+        CURRENT_IMAGE_IDS["$image"]="$image_id"
+        needs_import=0
+        if [[ "$ATLASNET_FORCE_IMAGE_IMPORT" == "1" ]]; then
+            needs_import=1
+        elif [[ "${PREV_IMAGE_IDS[$image]:-}" != "$image_id" ]]; then
+            needs_import=1
+        fi
+
+        if ((needs_import == 1)); then
+            echo "   - queued import $image"
+            IMAGES_TO_IMPORT+=("$image")
+            case "$image" in
+                watchdog:*) add_restart "atlasnet-watchdog" ;;
+                proxy:*) add_restart "atlasnet-proxy" ;;
+                cartograph:*) add_restart "atlasnet-cartograph" ;;
+            esac
+            if [[ "$image" == "shard:latest" || "$image" == "$SHARD_IMAGE_NAME" ]]; then
+                add_restart "atlasnet-shard"
+            fi
+        else
+            echo "   - cached in cluster $image"
+        fi
     else
         echo "   - skipping $image (not found locally)"
     fi
 done
+
+if ((${#IMAGES_TO_IMPORT[@]} > 0)); then
+    k3d image import -c "$CLUSTER_NAME" "${IMAGES_TO_IMPORT[@]}" >/dev/null
+else
+    echo "   - no image imports required"
+fi
+
+mkdir -p "$(dirname "$IMAGE_CACHE_FILE")"
+{
+    printf '__cluster_id__|%s\n' "$current_cluster_id"
+    for image in "${!CURRENT_IMAGE_IDS[@]}"; do
+        printf '%s|%s\n' "$image" "${CURRENT_IMAGE_IDS[$image]}"
+    done | sort
+} >"$IMAGE_CACHE_FILE"
 
 sed \
     -e "s|__NAMESPACE__|$NAMESPACE|g" \
@@ -270,8 +369,12 @@ else
     kctl apply -f "$TEMP_MANIFEST" >/dev/null
 fi
 # Shard deployment is declared with replicas=0 and is expected to be scaled by Watchdog.
-# Restart Watchdog after apply so it recomputes heuristic + shard target for each run.
-kctl -n "$NAMESPACE" rollout restart deployment/atlasnet-watchdog >/dev/null
+# Always restart watchdog so it recomputes shard target each run.
+add_restart "atlasnet-watchdog"
+echo "==> Restarting updated deployments..."
+for deployment in "${ROLLOUT_RESTART_DEPLOYMENTS[@]}"; do
+    kctl -n "$NAMESPACE" rollout restart "deployment/${deployment}" >/dev/null || true
+done
 # Remove a legacy service name from earlier k3d migration iterations.
 kctl -n "$NAMESPACE" delete svc atlasnet-internaldb --ignore-not-found >/dev/null || true
 

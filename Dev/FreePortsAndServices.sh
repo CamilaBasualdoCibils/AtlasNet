@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
     cat <<'EOF'
 Usage:
-  Dev/FreePortsAndServices.sh [--dry-run] [port ...]
+  Dev/FreePortsAndServices.sh [--dry-run] [--keep-k3d-clusters] [--keep-k8s-services] [--keep-local-listeners] [port ...]
 
 Frees host ports by:
   1) Deleting k3d clusters whose load balancer publishes those ports
@@ -19,11 +19,16 @@ Default ports (if none provided):
 Examples:
   Dev/FreePortsAndServices.sh
   Dev/FreePortsAndServices.sh --dry-run
+  Dev/FreePortsAndServices.sh --keep-k3d-clusters --keep-k8s-services
+  Dev/FreePortsAndServices.sh --keep-local-listeners
   Dev/FreePortsAndServices.sh 3000 2555
 EOF
 }
 
 DRY_RUN=0
+KEEP_K3D_CLUSTERS=0
+KEEP_K8S_SERVICES=0
+KEEP_LOCAL_LISTENERS=0
 declare -a INPUT_PORTS=()
 declare -a DEFAULT_PORTS=(2555 3000 9229)
 
@@ -31,6 +36,18 @@ while (($# > 0)); do
     case "$1" in
         --dry-run)
             DRY_RUN=1
+            shift
+            ;;
+        --keep-k3d-clusters)
+            KEEP_K3D_CLUSTERS=1
+            shift
+            ;;
+        --keep-k8s-services)
+            KEEP_K8S_SERVICES=1
+            shift
+            ;;
+        --keep-local-listeners)
+            KEEP_LOCAL_LISTENERS=1
             shift
             ;;
         -h|--help)
@@ -274,11 +291,20 @@ kill_remaining_local_listeners() {
 
 log "Requested ports: ${PORTS[*]}"
 ((DRY_RUN)) && log "Dry-run mode enabled; no changes will be made."
+((KEEP_K3D_CLUSTERS)) && log "Keeping existing k3d clusters."
+((KEEP_K8S_SERVICES)) && log "Keeping existing Kubernetes Services."
+((KEEP_LOCAL_LISTENERS)) && log "Keeping local listener processes."
 
-delete_k3d_clusters_for_ports
+if ((KEEP_K3D_CLUSTERS == 0)); then
+    delete_k3d_clusters_for_ports
+fi
 delete_swarm_services_for_ports
 delete_docker_containers_for_ports
-delete_k8s_services_for_ports
-kill_remaining_local_listeners
+if ((KEEP_K8S_SERVICES == 0)); then
+    delete_k8s_services_for_ports
+fi
+if ((KEEP_LOCAL_LISTENERS == 0)); then
+    kill_remaining_local_listeners
+fi
 
 log "Done."
