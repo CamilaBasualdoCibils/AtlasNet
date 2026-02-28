@@ -1,0 +1,392 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: __NAMESPACE__
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-watchdog
+  namespace: __NAMESPACE__
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: atlasnet-watchdog-scaler
+  namespace: __NAMESPACE__
+rules:
+  - apiGroups:
+      - apps
+    resources:
+      - deployments/scale
+    verbs:
+      - get
+      - patch
+      - update
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: atlasnet-watchdog-scaler
+  namespace: __NAMESPACE__
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-watchdog
+    namespace: __NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: atlasnet-watchdog-scaler
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: atlasnet-cartograph-reader
+  namespace: __NAMESPACE__
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: atlasnet-cartograph-reader
+  namespace: __NAMESPACE__
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-cartograph
+    namespace: __NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: atlasnet-cartograph-reader
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: __CLUSTER_ROLE_NAME__
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+  - apiGroups:
+      - metrics.k8s.io
+    resources:
+      - nodes
+      - pods
+    verbs:
+      - get
+      - list
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: __CLUSTER_ROLE_BINDING_NAME__
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-cartograph
+    namespace: __NAMESPACE__
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: __CLUSTER_ROLE_NAME__
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-watchdog
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-watchdog
+    atlasnet.role: watchdog
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-watchdog
+  template:
+    metadata:
+      labels:
+        app: atlasnet-watchdog
+        atlasnet.role: watchdog
+    spec:
+      serviceAccountName: atlasnet-watchdog
+      containers:
+        - name: watchdog
+          image: __IMAGE_WATCHDOG__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: ATLASNET_SHARD_DEPLOYMENT
+              value: atlasnet-shard
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+          ports:
+            - name: interlink
+              containerPort: 25555
+              protocol: UDP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-shard
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-shard
+    atlasnet.role: shard
+spec:
+  replicas: 0
+  selector:
+    matchLabels:
+      app: atlasnet-shard
+  template:
+    metadata:
+      labels:
+        app: atlasnet-shard
+        atlasnet.role: shard
+    spec:
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels:
+                    app: atlasnet-shard
+      topologySpreadConstraints:
+        - maxSkew: 1
+          topologyKey: kubernetes.io/hostname
+          whenUnsatisfiable: ScheduleAnyway
+          labelSelector:
+            matchLabels:
+              app: atlasnet-shard
+      containers:
+        - name: shard
+          image: __IMAGE_SHARD__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+          ports:
+            - name: interlink
+              containerPort: 25555
+              protocol: UDP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-internaldb
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-internaldb
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-internaldb
+  template:
+    metadata:
+      labels:
+        app: atlasnet-internaldb
+    spec:
+      containers:
+        - name: internaldb
+          image: __IMAGE_VALKEY__
+          imagePullPolicy: IfNotPresent
+          command:
+            - valkey-server
+            - --appendonly
+            - "yes"
+            - --port
+            - "6379"
+            - --loadmodule
+            - /usr/lib/valkey/libjson.so
+            - --loadmodule
+            - /usr/lib/valkey/libsearch.so
+          ports:
+            - name: redis
+              containerPort: 6379
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: internaldb
+  namespace: __NAMESPACE__
+spec:
+  type: ClusterIP
+  selector:
+    app: atlasnet-internaldb
+  ports:
+    - name: redis
+      protocol: TCP
+      port: 6379
+      targetPort: redis
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-cartograph
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-cartograph
+  template:
+    metadata:
+      labels:
+        app: atlasnet-cartograph
+    spec:
+      serviceAccountName: atlasnet-cartograph
+      containers:
+        - name: cartograph
+          image: __IMAGE_CARTOGRAPH__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+          ports:
+            - name: http
+              containerPort: 3000
+              protocol: TCP
+            - name: inspect
+              containerPort: 9229
+              protocol: TCP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlasnet-cartograph
+  namespace: __NAMESPACE__
+spec:
+  type: LoadBalancer
+  selector:
+    app: atlasnet-cartograph
+  ports:
+    - name: http
+      protocol: TCP
+      port: 3000
+      targetPort: http
+    - name: inspect
+      protocol: TCP
+      port: 9229
+      targetPort: inspect
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-proxy
+  namespace: __NAMESPACE__
+  labels:
+    app: atlasnet-proxy
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: atlasnet-proxy
+  template:
+    metadata:
+      labels:
+        app: atlasnet-proxy
+    spec:
+      containers:
+        - name: proxy
+          image: __IMAGE_PROXY__
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: HANDSHAKE_SERVICE_ENABLE
+              value: "1"
+            - name: POD_IP
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+            - name: INTERNAL_REDIS_SERVICE_NAME
+              value: internaldb
+            - name: INTERNAL_REDIS_PORT
+              value: "6379"
+            - name: INTERLINK_PUBLIC_IP
+              value: "__PROXY_PUBLIC_IP__"
+            - name: INTERLINK_PUBLIC_PORT
+              value: "__PROXY_PUBLIC_PORT__"
+          ports:
+            - name: proxy-tcp
+              containerPort: 25568
+              protocol: TCP
+            - name: proxy-udp
+              containerPort: 25568
+              protocol: UDP
+            - name: interlink
+              containerPort: 25555
+              protocol: UDP
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlasnet-proxy
+  namespace: __NAMESPACE__
+spec:
+  type: LoadBalancer
+  selector:
+    app: atlasnet-proxy
+  ports:
+    - name: proxy-tcp
+      protocol: TCP
+      port: 2555
+      targetPort: proxy-tcp
+    - name: proxy-udp
+      protocol: UDP
+      port: 2555
+      targetPort: proxy-udp

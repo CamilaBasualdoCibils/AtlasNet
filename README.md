@@ -235,6 +235,11 @@ Default host endpoints:
 - Cartograph: `http://127.0.0.1:3000`
 - Proxy: `127.0.0.1:2555` (TCP/UDP)
 
+K3s multi-node workflow (Linux laptop + Raspberry Pi 5):
+- [docs/k3s-laptop-pi5-workflow.md](docs/k3s-laptop-pi5-workflow.md)
+- publish multi-arch images: `Dev/BuildAndPushAtlasNetImages.sh`
+- deploy to k3s: `Dev/RunAtlasNetK3sDeploy.sh`
+
 ## Dev container
 
 The repo includes a **dev container** (`.devcontainer/`) with:
