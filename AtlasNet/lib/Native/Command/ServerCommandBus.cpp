@@ -1,7 +1,7 @@
 #include "ServerCommandBus.hpp"
 
 #include <algorithm>
-
+#include "Command/Database/RoutingManifest.hpp"
 #include "Client/Database/ClientManifest.hpp"
 #include "Command/NetCommand.hpp"
 #include "Command/Packet/CommandPayloadPacket.hpp"
@@ -11,7 +11,7 @@
 
 void ServerCommandBus::implParseCommand(ClientID target, const INetCommand& command)
 {
-	const auto ClientProxy = ClientManifest::Get().GetClientProxy(target);
+	const auto ClientProxy = RoutingManifest::Get().GetClientProxy(target);
 	ASSERT(ClientProxy.has_value(), "this should never occur");
 
 	ServerStateCommandPacket& packet = packets.emplace_back();
@@ -28,7 +28,7 @@ void ServerCommandBus::implFlushCommands()
 		packets.cbegin(), packets.cend(),
 		[this](const ServerStateCommandPacket& p)
 		{
-			std::optional<NetworkIdentity> target = ClientManifest::Get().GetClientProxy(p.target);
+			std::optional<NetworkIdentity> target = RoutingManifest::Get().GetClientProxy(p.target);
 			ASSERT(target.has_value(), "This should never happen");
 			Interlink::Get().SendMessage(*target, p, NetworkMessageSendFlag::eReliableBatched);
 		});

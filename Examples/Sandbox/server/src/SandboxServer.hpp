@@ -19,7 +19,8 @@ class SandboxServer : IAtlasNetServer
 	void Run();
 
 	private:
-	 void OnClientSpawn(const ClientSpawnInfo& c) override;
+	 void OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
+							   AtlasEntityPayload& payload) override;
 	 void OnGameClientInputCommand(const NetClientIntentHeader& header,
 								   const GameClientInputCommand& command);
 };

@@ -29,11 +29,11 @@ class CommandRouter : public Singleton<CommandRouter>
 	void OnServerStatePacket(const ServerStateCommandPacket& packet,
 							 const PacketManager::PacketInfo& info)
 	{
-		logger.DebugFormatted("Received ServerStatePacket");
+		//logger.DebugFormatted("Received ServerStatePacket");
 	};
 	void OnClientIntentPacket(const ClientIntentCommandPacket& packet,
 							  const PacketManager::PacketInfo& info)
 	{
-		logger.DebugFormatted("Received ClientIntentPacket");
+		//logger.DebugFormatted("Received ClientIntentPacket");
 	};
 };

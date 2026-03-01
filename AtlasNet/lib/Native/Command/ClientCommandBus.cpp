@@ -19,6 +19,9 @@ void ClientCommandBus::implFlushCommands()
 {
 	NetworkIdentity Proxy = ClientLink::Get().GetManagingProxy();
 	std::for_each(
-		packets.cbegin(), packets.cend(), [Proxy = Proxy](const ClientIntentCommandPacket& p)
-		{ Interlink::Get().SendMessage(Proxy, p, NetworkMessageSendFlag::eReliableBatched); });
+		packets.cbegin(), packets.cend(),
+		[Proxy = Proxy](
+			const ClientIntentCommandPacket& p) {  // ClientLink::Get().SendMessage(Proxy, p,
+												   // NetworkMessageSendFlag::eReliableBatched);
+		});
 }

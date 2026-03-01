@@ -13,19 +13,17 @@
 #include "Global/pch.hpp"
 #include "Transform.hpp"
 using AtlasEntityID = UUID;
-
+using AtlasEntityPayload = boost::container::small_vector<uint8, 32>;
 struct AtlasEntityMinimal : AtlasObject
 {
 	virtual ~AtlasEntityMinimal() = default;
 
-	
 	AtlasEntityID Entity_ID;
 	Transform transform;
 	bool IsClient = false;
 	ClientID Client_ID;
-	uint64_t PacketSeq = 0; //Sequence ID of last update packet
+	uint64_t PacketSeq = 0;	 // Sequence ID of last update packet
 	uint64_t TransferGeneration = 0;
-
 
 	void Serialize(ByteWriter& bw) const override
 	{
@@ -44,14 +42,12 @@ struct AtlasEntityMinimal : AtlasObject
 		Client_ID = br.uuid();
 		PacketSeq = br.u64();
 		TransferGeneration = br.u64();
-
 	}
 	static AtlasEntityID CreateUniqueID() { return UUIDGen::Gen(); }
 };
 struct AtlasEntity : AtlasEntityMinimal
 {
-
-	boost::container::small_vector<uint8, 32> payload;
+	AtlasEntityPayload payload;
 
 	void Serialize(ByteWriter& bw) const override
 	{

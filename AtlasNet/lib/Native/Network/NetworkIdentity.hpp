@@ -21,6 +21,7 @@ struct NetworkIdentity
 
 	static NetworkIdentity MakeIDWatchDog();
 	static NetworkIdentity MakeIDShard(const UUID& _ID);
+	static NetworkIdentity MakeIDProxy(const UUID& _ID);
 	static NetworkIdentity MakeIDGameClient(const UUID& _ID);
 	static NetworkIdentity MakeIDCartograph();
 

@@ -3,7 +3,9 @@
 #include <steam/isteamnetworkingsockets.h>
 #include <steam/steamnetworkingtypes.h>
 
+#include <condition_variable>
 #include <iostream>
+#include <mutex>
 #include <thread>
 
 #include "Debug/Log.hpp"
@@ -41,8 +43,11 @@ class ClientLink : public Singleton<ClientLink>
 	PacketManager packet_manager;
 	PacketManager::Subscription ClientIDAssignSub;
 	Log logger = Log("ClientLink");
-
 	NetworkIdentity ManagingProxy;
+	std::mutex mutex;
+	std::condition_variable connectedCV;
+	bool ConnectedToAtlasNet = false;
+
 
 	struct IndexByState
 	{

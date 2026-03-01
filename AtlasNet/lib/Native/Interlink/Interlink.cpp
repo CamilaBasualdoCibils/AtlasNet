@@ -771,15 +771,15 @@ void Interlink::OnClientConnected(const Connection &c)
 		Client client;
 		client.ID = newIdentity.ID;
 		client.ip = c.address;
-		ClientManifest::Get().RegisterClient(client);
-		ClientManifest::Get().AssignProxyClient(client.ID, NetworkCredentials::Get().GetID());
-
+		ClientManifest::Get().InsertClient(client);
+		
 		ClientHandshakeEvent cce;
 		cce.client = client;
 		cce.ConnectedProxy = NetworkCredentials::Get().GetID();
 		EventSystem::Get().Dispatch(cce);
 
 		HandshakeService::Get().OnClientConnect(client);
+		
 	}
 }
 void Interlink::CloseAllConnections(int reason) {}

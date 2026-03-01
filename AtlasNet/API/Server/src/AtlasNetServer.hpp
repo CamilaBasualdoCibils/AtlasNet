@@ -78,7 +78,8 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 		Client client;
 		Transform spawnLocation;  // Determined by handshake service
 	};
-	virtual void OnClientSpawn(const ClientSpawnInfo& c) = 0;
+	virtual void OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
+							   AtlasEntityPayload& payload) = 0;
 
 	ServerCommandBus& GetCommandBus() { return commandbus; }
 

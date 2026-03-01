@@ -80,6 +80,10 @@ void ClientLink::ConnectToAtlasNet(const IPAddress &address)
 	c.target = NetworkIdentityType::eAtlasNetInitial;
 
 	Connections.insert(c);
+	std::unique_lock<std::mutex> lock(mutex);
+
+	// Wait until ready == true
+	connectedCV.wait(lock, [this] { return ConnectedToAtlasNet; });
 }
 void ClientLink::Init()
 {
@@ -130,6 +134,11 @@ void ClientLink::OnClientIDAssignedPacket(const ClientIDAssignPacket &clientIDPa
 						  clientIDPacket.AssignedClientID.ToString());
 	ClientID id = clientIDPacket.AssignedClientID.ID;
 	ClientCredentials::Make(id);
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		ConnectedToAtlasNet = true;
+	}
+	connectedCV.notify_one();
 }
 void ClientLink::ReceiveMessages()
 {
