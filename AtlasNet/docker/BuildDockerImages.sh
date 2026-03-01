@@ -50,6 +50,8 @@ if ! docker buildx inspect "$BUILDER_NAME" >/dev/null 2>&1; then
     docker buildx create \
         --name "$BUILDER_NAME" \
         --driver docker-container \
+        --driver-opt network=host \
+        --buildkitd-flags '--allow-insecure-entitlement=network.host' \
         --use
 else
     docker buildx use "$BUILDER_NAME"
