@@ -9,7 +9,7 @@
   "runArgs": [
     "--init",
     "--shm-size=2g" ,
-    //"--network=host",
+    "--network=host",
     //"--memory=10g",
     //"--memory-swap=10g",
      "--cap-add=SYS_PTRACE",
