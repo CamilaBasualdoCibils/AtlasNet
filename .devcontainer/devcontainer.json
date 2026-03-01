@@ -20,6 +20,7 @@
     "source=dind-var-lib-docker,target=/var/lib/docker,type=volume"
   ],
   "forwardPorts": [
+    9000,
     3000,
     5000,
     8000,

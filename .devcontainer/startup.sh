@@ -20,12 +20,15 @@ case "$MODE" in
     done
 
     docker volume inspect portainer_data >/dev/null 2>&1 || docker volume create portainer_data >/dev/null
+    docker network inspect portainer_net >/dev/null 2>&1 || \
+      docker network create --driver bridge --subnet "${PORTAINER_DOCKER_SUBNET:-172.30.0.0/24}" portainer_net >/dev/null
 
     if ! docker ps --format '{{.Names}}' | grep -qx 'portainer'; then
       docker rm -f portainer >/dev/null 2>&1 || true
       docker run -d \
         --name portainer \
         --restart=unless-stopped \
+        --network portainer_net \
         -p 9000:9000 \
         -p 9443:9443 \
         -v /var/run/docker.sock:/var/run/docker.sock \
