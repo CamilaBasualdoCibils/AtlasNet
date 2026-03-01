@@ -22,6 +22,7 @@ class ClientManifest : public Singleton<ClientManifest>
    public:
 	void RegisterClient(const Client& client);
 	void GetProxyClients(const NetworkIdentity& id, std::vector<ClientID>& clients);
-	std::optional<NetworkIdentity> GetClientProxy(const ClientID& client_ID);
+	std::optional<NetworkIdentity> GetClientProxy(const ClientID& client_ID) {}
 	void AssignProxyClient(const ClientID& cid, const NetworkIdentity& ID);
+	
 };

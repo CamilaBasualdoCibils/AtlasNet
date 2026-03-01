@@ -17,10 +17,10 @@
 class EventRegistry : public Singleton<EventRegistry>
 {
    private:
-	static constexpr uint32_t HashName(const std::string_view str)
+	static constexpr EventTypeID HashName(const std::string_view str)
 	{
 		const char* c = str.data();
-		uint32_t hash = 2166136261u;
+		EventTypeID hash = 2166136261u;
 		while (*c)
 		{
 			hash ^= static_cast<uint8_t>(*c++);

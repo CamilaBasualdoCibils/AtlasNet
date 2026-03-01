@@ -8,6 +8,7 @@
 #include "Entity/Packet/EntityTransferPacket.hpp"
 #include "Entity/Transfer/TransferData.hpp"
 #include "Entity/Transfer/TransferManifest.hpp"
+#include "Entity/Transform.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Global/pch.hpp"
 #include "Interlink/Interlink.hpp"
@@ -33,20 +34,24 @@ void TransferCoordinator::ParseEntitiesForTargets()
 			//						  UUIDGen::ToString(entityID));
 			continue;
 		}
-		if (EntityLedger::Get()._ReadLock(
-				[&]()
+		std::optional<Transform> entityTransform = EntityLedger::Get()._ReadLock(
+			[&]() -> std::optional<Transform>
+			{
+				if (EntityLedger::Get().ExistsEntity(entityID) &&
+					!EntityLedger::Get().IsEntityClient(entityID))
 				{
-					return EntityLedger::Get().ExistsEntity(entityID) &&
-						   EntityLedger::Get().IsEntityClient(entityID);
-				}))
+					return EntityLedger::Get().GetEntityMinimal(entityID).transform;
+				}
+				return std::nullopt;
+			});
+
+		if (!entityTransform.has_value())
 		{
-			logger.ErrorFormatted("Client Transfering is not yet implemented, Entity ID {}",
-								  UUIDGen::ToString(entityID));
 			continue;
 		}
 		// Get the Bounds ID at the entity position
 		const std::optional<IBounds::BoundsID> boundsID =
-			heuristic->QueryPosition(EntityLedger::Get().GetEntity(entityID).transform.position);
+			heuristic->QueryPosition(entityTransform->position);
 
 		// if not a bound, aka outside any bound then continue
 		if (!boundsID.has_value())

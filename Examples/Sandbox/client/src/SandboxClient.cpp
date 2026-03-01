@@ -2,6 +2,10 @@
 
 #include <thread>
 
+#include "AtlasNetClient.hpp"
+#include "Command/NetCommand.hpp"
+#include "Commands/GameClientInputCommand.hpp"
+#include "Commands/GameStateCommand.hpp"
 #include "Network/IPAddress.hpp"
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -114,6 +118,9 @@ void SandboxClient::Run(const IPAddress &address)
 	{
 		ShouldDisconnect = ShouldDisconnect || glfwWindowShouldClose(*window);
 	}
+	AtlasNetClient::Get().GetCommandBus().Subscribe<GameStateCommand>(
+		[this](const NetServerStateHeader&, const GameStateCommand &c)
+		{ logger.Debug("Received a command of GameStateCommand"); });
 	while (!ShouldDisconnect)
 	{
 		auto now = clock::now();
@@ -123,6 +130,9 @@ void SandboxClient::Run(const IPAddress &address)
 
 		AtlasNetClient::Get().Tick();
 
+		AtlasNetClient::Get().GetCommandBus().Dispatch(GameClientInputCommand{});
+
+		AtlasNetClient::Get().GetCommandBus().Flush();
 		// Print positions every second
 		// scene.printPositions();
 
@@ -147,4 +157,8 @@ void SandboxClient::Run(const IPAddress &address)
 			glfwPollEvents();
 		}
 	}
+}
+void SandboxClient::OnGameStateCommand(const NetServerStateHeader &header,
+									   const GameStateCommand &command)
+{
 }

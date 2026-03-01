@@ -4,6 +4,7 @@
 #include <unordered_set>
 
 #include "Client/Client.hpp"
+#include "Command/ServerCommandBus.hpp"
 #include "Debug/Log.hpp"
 #include "Docker/DockerEvents.hpp"
 #include "Entity/Entity.hpp"
@@ -34,14 +35,14 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 	std::shared_ptr<Log> logger = std::make_shared<Log>("AtlasNetServer");
 
 	static inline IAtlasNetServer* Instance = nullptr;
-	static IAtlasNetServer& GetInstance() {
+	static IAtlasNetServer& GetInstance()
+	{
 		ASSERT(Instance, "ERROR");
 		return *Instance;
 	}
+
    public:
-	IAtlasNetServer(){
-		Instance = this;
-	};
+	IAtlasNetServer() { Instance = this; };
 	/**
 	 * @brief
 	 *
@@ -62,16 +63,16 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 	 * @param OutgoingEntities Entity IDs of entities you should get rid of.
 	 */
 	void AtlasNet_SyncEntities(std::span<const AtlasEntityID> ActiveEntities,
-					  std::span<const AtlasEntityID>& ReleasedEntities,
-					  std::span<const AtlasEntityHandle>& AcquiredEntities);
+							   std::span<const AtlasEntityID>& ReleasedEntities,
+							   std::span<const AtlasEntityHandle>& AcquiredEntities);
 	/**
 	Simple get local entities
 	*/
 
 	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateEntity(const Transform& t,
-												 std::span<const uint8_t> metadata = {});
-	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateClientEntity(ClientID c_id, const Transform& t,
-													   std::span<const uint8_t> metadata = {});
+														  std::span<const uint8_t> metadata = {});
+	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateClientEntity(
+		ClientID c_id, const Transform& t, std::span<const uint8_t> metadata = {});
 	struct ClientSpawnInfo
 	{
 		Client client;
@@ -79,7 +80,10 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 	};
 	virtual void OnClientSpawn(const ClientSpawnInfo& c) = 0;
 
+	ServerCommandBus& GetCommandBus() { return commandbus; }
+
    private:
+	ServerCommandBus commandbus;
 	AtlasEntity Internal_CreateEntity(const Transform& t, std::span<const uint8_t> metadata = {});
 	void ShardLogicEntry(std::stop_token st);
 };
