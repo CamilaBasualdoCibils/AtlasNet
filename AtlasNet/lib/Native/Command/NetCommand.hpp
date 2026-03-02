@@ -22,7 +22,7 @@ struct NetClientIntentHeader : NetCommandHeader
 	void Serialize(ByteWriter& bw) const
 	{
 		bw.uuid(clientID);
-		bw.uuid(entityID);
+	bw.uuid(entityID);
 	}
 	void Deserialize(ByteReader& br)
 	{

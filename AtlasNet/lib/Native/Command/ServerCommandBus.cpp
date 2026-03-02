@@ -11,16 +11,11 @@
 
 void ServerCommandBus::implParseCommand(ClientID target, const INetCommand& command)
 {
-	const auto ClientProxy = ClientManifest::Get().GetClientProxy(target);
-	ASSERT(ClientProxy.has_value(), "this should never occur");
-
 	ServerStateCommandPacket& packet = packets.emplace_back();
 	packet.target = target;
 	packet.ServerStateHeader = NetServerStateHeader{};
 	packet.cmdTypeID = command.GetCommandID();
-	ByteWriter commandDataWriter;
-	command.Serialize(commandDataWriter);
-	packet.commandData.assign(commandDataWriter.bytes().begin(), commandDataWriter.bytes().end());
+	packet.InsertCommand(command);
 }
 void ServerCommandBus::implFlushCommands()
 {
@@ -32,4 +27,5 @@ void ServerCommandBus::implFlushCommands()
 			ASSERT(target.has_value(), "This should never happen");
 			Interlink::Get().SendMessage(*target, p, NetworkMessageSendFlag::eReliableBatched);
 		});
+	packets.clear();
 }

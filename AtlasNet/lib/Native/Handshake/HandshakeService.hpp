@@ -10,6 +10,7 @@
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkEnums.hpp"
 #include "Network/NetworkIdentity.hpp"
 class HandshakeService : public Singleton<HandshakeService>
@@ -41,6 +42,7 @@ class HandshakeService : public Singleton<HandshakeService>
 			   "Unable to find a shard for that position. TODO, Implement a GetClosestBound in "
 			   "IHeuristic");
 
+		ClientManifest::Get().AssignProxyClient(c.ID, NetworkCredentials::Get().GetID());
 		ClientSpawnPacket csp;
 		csp.stage = ClientSpawnPacket::eNotification;
 		csp.SetAsNotification().incomingClients.push_back(

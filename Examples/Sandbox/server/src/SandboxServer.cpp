@@ -5,6 +5,8 @@
 #include <thread>
 
 #include "AtlasNetServer.hpp"
+#include "Client/Database/ClientManifest.hpp"
+#include "Client/Shard/ClientLedger.hpp"
 #include "Command/NetCommand.hpp"
 #include "Commands/GameClientInputCommand.hpp"
 #include "Commands/GameStateCommand.hpp"
@@ -17,6 +19,7 @@
 #include "Global/Misc/UUID.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
+#include "Global/pch.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 
 void SandboxServer::Run()
@@ -43,7 +46,7 @@ void SandboxServer::Run()
 	{
 		std::mt19937 rng(std::random_device{}());
 		std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-		for (int i = 0; i < 100; i++)
+		for (int i = 0; i < 0; i++)
 		{
 			float z = dist(rng) * 2.0f - 1.0f;					// z in [-1, 1]
 			float theta = dist(rng) * 2.0f * glm::pi<float>();	// angle around Z
@@ -97,7 +100,7 @@ void SandboxServer::Run()
 			{
 				if (e.IsClient)
 				{
-					GetCommandBus().Dispatch(e.Client_ID, GameStateCommand{});
+					// GetCommandBus().Dispatch(e.Client_ID, GameStateCommand{});
 					return;
 				}
 				vec3 velocity = ByteReader(e.payload).vec3();
@@ -110,12 +113,12 @@ void SandboxServer::Run()
 				if (pos.x > MaxX)
 				{
 					pos.x = MaxX;
-					velocity.x *= -1.f;
+					velocity.x *= -1.F;
 				}
 				else if (pos.x < MinX)
 				{
 					pos.x = MinX;
-					velocity.x *= -1.f;
+					velocity.x *= -1.F;
 				}
 
 				// ---- Y Axis ----
@@ -159,13 +162,28 @@ void SandboxServer::Run()
 		}
 	}
 }
-void SandboxServer::OnClientSpawn(const ClientSpawnInfo& c)
+void SandboxServer::OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
+								  AtlasEntityPayload& payload)
 {
-	logger.DebugFormatted("SPAWNING CLIENT ENTITY FOR CLIENT {}", UUIDGen::ToString(c.client.ID));
-	AtlasEntityHandle clientHandle = AtlasNet_CreateClientEntity(c.client.ID, c.spawnLocation);
+	GameStateCommand setPosCommand;
+	setPosCommand.yourPosition = c.spawnLocation.position;
+	GetCommandBus().Dispatch(c.client.ID, setPosCommand);
+	logger.DebugFormatted("Sending a GameServerState to {} Setting initial pos to {}",
+						  UUIDGen::ToString(c.client.ID), glm::to_string(c.spawnLocation.position));
 }
 void SandboxServer::OnGameClientInputCommand(const NetClientIntentHeader& header,
 											 const GameClientInputCommand& command)
 {
-	logger.Debug("Received a GameClientInputCommand");
+	logger.DebugFormatted("Received a GameClientInputCommand from {} requesting to move to {}",
+						  UUIDGen::ToString(header.clientID),
+						  glm::to_string(command.myDesiredDestination));
+
+	EntityLedger::Get().GetEntity(header.entityID, [&](AtlasEntity& e)
+								  { e.transform.position = command.myDesiredDestination; });
+	GameStateCommand response;
+	response.yourPosition = command.myDesiredDestination;
+	logger.DebugFormatted("Responding a GameServerState to {} approving move to {}",
+						  UUIDGen::ToString(header.clientID),
+						  glm::to_string(command.myDesiredDestination));
+	GetCommandBus().Dispatch(header.clientID, response);
 }

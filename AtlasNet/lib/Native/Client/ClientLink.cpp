@@ -80,6 +80,10 @@ void ClientLink::ConnectToAtlasNet(const IPAddress &address)
 	c.target = NetworkIdentityType::eAtlasNetInitial;
 
 	Connections.insert(c);
+	std::unique_lock<std::mutex> lock(mutex);
+
+	// Wait until ready == true
+	connectedCV.wait(lock, [this] { return ConnectedToAtlasNet; });
 }
 void ClientLink::Init()
 {
@@ -114,7 +118,7 @@ void ClientLink::Init()
 				auto now = clock::now();
 				if (now - last < std::chrono::milliseconds(2))
 				{
-					std::this_thread::sleep_for(std::chrono::milliseconds(50));
+					std::this_thread::sleep_for(std::chrono::milliseconds(1));
 				}
 				last = now;
 			}
@@ -130,6 +134,11 @@ void ClientLink::OnClientIDAssignedPacket(const ClientIDAssignPacket &clientIDPa
 						  clientIDPacket.AssignedClientID.ToString());
 	ClientID id = clientIDPacket.AssignedClientID.ID;
 	ClientCredentials::Make(id);
+	{
+		std::lock_guard<std::mutex> lock(mutex);
+		ConnectedToAtlasNet = true;
+	}
+	connectedCV.notify_one();
 }
 void ClientLink::ReceiveMessages()
 {
@@ -201,5 +210,24 @@ void ClientLink::OnConnected(SteamNetConnectionStatusChangedCallback_t *pInfo)
 							   c.target = realIdentity;
 						   });
 		ManagingProxy = realIdentity;
+	}
+}
+void ClientLink::SendMessage(const std::shared_ptr<IPacket> &packet,
+							 NetworkMessageSendFlag sendFlag)
+{
+	const Connection &conn = *Connections.get<IndexByTarget>().find(ManagingProxy);
+
+	ByteWriter bw;
+	packet->Serialize(bw);
+	const auto data_span = bw.bytes();
+	const auto SendResult = SteamNetworkingSockets()->SendMessageToConnection(
+		conn.SteamConnection, data_span.data(), data_span.size_bytes(), (int)sendFlag, nullptr);
+
+	if (SendResult != k_EResultOK)
+	{
+		logger.ErrorFormatted(
+			"Unable to send message. SteamNetworkingSockets returned "
+			"result code {}",
+			(int)SendResult);
 	}
 }

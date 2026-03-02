@@ -59,10 +59,13 @@ void IAtlasNetServer::AtlasNet_Initialize()
 				ClientSpawnInfo i;
 				i.client = e.client;
 				i.spawnLocation = e.SpawnLocation;
-				OnClientSpawn(i);
+				AtlasNet_CreateClientEntity(e.client.ID, i.spawnLocation);
+				AtlasEntityPayload test_payload;
+				OnClientSpawn(i, AtlasEntityMinimal{}, test_payload);
 			}
 		});
 	logger->Debug("AtlasNet Initialize");
+	commandbus.emplace();
 }
 
 AtlasEntityHandle IAtlasNetServer::AtlasNet_CreateEntity(const Transform &t,

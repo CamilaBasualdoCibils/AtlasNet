@@ -132,6 +132,8 @@ class Interlink : public Singleton<Interlink>
 					 NetworkMessageSendFlag sendFlag);
 	PacketManager &GetPacketManager()
 	{
+		if (!IsInit)
+			throw "Interlink Not Initialized";
 		ASSERT(IsInit, "Interlink was not initialized");
 		return packet_manager;
 	}
