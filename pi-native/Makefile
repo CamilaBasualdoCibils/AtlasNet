@@ -84,7 +84,7 @@ build-core: configure
 
 build-docker: build-core
 	@echo "==> Staging binaries and building local Docker images (arm64) via CMake target AtlasnetDockerBuild_Fast..."
-	cmake --build "$(BUILD_DIR)" --target AtlasnetDockerBuild_Fast -- -j2
+	BUILDKITD_CONFIG="$(ATLASNET_ROOT)/AtlasNet/docker/buildkitd.pi.toml" cmake --build "$(BUILD_DIR)" --target AtlasnetDockerBuild_Fast -- -j2
 	@echo "==> Docker images built using CopyDockerfile (arm64 local images: watchdog, proxy, shard, cartograph)."
 
 push-docker: build-docker
