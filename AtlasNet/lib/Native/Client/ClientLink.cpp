@@ -212,3 +212,22 @@ void ClientLink::OnConnected(SteamNetConnectionStatusChangedCallback_t *pInfo)
 		ManagingProxy = realIdentity;
 	}
 }
+void ClientLink::SendMessage(const std::shared_ptr<IPacket> &packet,
+							 NetworkMessageSendFlag sendFlag)
+{
+	const Connection &conn = *Connections.get<IndexByTarget>().find(ManagingProxy);
+
+	ByteWriter bw;
+	packet->Serialize(bw);
+	const auto data_span = bw.bytes();
+	const auto SendResult = SteamNetworkingSockets()->SendMessageToConnection(
+		conn.SteamConnection, data_span.data(), data_span.size_bytes(), (int)sendFlag, nullptr);
+
+	if (SendResult != k_EResultOK)
+	{
+		logger.ErrorFormatted(
+			"Unable to send message. SteamNetworkingSockets returned "
+			"result code {}",
+			(int)SendResult);
+	}
+}

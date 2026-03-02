@@ -97,7 +97,7 @@ void SandboxServer::Run()
 			{
 				if (e.IsClient)
 				{
-					//GetCommandBus().Dispatch(e.Client_ID, GameStateCommand{});
+					// GetCommandBus().Dispatch(e.Client_ID, GameStateCommand{});
 					return;
 				}
 				vec3 velocity = ByteReader(e.payload).vec3();
@@ -110,12 +110,12 @@ void SandboxServer::Run()
 				if (pos.x > MaxX)
 				{
 					pos.x = MaxX;
-					velocity.x *= -1.f;
+					velocity.x *= -1.F;
 				}
 				else if (pos.x < MinX)
 				{
 					pos.x = MinX;
-					velocity.x *= -1.f;
+					velocity.x *= -1.F;
 				}
 
 				// ---- Y Axis ----
@@ -160,9 +160,8 @@ void SandboxServer::Run()
 	}
 }
 void SandboxServer::OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
-							   AtlasEntityPayload& payload)
+								  AtlasEntityPayload& payload)
 {
-	
 }
 void SandboxServer::OnGameClientInputCommand(const NetClientIntentHeader& header,
 											 const GameClientInputCommand& command)

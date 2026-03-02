@@ -3,10 +3,12 @@
 #include "Command/CommandBus.hpp"
 #include "Command/NetCommand.hpp"
 #include "Command/Packet/CommandPayloadPacket.hpp"
+#include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 class ClientCommandBus : ICommandBus<NetworkIdentity, NetServerStateHeader, NetClientIntentHeader>
 
 {
+	Log logger = Log("ClientCommandBus");
 	boost::container::small_vector<ClientIntentCommandPacket,10> packets;
    private:
 	void implParseCommand(NetworkIdentity target, const INetCommand& command) override;

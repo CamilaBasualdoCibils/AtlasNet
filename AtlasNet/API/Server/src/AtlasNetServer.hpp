@@ -81,10 +81,15 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 	virtual void OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
 							   AtlasEntityPayload& payload) = 0;
 
-	ServerCommandBus& GetCommandBus() { return commandbus; }
+	ServerCommandBus& GetCommandBus()
+	{
+		if (!commandbus.has_value())
+			throw "Initialize atlasnet first";
+		return *commandbus;
+	}
 
    private:
-	ServerCommandBus commandbus;
+	std::optional<ServerCommandBus> commandbus;
 	AtlasEntity Internal_CreateEntity(const Transform& t, std::span<const uint8_t> metadata = {});
 	void ShardLogicEntry(std::stop_token st);
 };

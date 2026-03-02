@@ -9,6 +9,8 @@
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 
+using ShardID = UUID;
+using ProxyID = UUID;
 struct NetworkIdentity
 {
 	NetworkIdentityType Type = NetworkIdentityType::eInvalid;

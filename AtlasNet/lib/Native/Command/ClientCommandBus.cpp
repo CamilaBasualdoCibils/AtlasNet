@@ -3,6 +3,7 @@
 #include <algorithm>
 
 #include "Client/ClientLink.hpp"
+#include "Command/NetCommand.hpp"
 #include "Command/Packet/CommandPayloadPacket.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Network/NetworkEnums.hpp"
@@ -11,17 +12,12 @@ void ClientCommandBus::implParseCommand(NetworkIdentity target, const INetComman
 {
 	ClientIntentCommandPacket& packet = packets.emplace_back();
 	packet.cmdTypeID = command.GetCommandID();
-	ByteWriter commandDataWriter;
-	command.Serialize(commandDataWriter);
-	packet.commandData.assign(commandDataWriter.bytes().begin(), commandDataWriter.bytes().end());
+	packet.InsertCommand(command);
+	logger.DebugFormatted("Dispatching ClientIntentCommand ID: {}", packet.cmdTypeID);
 }
 void ClientCommandBus::implFlushCommands()
 {
-	NetworkIdentity Proxy = ClientLink::Get().GetManagingProxy();
-	std::for_each(
-		packets.cbegin(), packets.cend(),
-		[Proxy = Proxy](
-			const ClientIntentCommandPacket& p) {  // ClientLink::Get().SendMessage(Proxy, p,
-												   // NetworkMessageSendFlag::eReliableBatched);
-		});
+	std::for_each(packets.cbegin(), packets.cend(), [](const ClientIntentCommandPacket& p)
+				  { ClientLink::Get().SendMessage(p, NetworkMessageSendFlag::eReliableBatched); });
+	packets.clear();
 }

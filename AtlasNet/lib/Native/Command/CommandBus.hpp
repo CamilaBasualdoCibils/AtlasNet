@@ -20,16 +20,19 @@ class ICommandBus
 	virtual void implParseCommand(TargetType target, const INetCommand& command) = 0;
 	virtual void implFlushCommands() = 0;
 
+   protected:
+	void ExecCallback(const NetClientIntentHeader& header, const INetCommand& command)
+	{
+		const std::vector<CallbackFunc>& Callbacks = subscriptions.at(command.GetCommandID());
+
+		std::for_each(Callbacks.cbegin(), Callbacks.cend(),
+					  [&command = command, &header = header](CallbackFunc f)
+					  { f(header, command); });
+	}
+
    public:
 	virtual ~ICommandBus() = default;
-	template <typename T>
-		requires(std::is_base_of_v<INetCommand, T>)
-	void ExecCallback(const T& c)
-	{
-		const std::vector<CallbackFunc>& Callbacks = subscriptions.at(T::GetCommandIDStatic());
 
-		std::for_each(Callbacks.cbegin(), Callbacks.cend(), [c = &c](CallbackFunc f) { f(c); });
-	}
 	template <typename T>
 	void Dispatch(const TargetType& target, const T& c)
 	{

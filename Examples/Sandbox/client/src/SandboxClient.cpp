@@ -119,7 +119,7 @@ void SandboxClient::Run(const IPAddress &address)
 		ShouldDisconnect = ShouldDisconnect || glfwWindowShouldClose(*window);
 	}
 	AtlasNetClient::Get().GetCommandBus().Subscribe<GameStateCommand>(
-		[this](const NetServerStateHeader&, const GameStateCommand &c)
+		[this](const NetServerStateHeader &, const GameStateCommand &c)
 		{ logger.Debug("Received a command of GameStateCommand"); });
 	while (!ShouldDisconnect)
 	{
@@ -130,7 +130,10 @@ void SandboxClient::Run(const IPAddress &address)
 
 		AtlasNetClient::Get().Tick();
 
-		AtlasNetClient::Get().GetCommandBus().Dispatch(GameClientInputCommand{});
+		if (ImGui::IsKeyPressed(ImGuiKey_Space))
+		{
+			AtlasNetClient::Get().GetCommandBus().Dispatch(GameClientInputCommand{});
+		}
 
 		AtlasNetClient::Get().GetCommandBus().Flush();
 		// Print positions every second

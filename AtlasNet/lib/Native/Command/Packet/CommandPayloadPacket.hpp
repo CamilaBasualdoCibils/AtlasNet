@@ -108,14 +108,19 @@ class ClientIntentCommandPacket
 	CommandID cmdTypeID;
 	boost::container::small_vector<uint8_t, 64> commandData;
 
-	void SerializeData(ByteWriter& bw) const override { bw.blob(commandData); }
+	void SerializeData(ByteWriter& bw) const override
+	{
+		bw.write_scalar(cmdTypeID);
+		bw.blob(commandData);
+	}
 	void DeserializeData(ByteReader& br) override
 	{
+		cmdTypeID = br.read_scalar<decltype(cmdTypeID)>();
 		std::span blob = br.blob();
 		commandData.assign(blob.begin(), blob.end());
 	}
 	[[nodiscard]] bool ValidateData() const override { return true; }
-	void InsertCommand(const IClientIntentCommand& command)
+	void InsertCommand(const INetCommand& command)
 	{
 		ByteWriter bw;
 		command.Serialize(bw);

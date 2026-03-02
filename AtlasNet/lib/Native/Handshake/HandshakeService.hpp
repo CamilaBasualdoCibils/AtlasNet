@@ -2,7 +2,6 @@
 
 #include "Client/Client.hpp"
 #include "Client/Packet/ClientSpawnPacket.hpp"
-#include "Command/Database/RoutingManifest.hpp"
 #include "Debug/Log.hpp"
 #include "Entity/Transform.hpp"
 #include "Global/Misc/Singleton.hpp"
@@ -43,7 +42,7 @@ class HandshakeService : public Singleton<HandshakeService>
 			   "Unable to find a shard for that position. TODO, Implement a GetClosestBound in "
 			   "IHeuristic");
 
-		RoutingManifest::Get().AssignProxyClient(c.ID, NetworkCredentials::Get().GetID());
+		ClientManifest::Get().AssignProxyClient(c.ID, NetworkCredentials::Get().GetID());
 		ClientSpawnPacket csp;
 		csp.stage = ClientSpawnPacket::eNotification;
 		csp.SetAsNotification().incomingClients.push_back(

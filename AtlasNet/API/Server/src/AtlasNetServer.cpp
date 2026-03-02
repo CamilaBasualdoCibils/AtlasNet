@@ -65,6 +65,7 @@ void IAtlasNetServer::AtlasNet_Initialize()
 			}
 		});
 	logger->Debug("AtlasNet Initialize");
+	commandbus.emplace();
 }
 
 AtlasEntityHandle IAtlasNetServer::AtlasNet_CreateEntity(const Transform &t,
