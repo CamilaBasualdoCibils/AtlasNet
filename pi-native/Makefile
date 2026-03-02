@@ -73,8 +73,8 @@ build-core: configure
 	@echo "==> Core AtlasNet targets built (watchdog, proxy, shard)."
 
 build-docker: build-core
-	@echo "==> Building local Docker images (arm64) via CopyDockerfile..."
-	cd "$(ATLASNET_ROOT)/AtlasNet" && ./docker/BuildDockerImages.sh -f ./docker/dockerfiles/docker-bake.copy.json
+	@echo "==> Staging binaries and building local Docker images (arm64) via CMake target AtlasnetDockerBuild_Fast..."
+	cmake --build "$(BUILD_DIR)" --target AtlasnetDockerBuild_Fast -- -j2
 	@echo "==> Docker images built using CopyDockerfile (arm64 local images: watchdog, proxy, shard, cartograph)."
 
 push-docker: build-docker
