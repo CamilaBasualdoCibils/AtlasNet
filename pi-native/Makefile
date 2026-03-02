@@ -69,8 +69,8 @@ configure: deps vcpkg
 
 build-core: configure
 	@echo "==> Building core AtlasNet runtimes for arm64 (this may take a while on a Pi 5)..."
-	cmake --build "$(BUILD_DIR)" --target watchdog proxy shard cartograph -- -j2
-	@echo "==> Core AtlasNet targets built."
+	cmake --build "$(BUILD_DIR)" --target watchdog proxy shard -- -j2
+	@echo "==> Core AtlasNet targets built (watchdog, proxy, shard)."
 
 build-docker: build-core
 	@echo "==> Building local Docker images (arm64) via CopyDockerfile..."
