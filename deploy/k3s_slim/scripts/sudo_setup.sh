@@ -6,9 +6,20 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install opens
 
 : "${SERVER_IP:?Set SERVER_IP in .env or pass SERVER_IP=...}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env or pass SERVER_SSH_USER=...}"
-: "${PI_WORKER_IP:?Set PI_WORKER_IP in .env or pass PI_WORKER_IP=...}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
+
+resolve_worker_ips() {
+  local workers="${WORKER_IPS:-}"
+  if [[ -z "${workers// }" ]]; then
+    workers="${LINUX_WORKER_IP:-} ${PI_WORKER_IP:-}"
+  fi
+  workers="$(echo "$workers" | xargs)"
+  [[ -n "$workers" ]] || die "Set WORKER_IPS (or LINUX_WORKER_IP/PI_WORKER_IP) in .env."
+  echo "$workers"
+}
+
+WORKERS="$(resolve_worker_ips)"
 
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 [[ -f "$SSH_KEY" ]] || die "SSH key file does not exist: $SSH_KEY"
@@ -73,9 +84,13 @@ ensure_passwordless_sudo() {
 
 echo "Checking SSH access before sudo setup ..."
 check_ssh_access "$SERVER_IP" "$SERVER_SSH_USER"
-check_ssh_access "$PI_WORKER_IP" "$WORKER_SSH_USER"
+for worker_ip in $WORKERS; do
+  check_ssh_access "$worker_ip" "$WORKER_SSH_USER"
+done
 
 ensure_passwordless_sudo "$SERVER_IP" "$SERVER_SSH_USER" "server"
-ensure_passwordless_sudo "$PI_WORKER_IP" "$WORKER_SSH_USER" "worker"
+for worker_ip in $WORKERS; do
+  ensure_passwordless_sudo "$worker_ip" "$WORKER_SSH_USER" "worker ${worker_ip}"
+done
 
 echo "Sudo setup done. Run 'make linux-pi'."

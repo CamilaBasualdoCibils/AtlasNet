@@ -13,11 +13,41 @@ source "$ENV_FILE"
 
 : "${SERVER_IP:?Set SERVER_IP in .env}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
-: "${PI_WORKER_IP:?Set PI_WORKER_IP in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
 : "${SERVER_PORT_CLEANUP_PORTS:=7946}"
 : "${WORKER_PORT_CLEANUP_PORTS:=7946}"
+
+resolve_worker_ips() {
+  local workers="${WORKER_IPS:-}"
+  if [[ -z "${workers// }" ]]; then
+    workers="${LINUX_WORKER_IP:-} ${PI_WORKER_IP:-}"
+  fi
+  workers="$(echo "$workers" | xargs)"
+  [[ -n "$workers" ]] || die "Set WORKER_IPS (or LINUX_WORKER_IP/PI_WORKER_IP) in .env"
+  echo "$workers"
+}
+
+WORKERS="$(resolve_worker_ips)"
+
+append_port_if_missing() {
+  local list="$1"
+  local want="$2"
+  local item
+
+  for item in $list; do
+    if [[ "$item" == "$want" ]]; then
+      echo "$list"
+      return 0
+    fi
+  done
+
+  echo "$list $want"
+}
+
+# Always preflight server API port conflicts for k3s.
+SERVER_PORT_CLEANUP_PORTS="$(append_port_if_missing "$SERVER_PORT_CLEANUP_PORTS" "6443")"
+SERVER_PORT_CLEANUP_PORTS="$(echo "$SERVER_PORT_CLEANUP_PORTS" | xargs)"
 
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 [[ -f "$SSH_KEY" ]] || die "SSH key file does not exist: $SSH_KEY"
@@ -36,7 +66,8 @@ cleanup_remote_ports() {
   }
 
   echo "${host_label}: cleaning ports [${ports}] on ${host_user}@${host_ip}"
-  ssh -tt -i "$SSH_KEY" \
+  ssh -T -i "$SSH_KEY" \
+    -o BatchMode=yes \
     -o StrictHostKeyChecking=accept-new \
     -o ConnectTimeout=5 \
     "${host_user}@${host_ip}" \
@@ -101,6 +132,12 @@ for port in $PORTS; do
   for pid in $pids; do
     comm="$(get_comm "$pid")"
 
+    # Keep k3s on the API port when it's already healthy on reruns.
+    if [[ "$port" == "6443" && "$comm" =~ ^k3s(|-server)$ ]]; then
+      echo "   - keeping k3s listener on 6443 (pid ${pid})"
+      continue
+    fi
+
     # Docker Swarm uses 7946 and blocks MetalLB speaker.
     if [[ "$port" == "7946" && "$comm" == "dockerd" ]]; then
       swarm_state="$(sudo docker info --format '{{.Swarm.LocalNodeState}}' 2>/dev/null || true)"
@@ -125,6 +162,13 @@ for port in $PORTS; do
   done
 
   remaining="$(sudo ss -lntupH "( sport = :${port} )" 2>/dev/null || true)"
+  if [[ "$port" == "6443" && -n "${remaining// }" ]]; then
+    remaining_non_k3s="$(printf '%s\n' "$remaining" | awk 'NF && $0 !~ /k3s/' || true)"
+    if [[ -z "${remaining_non_k3s// }" ]]; then
+      echo " - port 6443: reserved by k3s (allowed)"
+      continue
+    fi
+  fi
   if [[ -n "${remaining// }" ]]; then
     echo "ERROR: port ${port} still in use:"
     echo "$remaining"
@@ -137,6 +181,8 @@ REMOTE
 }
 
 cleanup_remote_ports "$SERVER_SSH_USER" "$SERVER_IP" "server" "$SERVER_PORT_CLEANUP_PORTS"
-cleanup_remote_ports "$WORKER_SSH_USER" "$PI_WORKER_IP" "worker" "$WORKER_PORT_CLEANUP_PORTS"
+for worker_ip in $WORKERS; do
+  cleanup_remote_ports "$WORKER_SSH_USER" "$worker_ip" "worker ${worker_ip}" "$WORKER_PORT_CLEANUP_PORTS"
+done
 
 echo "Port cleanup done."

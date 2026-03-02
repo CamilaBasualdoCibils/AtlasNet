@@ -3,7 +3,8 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 CONFIG_FILE="$ROOT_DIR/config/cluster.env"
-KUBECONFIG_PATH="$ROOT_DIR/config/kubeconfig"
+PROJECT_KUBECONFIG_PATH="$ROOT_DIR/config/kubeconfig"
+TARGET_KUBECONFIG_PATH="${K3S_KUBECONFIG_PATH:-$HOME/.kube/config}"
 CONTEXT_NAME="k3s-homelab"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
@@ -178,6 +179,37 @@ check_sudo_access() {
   fi
 }
 
+check_server_api_port_conflict() {
+  local listeners
+  listeners="$(
+    ssh -i "$SSH_KEY" \
+      -o BatchMode=yes \
+      -o StrictHostKeyChecking=accept-new \
+      -o ConnectTimeout=5 \
+      "${SERVER_SSH_USER}@${SERVER_IP}" \
+      "sudo ss -ltnp '( sport = :6443 )' 2>/dev/null | awk 'NR>1 {print}'" \
+      2>/dev/null || true
+  )"
+
+  if [[ -z "${listeners// }" ]]; then
+    return 0
+  fi
+  if [[ "$listeners" == *k3s* ]]; then
+    return 0
+  fi
+
+  cat >&2 <<EOF2
+ERROR: Server API port 6443 is already in use on ${SERVER_IP}.
+Current listeners:
+${listeners}
+
+This blocks k3s server startup.
+Common cause on dev machines: IDE/port-forward process bound to 127.0.0.1:6443.
+Close/stop that port forward and rerun 'make linux-pi'.
+EOF2
+  exit 1
+}
+
 install_k3sup_if_missing() {
   if command -v k3sup >/dev/null 2>&1; then
     return 0
@@ -199,22 +231,33 @@ install_k3sup_if_missing() {
   command -v k3sup >/dev/null 2>&1 || die "k3sup install failed"
 }
 
-link_default_kubeconfig() {
-  local default_dir="$HOME/.kube"
-  local default_path="$default_dir/config"
-  local backup_path=""
-
-  mkdir -p "$default_dir"
-
-  if [[ -e "$default_path" && ! -L "$default_path" ]]; then
-    backup_path="${default_path}.bak.$(date +%Y%m%d%H%M%S)"
-    mv "$default_path" "$backup_path"
-    echo "Backed up existing kubeconfig: $backup_path"
+sync_project_kubeconfig_copy() {
+  mkdir -p "$(dirname "$PROJECT_KUBECONFIG_PATH")"
+  if [[ "$TARGET_KUBECONFIG_PATH" != "$PROJECT_KUBECONFIG_PATH" ]]; then
+    cp "$TARGET_KUBECONFIG_PATH" "$PROJECT_KUBECONFIG_PATH"
   fi
+  chmod 600 "$TARGET_KUBECONFIG_PATH" >/dev/null 2>&1 || true
+  chmod 600 "$PROJECT_KUBECONFIG_PATH" >/dev/null 2>&1 || true
+  echo "Kubeconfig target: $TARGET_KUBECONFIG_PATH"
+  echo "Project kubeconfig copy: $PROJECT_KUBECONFIG_PATH"
+}
 
-  ln -sfn "$KUBECONFIG_PATH" "$default_path"
-  chmod 600 "$KUBECONFIG_PATH" >/dev/null 2>&1 || true
-  echo "Linked default kubeconfig: $default_path -> $KUBECONFIG_PATH"
+prepare_target_kubeconfig_path() {
+  local target_dir
+  local previous_real_path=""
+  target_dir="$(dirname "$TARGET_KUBECONFIG_PATH")"
+  mkdir -p "$target_dir"
+
+  # If an older run left ~/.kube/config as a symlink, replace it with a real file path target.
+  if [[ -L "$TARGET_KUBECONFIG_PATH" ]]; then
+    previous_real_path="$(readlink -f "$TARGET_KUBECONFIG_PATH" 2>/dev/null || true)"
+    rm -f "$TARGET_KUBECONFIG_PATH"
+    if [[ -n "$previous_real_path" && -f "$previous_real_path" ]]; then
+      cp "$previous_real_path" "$TARGET_KUBECONFIG_PATH"
+    else
+      : >"$TARGET_KUBECONFIG_PATH"
+    fi
+  fi
 }
 
 echo "Checking SSH access to nodes ..."
@@ -228,6 +271,8 @@ check_sudo_access "$SERVER_IP" "$SERVER_SSH_USER"
 for ip in $WORKER_IPS; do
   check_sudo_access "$ip" "$WORKER_SSH_USER"
 done
+
+check_server_api_port_conflict
 
 install_k3sup_if_missing
 
@@ -243,7 +288,7 @@ K3SUP_INSTALL_ARGS=(
   --user "$SERVER_SSH_USER"
   --ssh-key "$SSH_KEY"
   --tls-san "$K3S_API_ENDPOINT"
-  --local-path "$KUBECONFIG_PATH"
+  --local-path "$TARGET_KUBECONFIG_PATH"
   --context "$CONTEXT_NAME"
   --sudo "$K3SUP_USE_SUDO"
   --k3s-extra-args "$K3S_SERVER_ARGS"
@@ -253,10 +298,12 @@ if [[ -n "$K3S_VERSION" ]]; then
   K3SUP_INSTALL_ARGS+=(--k3s-version "$K3S_VERSION")
 fi
 
-mkdir -p "$(dirname "$KUBECONFIG_PATH")"
+prepare_target_kubeconfig_path
 k3sup "${K3SUP_INSTALL_ARGS[@]}"
 
-export KUBECONFIG="$KUBECONFIG_PATH"
+sync_project_kubeconfig_copy
+
+export KUBECONFIG="$TARGET_KUBECONFIG_PATH"
 
 echo
 echo "Joining workers (if any) ..."
@@ -275,14 +322,10 @@ else
   done
 fi
 
-link_default_kubeconfig
-
-echo
 echo "Cluster context: $CONTEXT_NAME"
 kubectl config use-context "$CONTEXT_NAME" >/dev/null
 
 echo
 echo "Done. Verify with:"
-echo "  export KUBECONFIG=\"$KUBECONFIG_PATH\""
-echo "  # or use default: ~/.kube/config (auto-linked)"
+echo "  export KUBECONFIG=\"$TARGET_KUBECONFIG_PATH\""
 echo "  kubectl get nodes -o wide"

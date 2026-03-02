@@ -6,8 +6,8 @@ Minimal automation to build a small k3s cluster with `k3sup`.
 - Sets up SSH key access to server and worker.
 - Sets up passwordless sudo for those SSH users (if needed).
 - Installs k3s server and joins worker.
-- Writes kubeconfig to `config/kubeconfig`.
-- Automatically symlinks `~/.kube/config` to that file (backs up existing non-symlink config first).
+- Writes kubeconfig directly to `~/.kube/config` (or `K3S_KUBECONFIG_PATH` if set).
+- Mirrors that kubeconfig to `config/kubeconfig` for project-local Make targets.
 
 ## Prereqs
 - Run from your Linux control machine.
@@ -22,10 +22,14 @@ cp .env.example .env
 Edit `.env`:
 - `SERVER_IP`
 - `SERVER_SSH_USER`
-- `PI_WORKER_IP`
-- `WORKER_SSH_USER` (SSH username on the worker; this is not hostname)
+- `WORKER_IPS` (space-separated worker IPs, e.g. Linux agent + Pi agent)
+- `WORKER_SSH_USER` (SSH username used on workers)
 - `SSH_KEY` (default is usually fine)
 - `K3SUP_USE_SUDO=true` (default)
+
+Legacy fallback still works when `WORKER_IPS` is empty:
+- `LINUX_WORKER_IP`
+- `PI_WORKER_IP`
 
 ## 2) Run cluster setup
 ```bash
@@ -45,7 +49,47 @@ kubectl get nodes -o wide
 kubectl get pods -A -o wide
 ```
 
-`kubectl` should work directly because `make linux-pi` links `~/.kube/config` for you.
+`kubectl` should work directly because `make linux-pi` writes `~/.kube/config`.
+
+## 4) Deploy AtlasNet workloads (Docker Hub images)
+
+Set these in `.env`:
+- `DOCKERHUB_NAMESPACE`
+- `ATLASNET_IMAGE_TAG`
+- Optional image overrides: `ATLASNET_WATCHDOG_IMAGE`, `ATLASNET_PROXY_IMAGE`, `ATLASNET_SHARD_IMAGE`, `ATLASNET_CARTOGRAPH_IMAGE`
+
+Then deploy:
+```bash
+make atlasnet-push
+make atlasnet-deploy
+make atlasnet-status
+```
+
+The deploy script reuses the AtlasNet Kubernetes runtime manifest and rewrites images to Docker Hub refs.
+
+`make atlasnet-push` builds and pushes multi-arch (`amd64` + `arm64`) images with buildx
+directly from `AtlasNet/docker/dockerfiles/BuildDockerfile`:
+- `watchdog`
+- `proxy`
+- `shard`
+- `cartograph`
+
+This means one Linux machine can publish all required architectures for mixed Linux + Pi clusters.
+If you need a custom shard/game-server image, set `ATLASNET_SHARD_IMAGE` explicitly in `.env`.
+
+### Private Docker Hub repos
+
+If images are private, set:
+- `DOCKERHUB_REQUIRE_AUTH=true`
+- `DOCKERHUB_USERNAME`
+- `DOCKERHUB_TOKEN` (Docker Hub access token)
+
+`make atlasnet-deploy` will create/update a pull secret in the target namespace and patch the default service account to use it.
+
+### Linux + Pi mixed cluster note
+
+If your cluster has both `amd64` (Linux) and `arm64` (Pi) workers, Docker Hub images must be multi-arch manifests.
+If not, pods may fail with `ImagePullBackOff` or architecture errors.
 
 ## Optional add-ons
 ```bash
@@ -57,10 +101,13 @@ Legacy `config/cluster.env` values are also supported if the file exists.
 
 ## Make targets
 - `make ssh-setup`: create SSH key (if missing) and copy to server + worker.
-- `make sudo-setup`: enable passwordless sudo for SSH users on server + worker.
-- `make port-cleanup`: free configured required ports on server + worker.
-- `make linux-pi`: install k3s server and join worker.
+- `make sudo-setup`: enable passwordless sudo for SSH users on server + workers.
+- `make port-cleanup`: free configured required ports on server + workers.
+- `make linux-pi`: install k3s server and join worker nodes.
 - `make nodes`: quick `kubectl get nodes -o wide` using project kubeconfig.
+- `make atlasnet-push`: build and push multi-arch runtime images to Docker Hub.
+- `make atlasnet-deploy`: apply AtlasNet runtime workloads using Docker Hub images.
+- `make atlasnet-status`: show node/pod/service status for AtlasNet namespace.
 - `make platform`: install optional platform add-ons.
 - `make cleanup-cluster`: uninstall k3s from worker/server and remove local project kubeconfig.
 
@@ -70,4 +117,4 @@ Legacy `config/cluster.env` values are also supported if the file exists.
 - `sudo: Authentication failed`:
   run `make sudo-setup`, or use root SSH users and set `K3SUP_USE_SUDO=false`.
 - `kubectl` tries `localhost:8080`:
-  your kubeconfig is not active; rerun `make linux-pi` or check `~/.kube/config` symlink.
+  your kubeconfig is not active; rerun `make linux-pi` or check `~/.kube/config`.

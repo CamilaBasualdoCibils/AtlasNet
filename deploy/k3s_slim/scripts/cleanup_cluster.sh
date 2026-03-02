@@ -14,9 +14,20 @@ source "$ENV_FILE"
 
 : "${SERVER_IP:?Set SERVER_IP in .env}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
-: "${PI_WORKER_IP:?Set PI_WORKER_IP in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
+
+resolve_worker_ips() {
+  local workers="${WORKER_IPS:-}"
+  if [[ -z "${workers// }" ]]; then
+    workers="${LINUX_WORKER_IP:-} ${PI_WORKER_IP:-}"
+  fi
+  workers="$(echo "$workers" | xargs)"
+  [[ -n "$workers" ]] || die "Set WORKER_IPS (or LINUX_WORKER_IP/PI_WORKER_IP) in .env"
+  echo "$workers"
+}
+
+WORKERS="$(resolve_worker_ips)"
 
 SSH_KEY="${SSH_KEY/#\~/$HOME}"
 [[ -f "$SSH_KEY" ]] || die "SSH key file does not exist: $SSH_KEY"
@@ -62,7 +73,9 @@ REMOTE
 }
 
 # Uninstall worker first, then server.
-uninstall_remote_node "$WORKER_SSH_USER" "$PI_WORKER_IP" "worker"
+for worker_ip in $WORKERS; do
+  uninstall_remote_node "$WORKER_SSH_USER" "$worker_ip" "worker"
+done
 uninstall_remote_node "$SERVER_SSH_USER" "$SERVER_IP" "server"
 
 if [[ -L "$HOME/.kube/config" ]]; then
