@@ -435,12 +435,6 @@ spec:
             - name: INTERNAL_REDIS_PORT
               value: "6379"
           ports:
-            - name: proxy-tcp
-              containerPort: 25568
-              protocol: TCP
-            - name: proxy-udp
-              containerPort: 25568
-              protocol: UDP
             - name: interlink
               containerPort: 25555
               protocol: UDP
@@ -455,14 +449,10 @@ spec:
   selector:
     app: atlasnet-proxy
   ports:
-    - name: proxy-tcp
-      protocol: TCP
-      port: 2555
-      targetPort: proxy-tcp
     - name: proxy-udp
       protocol: UDP
       port: 2555
-      targetPort: proxy-udp
+      targetPort: interlink
 ---
 apiVersion: v1
 kind: Service
@@ -471,14 +461,11 @@ metadata:
   namespace: __NAMESPACE__
 spec:
   type: LoadBalancer
+  sessionAffinity: ClientIP
   selector:
     app: atlasnet-proxy
   ports:
-    - name: proxy-tcp
-      protocol: TCP
-      port: 2555
-      targetPort: proxy-tcp
     - name: proxy-udp
       protocol: UDP
       port: 2555
-      targetPort: proxy-udp
+      targetPort: interlink

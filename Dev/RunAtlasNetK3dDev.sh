@@ -139,7 +139,6 @@ if ((CLUSTER_EXISTS == 0)); then
         --wait \
         -p "3000:3000@loadbalancer" \
         -p "9229:9229@loadbalancer" \
-        -p "2555:2555@loadbalancer" \
         -p "2555:2555/udp@loadbalancer" \
         --volume "/var/run/docker.sock:/var/run/docker.sock@all"
 else
@@ -606,5 +605,5 @@ kctl get svc -n "$NAMESPACE"
 echo
 echo "Cluster '$CLUSTER_NAME' is ready."
 echo "Cartograph: http://127.0.0.1:3000"
-echo "Proxy TCP/UDP: 127.0.0.1:2555"
+echo "Proxy UDP: 127.0.0.1:2555"
 echo "InternalDB: Cluster-internal service (internaldb:6379)"
