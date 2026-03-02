@@ -374,12 +374,14 @@ export default function MapPage() {
     onPointerMoveCapture,
     onPointerUpCapture,
     onPointerCancelCapture,
+    onContextMenuCapture,
     setActiveEntityId,
     setHoveredEntityId,
   } = useCtrlDragEntitySelection({
     containerRef,
     rendererRef,
     entities: authorityEntitiesForSelection,
+    viewMode,
   });
   const activeSelectedEntity = useMemo(
     () =>
@@ -725,17 +727,20 @@ export default function MapPage() {
       selectedPoints: selectedEntities.map((entity) => ({
         x: entity.x,
         y: entity.y,
+        isClient: entity.isClient,
       })),
       inspectedPoint: inspectedEntity
         ? {
             x: inspectedEntity.x,
             y: inspectedEntity.y,
+            isClient: inspectedEntity.isClient,
           }
         : null,
       hoveredPoint: hoveredEntity
         ? {
             x: hoveredEntity.x,
             y: hoveredEntity.y,
+            isClient: hoveredEntity.isClient,
           }
         : null,
     });
@@ -788,6 +793,7 @@ export default function MapPage() {
         onPointerMoveCapture={onPointerMoveCapture}
         onPointerUpCapture={onPointerUpCapture}
         onPointerCancelCapture={onPointerCancelCapture}
+        onContextMenuCapture={onContextMenuCapture}
         onMouseLeave={clearHoveredShard}
       >
         {showShardHoverDetails && selectedEntities.length === 0 && (
@@ -816,7 +822,9 @@ export default function MapPage() {
               pointerEvents: 'none',
             }}
           >
-            hold Ctrl + drag to select entities
+            {viewMode === '2d'
+              ? 'right-click + drag to select entities'
+              : 'hold Ctrl + drag to select entities'}
           </div>
         )}
 

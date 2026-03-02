@@ -37,6 +37,7 @@ interface ProjectedPoint {
 interface MapPoint {
   x: number;
   y: number;
+  isClient?: boolean;
 }
 
 interface EntityFocusOverlay {
@@ -419,6 +420,7 @@ export function createMapRenderer({
     basis?: CameraBasis
   ): void {
     const isFocus = tone === 'focus';
+    const isClientSelected = !isFocus && point.isClient === true;
     const outerRadius =
       viewMode === '2d'
         ? AUTHORITY_ENTITY_WORLD_RADIUS * Math.max(scale2D, 0.0001)
@@ -430,10 +432,14 @@ export function createMapRenderer({
         : clamp(outerRadius * 0.2, 1.4, 3.2);
     const strokeColor = isFocus
       ? 'rgba(59, 130, 246, 0.95)'
-      : 'rgba(251, 191, 36, 0.95)';
+      : isClientSelected
+        ? 'rgba(239, 68, 68, 0.95)'
+        : 'rgba(251, 191, 36, 0.95)';
     const fillColor = isFocus
       ? 'rgba(59, 130, 246, 0.36)'
-      : 'rgba(251, 191, 36, 0.3)';
+      : isClientSelected
+        ? 'rgba(239, 68, 68, 0.3)'
+        : 'rgba(251, 191, 36, 0.3)';
 
     ctx.save();
     ctx.beginPath();
