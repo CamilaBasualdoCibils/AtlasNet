@@ -47,7 +47,8 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 			poly.verticies.reserve(polyBound.vertices.size());
 			for (const auto& v : polyBound.vertices)
 			{
-				poly.verticies.emplace_back(v.x, v.y);
+				// Cartograph expects polygon vertices as local offsets from position.
+				poly.verticies.emplace_back(v.x - c.x, v.y - c.y);
 			}
 
 			if (const auto shard =

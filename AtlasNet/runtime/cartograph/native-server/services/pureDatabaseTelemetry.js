@@ -324,6 +324,13 @@ function toPolygonShape(id, points, ownerId, color) {
   }
   cx /= points.length;
   cy /= points.length;
+
+  // Cartograph expects polygon points to be local offsets from `position`.
+  const localPoints = points.map((p) => ({
+    x: Number(p.x) - cx,
+    y: Number(p.y) - cy,
+  }));
+
   return {
     id: String(id),
     ownerId: ownerId || '',
@@ -332,7 +339,7 @@ function toPolygonShape(id, points, ownerId, color) {
     radius: 0,
     size: { x: Math.abs(maxX - minX), y: Math.abs(maxY - minY) },
     color,
-    points,
+    points: localPoints,
   };
 }
 
