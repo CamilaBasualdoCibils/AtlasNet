@@ -15,34 +15,47 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 	shapes.clear();
 	logger.DebugFormatted("Fetching Heuristic");
 	const auto current_heuristic = HeuristicManifest::Get().PullHeuristic();
-	logger.DebugFormatted("Fetched Heuristic");
-
-	const GridHeuristic& grid_heuristic = dynamic_cast<GridHeuristic&>(*current_heuristic);
-	logger.DebugFormatted("Grid Heuristic has {} quads", grid_heuristic.GetGrids().size());
-
-	for (const auto& grid : grid_heuristic.GetGrids())
+	if (!current_heuristic)
 	{
+		logger.Warning("No active heuristic available; returning 0 shapes.");
+		return;
+	}
+	logger.DebugFormatted("Fetched Heuristic type={}", IHeuristic::TypeToString(current_heuristic->GetType()));
+
+	// Serialize bounds in a heuristic-agnostic way and deserialize them as GridShape.
+	// All currently supported heuristics (GridCell and Quadtree) use GridShape bounds.
+	std::unordered_map<IBounds::BoundsID, ByteWriter> serializedBounds;
+	current_heuristic->SerializeBounds(serializedBounds);
+	logger.DebugFormatted("Heuristic reports {} bounds", serializedBounds.size());
+
+	for (const auto& [boundId, writer] : serializedBounds)
+	{
+		ByteReader br(writer.bytes());
+		GridShape grid;
+		grid.Deserialize(br);
+
 		IBoundsDrawShape rect;
 		rect.pos_x = grid.aabb.center().x;
 		rect.pos_y = grid.aabb.center().y;
 		rect.type = IBoundsDrawShape::Type::eRectangle;
 		rect.size_x = grid.aabb.halfExtents().x * 2;
 		rect.size_y = grid.aabb.halfExtents().y * 2;
-		//rect.owner_id = claim_key.ToString();
 		rect.id = grid.ID;
+
 		if (const auto shard = HeuristicManifest::Get().ShardFromBoundID(grid.ID);
 			shard.has_value())
 		{
 			rect.color = "rgba(100, 255, 149, 1)";
-
 			rect.owner_id = shard->ToString();
 		}
 		else
 		{
 			rect.color = "rgba(255, 149, 100, 1)";
 		}
+
 		shapes.emplace_back(rect);
-	} /*
+	}
+	/*
 	 std::vector<GridShape> out_grid_shape;
 	 HeuristicManifest::Get().GetAllPendingBounds<GridShape>(out_grid_shape);
 	 for (const auto& grid : out_grid_shape)

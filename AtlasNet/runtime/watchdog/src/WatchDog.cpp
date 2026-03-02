@@ -23,6 +23,7 @@
 #include "Events/EventSystem.hpp"
 #include "Events/Events/Debug/LogEvent.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
+#include "Heuristic/Quadtree/QuadtreeHeuristic.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Interlink/InterlinkEnums.hpp"
@@ -290,7 +291,16 @@ void WatchDog::Init()
 	Interlink::Get().Init();
 	EventSystem::Get().Init();
 
-	SwitchHeuristic(IHeuristic::Type::eGridCell);
+	// Legacy grid-cell heuristic is still available as a separate heuristic,
+	// but WatchDog now defaults to the Quadtree heuristic.
+	SwitchHeuristic(IHeuristic::Type::eQuadtree);
+	if (auto quadtree =
+			std::dynamic_pointer_cast<QuadtreeHeuristic>(Heuristic))
+	{
+		// For now, configure Quadtree to produce 16 cells over the same
+		// net area as the legacy grid heuristic.
+		quadtree->SetTargetLeafCount(4);
+	}
 	ComputeHeuristic();	 // compute once
 	// HeuristicThread = std::jthread([this](std::stop_token st)
 	//							   { this->HeurristicThreadEntry(st); });
@@ -444,12 +454,21 @@ void WatchDog::SwitchHeuristic(IHeuristic::Type newHeuristic)
 	{
 		case IHeuristic::Type::eNone:
 			Heuristic = nullptr;
+			break;
+		case IHeuristic::Type::eInvalid:
+			Heuristic = nullptr;
+			break;
 		case IHeuristic::Type::eGridCell:
 		{
 			Heuristic = std::make_shared<GridHeuristic>();
+			break;
+		}
+		case IHeuristic::Type::eQuadtree:
+		{
+			Heuristic = std::make_shared<QuadtreeHeuristic>();
+			break;
 		}
 		case IHeuristic::Type::eOctree:
-		case IHeuristic::Type::eQuadtree:
 			break;
 	}
 }

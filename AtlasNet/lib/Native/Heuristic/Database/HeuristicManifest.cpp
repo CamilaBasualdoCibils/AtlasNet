@@ -11,6 +11,7 @@
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/pch.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
+#include "Heuristic/Quadtree/QuadtreeHeuristic.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "InternalDB/InternalDB.hpp"
 #include "Network/NetworkIdentity.hpp"
@@ -393,9 +394,10 @@ std::unique_ptr<IHeuristic> HeuristicManifest::PullHeuristic()
 		case IHeuristic::Type::eGridCell:
 			heuristic = std::make_unique<GridHeuristic>();
 			break;
-		case IHeuristic::Type::eOctree:
-			break;
 		case IHeuristic::Type::eQuadtree:
+			heuristic = std::make_unique<QuadtreeHeuristic>();
+			break;
+		case IHeuristic::Type::eOctree:
 			break;
 
 		default:
@@ -553,10 +555,11 @@ std::unique_ptr<IBounds> HeuristicManifest::Internal_CreateIBoundInst()
 	switch (hType)
 	{
 		case IHeuristic::Type::eGridCell:
+		case IHeuristic::Type::eQuadtree:
+			// Both grid and quadtree heuristics currently use GridShape bounds.
 			return std::make_unique<GridShape>();
 			break;
 		case IHeuristic::Type::eOctree:
-		case IHeuristic::Type::eQuadtree:
 		case IHeuristic::Type::eInvalid:
 		case IHeuristic::Type::eNone:
 			logger.ErrorFormatted("Unrecognized HeuristicType {}", IHeuristic::TypeToString(hType));
