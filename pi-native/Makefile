@@ -10,7 +10,7 @@
 #   make build-docker   # (optional) build local Docker images via CopyDockerfile
 #
 
-.PHONY: deps vcpkg configure build-core build-docker all
+.PHONY: deps vcpkg configure build-core build-docker push-docker all
 
 # Adjust if you prefer a different install location on the Pi.
 VCPKG_ROOT ?= /opt/vcpkg
@@ -24,7 +24,7 @@ BUILD_DIR ?= $(ATLASNET_ROOT)/build-pi
 all: build-core
 
 deps:
-	@echo "==> Installing system build dependencies (requires sudo)..."
+	@echo "==> Installing system build dependencies + Docker (requires sudo)..."
 	sudo apt-get update
 	sudo apt-get install -y \
 	  build-essential clang clangd \
@@ -33,8 +33,11 @@ deps:
 	  python3 python3-pip \
 	  uuid-dev libuv1-dev libssl-dev zlib1g-dev \
 	  protobuf-compiler libprotobuf-dev \
-	  swig nodejs npm
-	@echo "==> System dependencies installed (or already present)."
+	  swig nodejs npm \
+	  docker.io
+	@echo "==> Ensuring current user is in 'docker' group (may require re-login)..."
+	sudo usermod -aG docker "$$USER" || true
+	@echo "==> System dependencies + Docker installed (or already present)."
 
 vcpkg:
 	@echo "==> Ensuring vcpkg exists at $(VCPKG_ROOT)..."
@@ -48,7 +51,7 @@ vcpkg:
 	cd "$(VCPKG_ROOT)" && ./bootstrap-vcpkg.sh
 	@echo "==> vcpkg bootstrapped at $(VCPKG_ROOT)."
 
-configure: vcpkg
+configure: deps vcpkg
 	@echo "==> Configuring CMake for native arm64 build in $(BUILD_DIR)..."
 	mkdir -p "$(BUILD_DIR)"
 	cd "$(BUILD_DIR)" && cmake \
@@ -71,4 +74,32 @@ build-docker: build-core
 	@echo "==> Building local Docker images (arm64) via CopyDockerfile..."
 	cd "$(ATLASNET_ROOT)/AtlasNet" && ./docker/BuildDockerImages.sh -f ./docker/dockerfiles/docker-bake.copy.json
 	@echo "==> Docker images built using CopyDockerfile (arm64 local images: watchdog, proxy, shard, cartograph)."
+
+push-docker: build-docker
+	@echo "==> Preparing to push arm64 images to Docker Hub..."
+	@if [ -z "$$DOCKERHUB_NAMESPACE" ]; then \
+	  echo "ERROR: DOCKERHUB_NAMESPACE must be set in the environment (e.g. your Docker Hub username)."; \
+	  exit 1; \
+	fi
+	@if [ -z "$$ATLASNET_IMAGE_TAG" ]; then \
+	  echo "ERROR: ATLASNET_IMAGE_TAG must be set in the environment (e.g. latest or v0.1.0)."; \
+	  exit 1; \
+	fi
+	@if [ -z "$$DOCKERHUB_USERNAME" ] || [ -z "$$DOCKERHUB_TOKEN" ]; then \
+	  echo "ERROR: DOCKERHUB_USERNAME and DOCKERHUB_TOKEN must be set in the environment for docker login."; \
+	  exit 1; \
+	fi
+	@echo "==> Logging into Docker Hub as $$DOCKERHUB_USERNAME ..."
+	@printf '%s' "$$DOCKERHUB_TOKEN" | docker login --username "$$DOCKERHUB_USERNAME" --password-stdin
+	@echo "==> Tagging local images for $$DOCKERHUB_NAMESPACE with tag $$ATLASNET_IMAGE_TAG ..."
+	docker tag watchdog:latest   "$$DOCKERHUB_NAMESPACE/watchdog:$$ATLASNET_IMAGE_TAG"
+	docker tag proxy:latest      "$$DOCKERHUB_NAMESPACE/proxy:$$ATLASNET_IMAGE_TAG"
+	docker tag shard:latest      "$$DOCKERHUB_NAMESPACE/shard:$$ATLASNET_IMAGE_TAG"
+	docker tag cartograph:latest "$$DOCKERHUB_NAMESPACE/cartograph:$$ATLASNET_IMAGE_TAG"
+	@echo "==> Pushing images to Docker Hub..."
+	docker push "$$DOCKERHUB_NAMESPACE/watchdog:$$ATLASNET_IMAGE_TAG"
+	docker push "$$DOCKERHUB_NAMESPACE/proxy:$$ATLASNET_IMAGE_TAG"
+	docker push "$$DOCKERHUB_NAMESPACE/shard:$$ATLASNET_IMAGE_TAG"
+	docker push "$$DOCKERHUB_NAMESPACE/cartograph:$$ATLASNET_IMAGE_TAG"
+	@echo "==> Done. Published arm64 images to Docker Hub namespace '$$DOCKERHUB_NAMESPACE' with tag '$$ATLASNET_IMAGE_TAG'."
 
