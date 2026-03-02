@@ -3,6 +3,7 @@
 #include <unordered_map>
 
 #include "Client/Client.hpp"
+#include "Client/Database/ClientManifest.hpp"
 #include "Client/Packet/ClientSpawnPacket.hpp"
 #include "Debug/Log.hpp"
 #include "Events/EventSystem.hpp"
@@ -35,11 +36,12 @@ class ClientLedger : public Singleton<ClientLedger>
 		{
 			logger.DebugFormatted("Spawning Client {} at {}", UUIDGen::ToString(c.client.ID),
 								  c.spawn_Location.ToString());
+			ClientManifest::Get().AssignShardClient(c.client.ID, NetworkCredentials::Get().GetID());
 			ClientConnectEvent ev;
-            ev.client = c.client;
-            ev.ConnectedProxy = info.sender;
-            ev.SpawnLocation = c.spawn_Location;
-            ev.ConnectedShard = NetworkCredentials::Get().GetID();
+			ev.client = c.client;
+			ev.ConnectedProxy = info.sender;
+			ev.SpawnLocation = c.spawn_Location;
+			ev.ConnectedShard = NetworkCredentials::Get().GetID();
 			EventSystem::Get().Dispatch(ev);
 		}
 	}

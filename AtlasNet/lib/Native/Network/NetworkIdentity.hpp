@@ -9,6 +9,8 @@
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 
+using ShardID = UUID;
+using ProxyID = UUID;
 struct NetworkIdentity
 {
 	NetworkIdentityType Type = NetworkIdentityType::eInvalid;
@@ -21,6 +23,7 @@ struct NetworkIdentity
 
 	static NetworkIdentity MakeIDWatchDog();
 	static NetworkIdentity MakeIDShard(const UUID& _ID);
+	static NetworkIdentity MakeIDProxy(const UUID& _ID);
 	static NetworkIdentity MakeIDGameClient(const UUID& _ID);
 	static NetworkIdentity MakeIDCartograph();
 

@@ -3,7 +3,9 @@
 #include <steam/isteamnetworkingsockets.h>
 #include <steam/steamnetworkingtypes.h>
 
+#include <condition_variable>
 #include <iostream>
+#include <mutex>
 #include <thread>
 
 #include "Debug/Log.hpp"
@@ -24,7 +26,15 @@ class ClientLink : public Singleton<ClientLink>
 
 	PacketManager& GetPacketManager() { return packet_manager; }
 
-	constexpr const NetworkIdentity& GetManagingProxy() const {return ManagingProxy;}
+	constexpr const NetworkIdentity& GetManagingProxy() const { return ManagingProxy; }
+	template <typename T>
+	void SendMessage(const T& packet, NetworkMessageSendFlag sendFlag)
+	{
+		std::shared_ptr<IPacket> packet_ptr = std::make_shared<T>(packet);
+		SendMessage(packet_ptr, sendFlag);
+	}
+	void SendMessage(const std::shared_ptr<IPacket>& packet, NetworkMessageSendFlag sendFlag);
+
    private:
 	void OnConnected(SteamNetConnectionStatusChangedCallback_t* pInfo);
 	void Update();
@@ -41,8 +51,10 @@ class ClientLink : public Singleton<ClientLink>
 	PacketManager packet_manager;
 	PacketManager::Subscription ClientIDAssignSub;
 	Log logger = Log("ClientLink");
-
 	NetworkIdentity ManagingProxy;
+	std::mutex mutex;
+	std::condition_variable connectedCV;
+	bool ConnectedToAtlasNet = false;
 
 	struct IndexByState
 	{
