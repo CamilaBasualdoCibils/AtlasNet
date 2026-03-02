@@ -6,9 +6,10 @@
 #   make deps           # (optional) install build deps via apt
 #   make vcpkg          # clone + bootstrap vcpkg into /opt/vcpkg
 #   make configure      # configure CMake for arm64 with vcpkg
+#   make fix-docker-dns # buildx container DNS needs fixing
 #   make build-core     # build core AtlasNet runtimes
 #   make build-docker   # (optional) build local Docker images via CopyDockerfile
-#
+#	make push-docker    # push docker images to docker hub
 
 .PHONY: deps vcpkg configure build-core build-docker push-docker fix-docker-dns all
 
