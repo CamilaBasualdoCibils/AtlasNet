@@ -91,7 +91,7 @@ install_metallb() {
   helm repo update >/dev/null
 
   kubectl create namespace metallb-system >/dev/null 2>&1 || true
-  helm upgrade --install metallb metallb/metallb --namespace metallb-system
+  helm upgrade --install metallb metallb/metallb --namespace metallb-system --wait
 
   # Address pool (Layer2) - minimal for homelab.
   cat <<EOF | kubectl apply -f -
@@ -118,7 +118,7 @@ install_ingress_nginx() {
   helm repo update >/dev/null
 
   kubectl create namespace ingress-nginx >/dev/null 2>&1 || true
-  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx     --namespace ingress-nginx
+  helm upgrade --install ingress-nginx ingress-nginx/ingress-nginx     --namespace ingress-nginx     --wait
 }
 
 install_cert_manager() {
@@ -126,7 +126,7 @@ install_cert_manager() {
   helm repo update >/dev/null
 
   kubectl create namespace cert-manager >/dev/null 2>&1 || true
-  helm upgrade --install cert-manager jetstack/cert-manager     --namespace cert-manager     --set crds.enabled=true
+  helm upgrade --install cert-manager jetstack/cert-manager     --namespace cert-manager     --set crds.enabled=true     --wait
 }
 
 echo "Installing platform add-ons (safe to re-run) ..."
