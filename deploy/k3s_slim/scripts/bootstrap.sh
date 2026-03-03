@@ -210,6 +210,36 @@ install_k3sup_if_missing() {
   command -v k3sup >/dev/null 2>&1 || die "k3sup install failed"
 }
 
+K3SUP_RETRIES="${K3SUP_RETRIES:-3}"
+K3SUP_RETRY_SLEEP_SECS="${K3SUP_RETRY_SLEEP_SECS:-5}"
+
+k3sup_retry() {
+  local attempt=1
+  local max="$K3SUP_RETRIES"
+  local sleep_s="$K3SUP_RETRY_SLEEP_SECS"
+
+  while true; do
+    if k3sup "$@"; then
+      return 0
+    fi
+
+    if [[ "$attempt" -ge "$max" ]]; then
+      cat >&2 <<EOF2
+ERROR: k3sup failed after ${attempt} attempt(s).
+
+This is often caused by upstream download errors (for example GitHub release endpoints returning 5xx)
+while fetching k3s binaries/hashes. If you saw a "Download failed" message, try rerunning later,
+or set K3S_VERSION in your .env to a pinned version and retry.
+EOF2
+      return 1
+    fi
+
+    echo "WARN: k3sup failed (attempt ${attempt}/${max}). Retrying in ${sleep_s}s..." >&2
+    sleep "$sleep_s"
+    attempt=$((attempt + 1))
+  done
+}
+
 sync_project_kubeconfig_copy() {
   mkdir -p "$(dirname "$PROJECT_KUBECONFIG_PATH")"
   if [[ "$TARGET_KUBECONFIG_PATH" != "$PROJECT_KUBECONFIG_PATH" ]]; then
@@ -318,7 +348,7 @@ if [[ -n "$K3S_VERSION" ]]; then
 fi
 
 prepare_target_kubeconfig_path
-k3sup "${K3SUP_INSTALL_ARGS[@]}"
+k3sup_retry "${K3SUP_INSTALL_ARGS[@]}"
 
 sync_project_kubeconfig_copy
 
@@ -340,7 +370,7 @@ if [[ ${#SERVER_IPS_ARR[@]} -gt 1 ]]; then
       join_host="$ip"
     fi
     echo " - server: $join_user@$join_host"
-    k3sup join \
+    k3sup_retry join \
       --server-ip "$PRIMARY_SERVER_IP" \
       --server-user "$PRIMARY_SERVER_USER_DEFAULT" \
       --ip "$join_host" \
@@ -367,7 +397,7 @@ else
       worker_host="$entry"
     fi
     echo " - worker: $worker_user@$worker_host"
-    k3sup join \
+    k3sup_retry join \
       --server-ip "$PRIMARY_SERVER_IP" \
       --server-user "$PRIMARY_SERVER_USER_DEFAULT" \
       --ip "$worker_host" \
