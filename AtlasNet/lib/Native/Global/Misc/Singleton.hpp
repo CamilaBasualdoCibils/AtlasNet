@@ -2,8 +2,6 @@
 #include <cassert>
 #include <mutex>
 #include <memory>
-#include <iostream>
-#include <typeinfo>
 template <typename Type>
 class Singleton
 {
@@ -35,10 +33,7 @@ public:
             }
             else
             {
-                    std::cerr << "Singleton<" << typeid(Type).name()
-                              << ">::Get() called before Make(...). Failing assertion."
-                              << std::endl;
-                    assert(false&& "Singleton not constructed. Call Make(...) first.");
+                assert(false&& "Singleton not constructed. Call Make(...) first.");
             }
         }
 
