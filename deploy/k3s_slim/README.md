@@ -72,7 +72,7 @@ The deploy script reuses the AtlasNet Kubernetes runtime manifest and rewrites i
 and builds:
 - `watchdog:latest`
 - `proxy:latest`
-- `shard:latest`
+- `sandbox-server:latest`
 - `cartograph:latest`
 
 `make atlasnet-push` will:
@@ -80,6 +80,7 @@ and builds:
 - push them to Docker Hub
 
 If you need a custom shard/game-server image, set `ATLASNET_SHARD_IMAGE` explicitly in `.env`.
+If your local shard source image is not `sandbox-server:latest`, set `ATLASNET_SHARD_LOCAL_IMAGE`.
 
 ### Private Docker Hub repos
 

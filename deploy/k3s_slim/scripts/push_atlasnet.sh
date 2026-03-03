@@ -19,6 +19,7 @@ docker info >/dev/null 2>&1 || die "Docker daemon is not reachable."
 : "${ATLASNET_IMAGE_TAG:=latest}"
 : "${ATLASNET_IMAGE_TAG_AMD64:=latest-amd64}"
 : "${ATLASNET_IMAGE_TAG_ARM64:=latest-arm64}"
+: "${ATLASNET_SHARD_LOCAL_IMAGE:=sandbox-server:latest}"
 
 [[ -n "$DOCKERHUB_NAMESPACE" ]] || die "DOCKERHUB_NAMESPACE is required in .env"
 
@@ -40,7 +41,7 @@ esac
 
 : "${ATLASNET_WATCHDOG_IMAGE:=${DOCKERHUB_NAMESPACE}/watchdog:${ARCH_TAG}}"
 : "${ATLASNET_PROXY_IMAGE:=${DOCKERHUB_NAMESPACE}/proxy:${ARCH_TAG}}"
-: "${ATLASNET_SHARD_IMAGE:=${DOCKERHUB_NAMESPACE}/shard:${ARCH_TAG}}"
+: "${ATLASNET_SHARD_IMAGE:=${DOCKERHUB_NAMESPACE}/sandbox-server:${ARCH_TAG}}"
 : "${ATLASNET_CARTOGRAPH_IMAGE:=${DOCKERHUB_NAMESPACE}/cartograph:${ARCH_TAG}}"
 
 tag_and_push() {
@@ -62,7 +63,7 @@ echo "NOTE: This assumes you've already built local images (e.g. via 'sandbox_at
 
 tag_and_push "watchdog:latest"   "$ATLASNET_WATCHDOG_IMAGE"
 tag_and_push "proxy:latest"      "$ATLASNET_PROXY_IMAGE"
-tag_and_push "shard:latest"      "$ATLASNET_SHARD_IMAGE"
+tag_and_push "$ATLASNET_SHARD_LOCAL_IMAGE" "$ATLASNET_SHARD_IMAGE"
 tag_and_push "cartograph:latest" "$ATLASNET_CARTOGRAPH_IMAGE"
 
 echo
