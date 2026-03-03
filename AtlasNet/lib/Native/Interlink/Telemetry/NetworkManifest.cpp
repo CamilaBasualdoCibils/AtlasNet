@@ -58,7 +58,9 @@ void NetworkManifest::TelemetryUpdate(const NetworkIdentity& identifier)
 										  valueBW.as_string_view());
 #endif
 
-	if (writeResult != 0)
+	// Redis HSET returns 1 for a newly created field and 0 for an updated field.
+	// Both are valid success outcomes.
+	if (writeResult < 0)
 	{
 		std::printf("Failed to update network telemetry. HSET result: %lli\n",
 					static_cast<long long>(writeResult));

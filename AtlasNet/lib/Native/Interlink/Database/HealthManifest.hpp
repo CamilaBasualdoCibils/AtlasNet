@@ -91,7 +91,9 @@ class HealthManifest : public Singleton<HealthManifest>
 		const double TTL = now + _HEALTH_PING_TIMESTAMP_LIFE_MS*0.001;
 
 		const auto setResult = InternalDB::Get()->HSet(HealthPingTable, bw.as_string_view(), std::to_string(TTL));
-		if (setResult != 0)
+		// Redis HSET returns 1 when adding a new field and 0 when overwriting an existing field.
+		// Both are success states, so only negative values are considered failures here.
+		if (setResult < 0)
 		{
 			std::printf("Failed to update health in Health Manifest. HSET result: %lli",setResult);
 		}

@@ -44,6 +44,25 @@ warn_if_mixed_arch_cluster() {
   fi
 }
 
+warn_if_mutable_tags_with_cached_policy() {
+  [[ "$ATLASNET_IMAGE_PULL_POLICY" == "Always" ]] && return 0
+
+  local images=(
+    "$ATLASNET_WATCHDOG_IMAGE"
+    "$ATLASNET_PROXY_IMAGE"
+    "$ATLASNET_SHARD_IMAGE"
+    "$ATLASNET_CARTOGRAPH_IMAGE"
+  )
+  local image
+  for image in "${images[@]}"; do
+    if [[ "$image" == *":latest" ]]; then
+      echo "Warning: mutable image tag detected ('$image') with imagePullPolicy=$ATLASNET_IMAGE_PULL_POLICY."
+      echo "         Nodes may keep stale cached images. Use immutable tags, or set ATLASNET_IMAGE_PULL_POLICY=Always."
+      return 0
+    fi
+  done
+}
+
 configure_dockerhub_pull_secret() {
   if [[ -n "${DOCKERHUB_USERNAME:-}" && -n "${DOCKERHUB_TOKEN:-}" ]]; then
     echo "Configuring Docker Hub pull secret '$DOCKERHUB_SECRET_NAME' in namespace '$ATLASNET_K8S_NAMESPACE' ..."
@@ -158,6 +177,7 @@ echo " - cartograph image: $ATLASNET_CARTOGRAPH_IMAGE"
 echo " - imagePullPolicy: $ATLASNET_IMAGE_PULL_POLICY"
 
 warn_if_mixed_arch_cluster
+warn_if_mutable_tags_with_cached_policy
 ensure_namespace
 configure_dockerhub_pull_secret
 

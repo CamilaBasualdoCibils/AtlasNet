@@ -10,6 +10,7 @@
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 Partition::Partition() {}
 Partition::~Partition() {}
 
@@ -22,6 +23,7 @@ constexpr std::chrono::seconds kDefaultClaimRetryInterval(1);
 void Partition::Init()
 {
 	NetworkIdentity partitionIdentifier(NetworkIdentityType::eShard, UUIDGen::Gen());
+	NetworkCredentials::Make(partitionIdentifier);
 
 	logger = std::make_shared<Log>(partitionIdentifier.ToString());
 
