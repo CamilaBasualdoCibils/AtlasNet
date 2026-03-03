@@ -1,7 +1,8 @@
 SHELL := /usr/bin/env bash
 
 # run in this order:
-# in dev container - AtlasnetDockerBuild_Fast
+# in dev container - sandbox_atlasnet_run
+# (builds AtlasnetDockerBuild_Fast images + SandboxServerDockerBuild image)
 # atlasnet-push
 # atlasnet-merge-manifests
 # ssh-setup

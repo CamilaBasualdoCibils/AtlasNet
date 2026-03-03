@@ -69,7 +69,7 @@ The deploy script reuses the AtlasNet Kubernetes runtime manifest and rewrites i
 
 `make atlasnet-push` now assumes you have already built local Docker images on your dev machine
 (for example via the CMake target `sandbox_atlasnet_run`, which runs `AtlasnetDockerBuild_Fast`
-and builds:
+and `SandboxServerDockerBuild`, and builds:
 - `watchdog:latest`
 - `proxy:latest`
 - `sandbox-server:latest`
