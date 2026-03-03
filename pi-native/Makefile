@@ -23,9 +23,9 @@ ATLASNET_ROOT := $(abspath ..)
 BUILD_DIR ?= $(ATLASNET_ROOT)/build-pi
 
 # Docker Hub / image publishing settings (edit these or override via env)
-# NAMESPACE and TAG are required for push-docker.
+# On the Pi we default to pushing the ARM64-specific tag so it won't overwrite the multi-arch deploy tag.
 DOCKERHUB_NAMESPACE ?=
-ATLASNET_IMAGE_TAG ?= latest
+ATLASNET_IMAGE_TAG ?= latest-arm64
 
 all: build-core
 

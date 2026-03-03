@@ -67,14 +67,18 @@ make atlasnet-status
 
 The deploy script reuses the AtlasNet Kubernetes runtime manifest and rewrites images to Docker Hub refs.
 
-`make atlasnet-push` builds and pushes multi-arch (`amd64` + `arm64`) images with buildx
-directly from `AtlasNet/docker/dockerfiles/BuildDockerfile`:
-- `watchdog`
-- `proxy`
-- `shard`
-- `cartograph`
+`make atlasnet-push` now assumes you have already built local Docker images on your dev machine
+(for example via the CMake target `sandbox_atlasnet_run`, which runs `AtlasnetDockerBuild_Fast`
+and builds:
+- `watchdog:latest`
+- `proxy:latest`
+- `shard:latest`
+- `cartograph:latest`
 
-This means one Linux machine can publish all required architectures for mixed Linux + Pi clusters.
+`make atlasnet-push` will:
+- tag those local images as `${DOCKERHUB_NAMESPACE}/*:${ATLASNET_IMAGE_TAG}`
+- push them to Docker Hub
+
 If you need a custom shard/game-server image, set `ATLASNET_SHARD_IMAGE` explicitly in `.env`.
 
 ### Private Docker Hub repos
