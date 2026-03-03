@@ -18,7 +18,7 @@ ENV_EXPORTS := SERVER_IP SERVER_SSH_USER WORKER_IPS WORKER_SSH_USER SSH_KEY K3S_
 -include $(ENV_FILE)
 export $(ENV_EXPORTS)
 
-.PHONY: bootstrap nodes linux-pi ssh-setup sudo-setup port-cleanup cleanup-cluster atlasnet-push atlasnet-deploy atlasnet-status atlasnet-merge-manifests
+.PHONY: bootstrap nodes linux-pi ssh-setup sudo-setup port-cleanup cleanup-cluster dependency-setup atlasnet-push atlasnet-deploy atlasnet-status atlasnet-merge-manifests
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -31,6 +31,9 @@ ssh-setup:
 
 sudo-setup:
 	./scripts/sudo_setup.sh
+
+dependency-setup:
+	./scripts/dependency_setup.sh
 
 port-cleanup:
 	./scripts/port_cleanup.sh
