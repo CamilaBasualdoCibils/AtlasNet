@@ -77,6 +77,8 @@ ensure_passwordless_sudo() {
 echo "Checking SSH access before sudo setup ..."
 for entry in $SERVER_IPS; do
   [[ -n "$entry" ]] || continue
+  # Strip any stray double quotes that might sneak in from .env formatting
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -88,6 +90,7 @@ for entry in $SERVER_IPS; do
 done
 for entry in $WORKERS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -100,6 +103,7 @@ done
 
 for entry in $SERVER_IPS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -111,6 +115,7 @@ for entry in $SERVER_IPS; do
 done
 for entry in $WORKERS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"

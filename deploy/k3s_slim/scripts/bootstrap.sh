@@ -107,6 +107,8 @@ done
 
 # Derive primary server entry (may be \"user@ip\" or just \"ip\")
 PRIMARY_SERVER_ENTRY="${SERVER_IPS%% *}"
+# Strip any stray double quotes that might sneak in from .env formatting
+PRIMARY_SERVER_ENTRY="${PRIMARY_SERVER_ENTRY//\"/}"
 if [[ "$PRIMARY_SERVER_ENTRY" == *@* ]]; then
   PRIMARY_SERVER_USER_DEFAULT="${PRIMARY_SERVER_ENTRY%@*}"
   PRIMARY_SERVER_IP="${PRIMARY_SERVER_ENTRY#*@}"
@@ -240,6 +242,7 @@ prepare_target_kubeconfig_path() {
 echo "Checking SSH access to nodes ..."
 for entry in $SERVER_IPS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -251,6 +254,7 @@ for entry in $SERVER_IPS; do
 done
 for entry in $WORKER_IPS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -264,6 +268,7 @@ done
 echo "Checking sudo access on nodes ..."
 for entry in $SERVER_IPS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -275,6 +280,7 @@ for entry in $SERVER_IPS; do
 done
 for entry in $WORKER_IPS; do
   [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
   if [[ "$entry" == *@* ]]; then
     user="${entry%@*}"
     host="${entry#*@}"
@@ -325,6 +331,7 @@ if [[ ${#SERVER_IPS_ARR[@]} -gt 1 ]]; then
   echo "Joining additional server(s) ..."
   for ip in "${SERVER_IPS_ARR[@]:1}"; do
     [[ -n "$ip" ]] || continue
+    ip="${ip//\"/}"
     if [[ "$ip" == *@* ]]; then
       join_user="${ip%@*}"
       join_host="${ip#*@}"
@@ -351,6 +358,7 @@ if [[ -z "${WORKER_IPS// }" ]]; then
 else
   for entry in $WORKER_IPS; do
     [[ -n "$entry" ]] || continue
+    entry="${entry//\"/}"
     if [[ "$entry" == *@* ]]; then
       worker_user="${entry%@*}"
       worker_host="${entry#*@}"
