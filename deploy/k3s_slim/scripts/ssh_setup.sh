@@ -4,11 +4,12 @@ set -euo pipefail
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install openssh-client."; }
 
-: "${SERVER_IP:?Set SERVER_IP in .env or pass SERVER_IP=...}"
-: "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env or pass SERVER_SSH_USER=...}"
+# At least one server required
+: "${SERVER_IPS:?Set SERVER_IPS in .env}"
+: "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
-: "${WORKER_IPS:?Set WORKER_IPS in .env or pass WORKER_IPS=\"ip1 ip2\" ...}"
+: "${WORKER_IPS:=}"
 
 WORKERS="$(echo "$WORKER_IPS" | xargs)"
 
@@ -44,9 +45,27 @@ ensure_key_access() {
   fi
 }
 
-ensure_key_access "$SERVER_SSH_USER" "$SERVER_IP" "server"
-for worker_ip in $WORKERS; do
-  ensure_key_access "$WORKER_SSH_USER" "$worker_ip" "worker ${worker_ip}"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  ensure_key_access "$user" "$host" "server ${host}"
+done
+for entry in $WORKERS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  ensure_key_access "$user" "$host" "worker ${host}"
 done
 
 echo "SSH setup done. Run 'make linux-pi'."

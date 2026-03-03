@@ -12,11 +12,12 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
-: "${SERVER_IP:?Set SERVER_IP in .env}"
+# At least one server required
+: "${SERVER_IPS:?Set SERVER_IPS in .env}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
-: "${WORKER_IPS:?Set WORKER_IPS in .env or pass WORKER_IPS=\"ip1 ip2\" ...}"
+: "${WORKER_IPS:=}"
 
 WORKERS="$(echo "$WORKER_IPS" | xargs)"
 
@@ -63,11 +64,29 @@ echo " - cleanup complete"
 REMOTE
 }
 
-# Uninstall worker first, then server.
-for worker_ip in $WORKERS; do
-  uninstall_remote_node "$WORKER_SSH_USER" "$worker_ip" "worker"
+# Uninstall workers first, then servers.
+for entry in $WORKERS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  uninstall_remote_node "$user" "$host" "worker ${host}"
 done
-uninstall_remote_node "$SERVER_SSH_USER" "$SERVER_IP" "server"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  uninstall_remote_node "$user" "$host" "server ${host}"
+done
 
 if [[ -L "$HOME/.kube/config" ]]; then
   linked_target="$(readlink -f "$HOME/.kube/config" 2>/dev/null || true)"

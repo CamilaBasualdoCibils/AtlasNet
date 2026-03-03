@@ -11,13 +11,14 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
-: "${SERVER_IP:?Set SERVER_IP in .env}"
+# At least one server required
+: "${SERVER_IPS:?Set SERVER_IPS in .env}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
 : "${SERVER_PORT_CLEANUP_PORTS:=7946}"
 : "${WORKER_PORT_CLEANUP_PORTS:=7946}"
-: "${WORKER_IPS:?Set WORKER_IPS in .env or pass WORKER_IPS=\"ip1 ip2\" ...}"
+: "${WORKER_IPS:=}"
 
 WORKERS="$(echo "$WORKER_IPS" | xargs)"
 
@@ -171,9 +172,27 @@ done
 REMOTE
 }
 
-cleanup_remote_ports "$SERVER_SSH_USER" "$SERVER_IP" "server" "$SERVER_PORT_CLEANUP_PORTS"
-for worker_ip in $WORKERS; do
-  cleanup_remote_ports "$WORKER_SSH_USER" "$worker_ip" "worker ${worker_ip}" "$WORKER_PORT_CLEANUP_PORTS"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  cleanup_remote_ports "$user" "$host" "server ${host}" "$SERVER_PORT_CLEANUP_PORTS"
+done
+for entry in $WORKERS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  cleanup_remote_ports "$user" "$host" "worker ${host}" "$WORKER_PORT_CLEANUP_PORTS"
 done
 
 echo "Port cleanup done."

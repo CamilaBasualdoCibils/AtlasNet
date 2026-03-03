@@ -1,12 +1,12 @@
-# k3s slim (Linux server + Pi worker)
+# k3s slim
 
-Minimal automation to build a small k3s cluster with `k3sup`.
+Minimal automation to build a small k3s cluster with `k3sup`. Supports an arbitrary number of server and worker nodes; node architecture (amd64, arm64, etc.) does not need to be specified—use multi-arch images so each node pulls the correct image.
 
 ## What this does
-- Sets up SSH key access to server and worker.
+- Sets up SSH key access to server(s) and worker(s).
 - Sets up passwordless sudo for those SSH users (if needed).
-- Installs k3s server and joins worker.
-- Writes kubeconfig directly to `~/.kube/config` (or `K3S_KUBECONFIG_PATH` if set).
+- Installs k3s on the first server, joins additional servers (HA) and workers.
+- Writes kubeconfig to `~/.kube/config` (or `K3S_KUBECONFIG_PATH` if set).
 - Mirrors that kubeconfig to `config/kubeconfig` for project-local Make targets.
 
 ## Prereqs
@@ -20,16 +20,12 @@ cp .env.example .env
 ```
 
 Edit `.env`:
-- `SERVER_IP`
-- `SERVER_SSH_USER`
-- `WORKER_IPS` (space-separated worker IPs, e.g. Linux agent + Pi agent)
-- `WORKER_SSH_USER` (SSH username used on workers)
+- `SERVER_IPS` — space-separated server IPs; first is primary.
+- `SERVER_SSH_USER` — SSH username on server node(s)
+- `WORKER_IPS` — space-separated worker IPs; can be empty for a server-only cluster
+- `WORKER_SSH_USER` — SSH username on worker node(s)
 - `SSH_KEY` (default is usually fine)
 - `K3SUP_USE_SUDO=true` (default)
-
-Legacy fallback still works when `WORKER_IPS` is empty:
-- `LINUX_WORKER_IP`
-- `PI_WORKER_IP`
 
 ## 2) Run cluster setup
 ```bash
@@ -90,21 +86,22 @@ If images are private, set:
 
 `make atlasnet-deploy` will create/update a pull secret in the target namespace and patch the default service account to use it.
 
-### Linux + Pi mixed cluster note
+### Mixed-architecture clusters
 
-If your cluster has both `amd64` (Linux) and `arm64` (Pi) workers, Docker Hub images must be multi-arch manifests.
-If not, pods may fail with `ImagePullBackOff` or architecture errors.
+Use a single multi-arch image tag (e.g. `ATLASNET_IMAGE_TAG=latest` with a manifest that includes both amd64 and arm64). Each node will pull the image for its architecture; you do not need to specify which nodes are amd64 or arm64.
 
 ## Make targets
-- `make ssh-setup`: create SSH key (if missing) and copy to server + worker.
-- `make sudo-setup`: enable passwordless sudo for SSH users on server + workers.
-- `make port-cleanup`: free configured required ports on server + workers.
-- `make linux-pi`: install k3s server and join worker nodes.
+- `make ssh-setup`: create SSH key (if missing) and copy to server(s) + worker(s).
+- `make sudo-setup`: enable passwordless sudo for SSH users on server(s) + worker(s).
+- `make dependency-setup`: install iptables and set cgroup flags on all nodes (run once; reboot nodes if cmdline changed).
+- `make port-cleanup`: free configured required ports on server(s) + worker(s).
+- `make linux-pi`: install k3s on first server, join additional servers (HA) and workers.
 - `make nodes`: quick `kubectl get nodes -o wide` using project kubeconfig.
-- `make atlasnet-push`: build and push multi-arch runtime images to Docker Hub.
+- `make atlasnet-push`: tag and push existing local AtlasNet images to Docker Hub.
+- `make atlasnet-merge-manifests`: create multi-arch manifest tag from per-arch tags (see .env `ATLASNET_IMAGE_TAG_*`).
 - `make atlasnet-deploy`: apply AtlasNet runtime workloads using Docker Hub images.
 - `make atlasnet-status`: show node/pod/service status for AtlasNet namespace.
-- `make cleanup-cluster`: uninstall k3s from worker/server and remove local project kubeconfig.
+- `make cleanup-cluster`: uninstall k3s from worker(s) and server(s) and remove local project kubeconfig.
 
 ## Troubleshooting
 - `Permission denied (publickey,password)`:
