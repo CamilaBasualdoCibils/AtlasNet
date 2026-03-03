@@ -16,11 +16,10 @@
 #include <thread>
 
 #include "Client/Client.hpp"
+#include "Client/Packet/ClientTransferPacket.hpp"
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
-#include "Entity/EntityEnums.hpp"
 #include "Entity/EntityLedger.hpp"
-#include "Client/Packet/ClientTransferPacket.hpp"
 #include "Entity/Packet/EntityTransferPacket.hpp"
 #include "Entity/Transfer/TransferData.hpp"
 #include "Entity/Transfer/TransferManifest.hpp"
@@ -60,55 +59,26 @@ class TransferCoordinator : public Singleton<TransferCoordinator>
 	struct EntityByTransferID;
 	std::unordered_map<AtlasEntityID, TransferID> EntitiesInTransfer;
 	// std::unordered_map<TransferID, EntityTransferData> EntityTransfers;
-	struct ClientTransferData
-	{
-		TransferID ID;
-		ClientTransferStage stage = ClientTransferStage::eNone;
-		boost::container::small_vector<AtlasEntityID, 32> entityIDs;
-		bool WaitingOnResponse = false;
-	};
 	std::unordered_map<TransferID, ClientTransferData> ClientTransfers;
 
 	std::stack<AtlasEntityID> EntitiesToParseForReceiver;
 	mutable std::mutex EntityTransferMutex, ClientTransferMutex;
 	std::jthread TransferThread;
 	Log logger = Log("TransferCoordinator");
-	PacketManager::Subscription EntityTransferPacketSubscription;
+	PacketManager::Subscription EntityTransferPacketSubscription, ClientTransferPacketSubscription;
 
    public:
-	TransferCoordinator()
-		: EntityTransferPacketSubscription(
-			  Interlink::Get().GetPacketManager().Subscribe<EntityTransferPacket>(
-				  [this](const EntityTransferPacket& p, const PacketManager::PacketInfo& info)
-				  { OnEntityTransferPacketArrival(p, info); }))
-	{
-		TransferThread = std::jthread([this](std::stop_token st) { TransferThreadEntry(st); });
-	};
-	void MarkEntitiesForTransfer(const std::span<AtlasEntityID> entities)
-	{
-		std::lock_guard<std::mutex> lock(EntityTransferMutex);
-		for (const auto& ID : entities) EntitiesToParseForReceiver.push(ID);
-	}
-	bool IsEntityInTransfer(AtlasEntityID ID) const
-	{
-		std::lock_guard<std::mutex> lock(EntityTransferMutex);
-
-		return EntitiesInTransfer.contains(ID);
-	}
+	TransferCoordinator();
+	void MarkEntitiesForTransfer(const std::span<AtlasEntityID> entities);
+	bool IsEntityInTransfer(AtlasEntityID ID) const;
 
    private:
-	void TransferThreadEntry(std::stop_token st)
-	{
-		while (!st.stop_requested())
-		{
-			ParseEntitiesForTargets();
-			TransferTick();
-			std::this_thread::sleep_for(std::chrono::milliseconds(50));
-		}
-	}
+	void TransferThreadEntry(std::stop_token st);
 
 	void ParseEntitiesForTargets();
 	void TransferTick();
 	void OnEntityTransferPacketArrival(const EntityTransferPacket& p,
+									   const PacketManager::PacketInfo& info);
+	void OnClientTransferPacketArrival(const ClientTransferPacket& p,
 									   const PacketManager::PacketInfo& info);
 };

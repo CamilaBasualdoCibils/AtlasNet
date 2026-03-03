@@ -4,7 +4,6 @@
 
 #include <boost/describe/enum_to_string.hpp>
 
-#include "Entity/EntityEnums.hpp"
 #include "Entity/Transfer/TransferData.hpp"
 #include "Global/Misc/Singleton.hpp"
 #include "Global/Misc/UUID.hpp"

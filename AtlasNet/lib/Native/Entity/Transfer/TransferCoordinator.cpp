@@ -3,7 +3,6 @@
 #include <algorithm>
 
 #include "Entity/Entity.hpp"
-#include "Entity/EntityEnums.hpp"
 #include "Entity/EntityLedger.hpp"
 #include "Entity/Packet/EntityTransferPacket.hpp"
 #include "Entity/Transfer/TransferData.hpp"
@@ -259,3 +258,47 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 		break;
 	}
 }
+void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPacket& p,
+														const PacketManager::PacketInfo& info)
+{
+}
+void TransferCoordinator::MarkEntitiesForTransfer(const std::span<AtlasEntityID> entities)
+{
+	std::lock_guard<std::mutex> lock(EntityTransferMutex);
+	for (const AtlasEntityID& entityID : entities)
+	{
+		if (EntityLedger::Get().IsEntityClient(entityID))
+		{
+			iubawdhbawjdhb
+		}
+	}
+
+	for (const auto& ID : entities) EntitiesToParseForReceiver.push(ID);
+}
+bool TransferCoordinator::IsEntityInTransfer(AtlasEntityID ID) const
+{
+	std::lock_guard<std::mutex> lock(EntityTransferMutex);
+
+	return EntitiesInTransfer.contains(ID);
+}
+void TransferCoordinator::TransferThreadEntry(std::stop_token st)
+{
+	while (!st.stop_requested())
+	{
+		ParseEntitiesForTargets();
+		TransferTick();
+		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+}
+TransferCoordinator::TransferCoordinator()
+	: EntityTransferPacketSubscription(
+		  Interlink::Get().GetPacketManager().Subscribe<EntityTransferPacket>(
+			  [this](const EntityTransferPacket& p, const PacketManager::PacketInfo& info)
+			  { OnEntityTransferPacketArrival(p, info); })),
+	  ClientTransferPacketSubscription(
+		  Interlink::Get().GetPacketManager().Subscribe<ClientTransferPacket>(
+			  [this](const ClientTransferPacket& p, const PacketManager::PacketInfo& info)
+			  { OnClientTransferPacketArrival(p, info); }))
+{
+	TransferThread = std::jthread([this](std::stop_token st) { TransferThreadEntry(st); });
+};

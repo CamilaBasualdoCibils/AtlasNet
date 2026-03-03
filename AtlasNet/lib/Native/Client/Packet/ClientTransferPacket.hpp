@@ -4,12 +4,13 @@
 #include <variant>
 
 #include "Entity/Entity.hpp"
+#include "Entity/Transfer/TransferData.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "Network/Packet/Packet.hpp"
-#include "Client/ClientEnums.hpp"
+/*
 class ClientTransferPacket : public TPacket<ClientTransferPacket, "ClientTransferPacket">
 {
 	public:
@@ -185,7 +186,7 @@ class ClientTransferPacket : public TPacket<ClientTransferPacket, "ClientTransfe
 		}
 	};
 
-   
+
 	UUID TransferID;
 	ClientTransferStage stage;
 	std::variant<PrepareStageData, ReadyStageData, RequestSwitchStageData, FreezeStageData,
@@ -238,6 +239,19 @@ class ClientTransferPacket : public TPacket<ClientTransferPacket, "ClientTransfe
 		// 4️⃣ Deserialize into the constructed variant
 		std::visit([&br](auto& stageData) { stageData.Deserialize(br); }, Data);
 	}
+	[[nodiscard]] bool ValidateData() const override { return true; }
+};
+ATLASNET_REGISTER_PACKET(ClientTransferPacket);*/
+
+class ClientTransferPacket : public TPacket<ClientTransferPacket, "ClientTransferPacket">
+{
+   public:
+	ClientTransferPacket() = default;
+
+	void SerializeData(ByteWriter& bw) const override {
+
+	};
+	void DeserializeData(ByteReader& br) override {}
 	[[nodiscard]] bool ValidateData() const override { return true; }
 };
 ATLASNET_REGISTER_PACKET(ClientTransferPacket);
