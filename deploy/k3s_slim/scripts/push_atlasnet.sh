@@ -17,13 +17,31 @@ docker info >/dev/null 2>&1 || die "Docker daemon is not reachable."
 
 : "${DOCKERHUB_NAMESPACE:=}"
 : "${ATLASNET_IMAGE_TAG:=latest}"
+: "${ATLASNET_IMAGE_TAG_AMD64:=latest-amd64}"
+: "${ATLASNET_IMAGE_TAG_ARM64:=latest-arm64}"
 
 [[ -n "$DOCKERHUB_NAMESPACE" ]] || die "DOCKERHUB_NAMESPACE is required in .env"
 
-: "${ATLASNET_WATCHDOG_IMAGE:=${DOCKERHUB_NAMESPACE}/watchdog:${ATLASNET_IMAGE_TAG}}"
-: "${ATLASNET_PROXY_IMAGE:=${DOCKERHUB_NAMESPACE}/proxy:${ATLASNET_IMAGE_TAG}}"
-: "${ATLASNET_SHARD_IMAGE:=${DOCKERHUB_NAMESPACE}/shard:${ATLASNET_IMAGE_TAG}}"
-: "${ATLASNET_CARTOGRAPH_IMAGE:=${DOCKERHUB_NAMESPACE}/cartograph:${ATLASNET_IMAGE_TAG}}"
+# Automatically select an arch-specific tag (amd64 vs arm64) based on host architecture,
+# while still allowing explicit ATLASNET_*_IMAGE overrides in .env to take precedence.
+arch="$(uname -m || echo unknown)"
+case "$arch" in
+  x86_64|amd64)
+    ARCH_TAG="$ATLASNET_IMAGE_TAG_AMD64"
+    ;;
+  aarch64|arm64)
+    ARCH_TAG="$ATLASNET_IMAGE_TAG_ARM64"
+    ;;
+  *)
+    echo "WARNING: Unknown architecture '${arch}', falling back to default tag '${ATLASNET_IMAGE_TAG}'." >&2
+    ARCH_TAG="$ATLASNET_IMAGE_TAG"
+    ;;
+esac
+
+: "${ATLASNET_WATCHDOG_IMAGE:=${DOCKERHUB_NAMESPACE}/watchdog:${ARCH_TAG}}"
+: "${ATLASNET_PROXY_IMAGE:=${DOCKERHUB_NAMESPACE}/proxy:${ARCH_TAG}}"
+: "${ATLASNET_SHARD_IMAGE:=${DOCKERHUB_NAMESPACE}/shard:${ARCH_TAG}}"
+: "${ATLASNET_CARTOGRAPH_IMAGE:=${DOCKERHUB_NAMESPACE}/cartograph:${ARCH_TAG}}"
 
 tag_and_push() {
   local local_image="$1"   # e.g. watchdog:latest
