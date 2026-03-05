@@ -15,6 +15,7 @@ const AUTHORITY_TELEMETRY_COLUMN_COUNT = 7;
 const NETWORK_TELEMETRY_COLUMN_COUNT = 13;
 const GRID_SHAPE_SERIALIZED_SIZE_BYTES = 28;
 const CLAIMED_OWNER_MAP_CACHE_TTL_MS = 500;
+const TRANSFER_STATE_QUEUE_ENTRY_TTL_MS = 30_000;
 const TRANSFER_STAGE_SOURCE_STATES = new Set(['eNone', 'ePrepare', 'eUnknown']);
 const VALID_TRANSFER_STAGES = new Set([
   'eNone',
@@ -546,9 +547,13 @@ async function readTransferStateQueueFromDatabase() {
       }
 
       const rows = [];
+      const cutoffMs = Date.now() - TRANSFER_STATE_QUEUE_ENTRY_TTL_MS;
       for (const rawEntry of rawEntries) {
         const row = normalizeTransferStateQueueEventPayload(rawEntry);
         if (!row) {
+          continue;
+        }
+        if (row.timestampMs < cutoffMs) {
           continue;
         }
         rows.push(row);
