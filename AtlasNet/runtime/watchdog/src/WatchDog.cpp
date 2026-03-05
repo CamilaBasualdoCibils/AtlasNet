@@ -1,5 +1,7 @@
 #include "WatchDog.hpp"
 
+#include <curl/curl.h>
+
 #include <boost/describe/enum_to_string.hpp>
 #include <chrono>
 #include <cstdlib>
@@ -10,28 +12,26 @@
 #include <thread>
 #include <unordered_set>
 
-#include <curl/curl.h>
-
-//#include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
-#include "Global/Serialize/ByteReader.hpp"
-#include "Interlink/Database/HealthManifest.hpp"
-#include "Interlink/Database/ServerRegistry.hpp"
-#include "Heuristic/Database/HeuristicManifest.hpp"
+// #include "Entity/EntityHandoff/Telemetry/HandoffTransferManifest.hpp"
 #include "Docker/DockerIO.hpp"
 #include "Entity/Entity.hpp"
 #include "Entity/Transform.hpp"
 #include "Events/EventSystem.hpp"
 #include "Events/Events/Debug/LogEvent.hpp"
+#include "Global/Serialize/ByteReader.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/GridHeuristic/GridHeuristic.hpp"
+#include "Heuristic/IHeuristic.hpp"
 #include "Heuristic/Quadtree/QuadtreeHeuristic.hpp"
 #include "Heuristic/Voronoi/VoronoiHeuristic.hpp"
-#include "Heuristic/IHeuristic.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Interlink/Database/ServerRegistry.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Interlink/InterlinkEnums.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
 #include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
-/* 
+/*
 namespace
 {
 constexpr auto kHandoffAuditInterval = std::chrono::milliseconds(250);
@@ -80,15 +80,13 @@ std::string ReadTextFile(const char* path)
 		return {};
 	}
 
-	return std::string(std::istreambuf_iterator<char>(file),
-					   std::istreambuf_iterator<char>());
+	return std::string(std::istreambuf_iterator<char>(file), std::istreambuf_iterator<char>());
 }
 
 void TrimTrailingWhitespace(std::string& value)
 {
-	while (!value.empty() &&
-		   (value.back() == '\n' || value.back() == '\r' || value.back() == '\t' ||
-			value.back() == ' '))
+	while (!value.empty() && (value.back() == '\n' || value.back() == '\r' ||
+							  value.back() == '\t' || value.back() == ' '))
 	{
 		value.pop_back();
 	}
@@ -107,8 +105,7 @@ size_t CurlWriteCallback(char* ptr, size_t size, size_t nmemb, void* userdata)
 
 std::string ResolvePodNamespace()
 {
-	if (const char* podNamespace = std::getenv("POD_NAMESPACE");
-		podNamespace && *podNamespace)
+	if (const char* podNamespace = std::getenv("POD_NAMESPACE"); podNamespace && *podNamespace)
 	{
 		return std::string(podNamespace);
 	}
@@ -119,8 +116,7 @@ std::string ResolvePodNamespace()
 	return namespaceFromFile;
 }
 
-bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger,
-							 const uint32_t replicaCount)
+bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger, const uint32_t replicaCount)
 {
 	const char* host = std::getenv("KUBERNETES_SERVICE_HOST");
 	if (!host || !*host)
@@ -138,8 +134,7 @@ bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger,
 		return "443";
 	}();
 
-	const std::string tokenPath =
-		"/var/run/secrets/kubernetes.io/serviceaccount/token";
+	const std::string tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token";
 	std::string token = ReadTextFile(tokenPath.c_str());
 	TrimTrailingWhitespace(token);
 	if (token.empty())
@@ -165,16 +160,15 @@ bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger,
 		return "atlasnet-shard";
 	}();
 
-	const std::string requestUrl = std::format(
-		"https://{}:{}/apis/apps/v1/namespaces/{}/deployments/{}/scale", host,
-		port, podNamespace, deploymentName);
+	const std::string requestUrl =
+		std::format("https://{}:{}/apis/apps/v1/namespaces/{}/deployments/{}/scale", host, port,
+					podNamespace, deploymentName);
 
 	Json payload;
 	payload["spec"]["replicas"] = replicaCount;
 	const std::string payloadText = payload.dump();
 
-	static const bool curlInitialized =
-		(curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
+	static const bool curlInitialized = (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
 	if (!curlInitialized)
 	{
 		logger->Error("libcurl initialization failed for Kubernetes scaling.");
@@ -194,14 +188,12 @@ bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger,
 	headers = curl_slist_append(headers, authHeader.c_str());
 	headers = curl_slist_append(headers, "Content-Type: application/merge-patch+json");
 
-	const std::string caPath =
-		"/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
+	const std::string caPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
 	curl_easy_setopt(curl, CURLOPT_URL, requestUrl.c_str());
 	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
 	curl_easy_setopt(curl, CURLOPT_CUSTOMREQUEST, "PATCH");
 	curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payloadText.c_str());
-	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE,
-					 static_cast<long>(payloadText.size()));
+	curl_easy_setopt(curl, CURLOPT_POSTFIELDSIZE, static_cast<long>(payloadText.size()));
 	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWriteCallback);
 	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBody);
 	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 8L);
@@ -218,16 +210,14 @@ bool ScaleK8sShardDeployment(const std::shared_ptr<Log>& logger,
 
 	if (curlCode != CURLE_OK)
 	{
-		logger->ErrorFormatted("Kubernetes scale request failed: {}",
-							   curl_easy_strerror(curlCode));
+		logger->ErrorFormatted("Kubernetes scale request failed: {}", curl_easy_strerror(curlCode));
 		return false;
 	}
 
 	if (responseCode < 200 || responseCode >= 300)
 	{
-		logger->ErrorFormatted(
-			"Kubernetes scale request returned HTTP {}. Body: {}",
-			responseCode, responseBody);
+		logger->ErrorFormatted("Kubernetes scale request returned HTTP {}. Body: {}", responseCode,
+							   responseBody);
 		return false;
 	}
 
@@ -243,21 +233,20 @@ void WatchDog::ClearAllDatabaseState()
 {
 	// Ensure cache is initialized
 
-	logger->Debug(
-		"Clearing all entity and shape data from database and memory cache");
+	logger->Debug("Clearing all entity and shape data from database and memory cache");
 }
 void WatchDog::Run()
 {
 	Init();
-	//auto nextHandoffAudit = std::chrono::steady_clock::now() + kHandoffAuditInterval;
+	// auto nextHandoffAudit = std::chrono::steady_clock::now() + kHandoffAuditInterval;
 	while (!ShouldShutdown)
-	{/* 
-		const auto now = std::chrono::steady_clock::now();
-		if (now >= nextHandoffAudit)
-		{
-			AuditActiveHandoffTransfers();
-			nextHandoffAudit = now + kHandoffAuditInterval;
-		} */
+	{ /*
+		 const auto now = std::chrono::steady_clock::now();
+		 if (now >= nextHandoffAudit)
+		 {
+			 AuditActiveHandoffTransfers();
+			 nextHandoffAudit = now + kHandoffAuditInterval;
+		 } */
 		std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	}
 	logger->Debug("Shutting down");
@@ -270,21 +259,17 @@ void WatchDog::Init()
 	NetworkManifest::Get().ScheduleNetworkPings();
 	HealthManifest::Get().ScheduleHealthPings();
 	HealthManifest::Get().ScheduleHealthChecks(
-		[&](const NetworkIdentity &ID_fail, const std::string &key)
+		[&](const NetworkIdentity& ID_fail, const std::string& key)
 		{
-			logger->ErrorFormatted(
-				"HEALTH CHECK FAIL : {}. Removing from Health Manifest",
-				ID_fail.ToString());
-			const bool requeued = HeuristicManifest::Get().RequeueClaimedBound(
-				ID_fail.ToString());
+			logger->ErrorFormatted("HEALTH CHECK FAIL : {}. Removing from Health Manifest",
+								   ID_fail.ToString());
+			const bool requeued = HeuristicManifest::Get().RequeueClaimedBound(ID_fail.ToString());
 			if (requeued)
 			{
-				logger->DebugFormatted("Requeued claimed bounds for {}",
-									   ID_fail.ToString());
+				logger->DebugFormatted("Requeued claimed bounds for {}", ID_fail.ToString());
 			}
 			HealthManifest::Get().RemovePing(key);
-			if (ID_fail.IsInternal() &&
-				ID_fail != NetworkCredentials::Get().GetID())
+			if (ID_fail.IsInternal() && ID_fail != NetworkCredentials::Get().GetID())
 			{
 				ServerRegistry::Get().DeRegisterSelf(ID_fail);
 			}
@@ -296,8 +281,7 @@ void WatchDog::Init()
 	// but WatchDog now defaults to the Quadtree heuristic. For Voronoi
 	// testing, you can switch to eVoronoi below.
 	SwitchHeuristic(IHeuristic::Type::eVoronoi);
-	if (auto voronoi =
-			std::dynamic_pointer_cast<VoronoiHeuristic>(Heuristic))
+	if (auto voronoi = std::dynamic_pointer_cast<VoronoiHeuristic>(Heuristic))
 	{
 		// Seed count == number of Voronoi regions / bounds.
 		voronoi->SetSeedCount(5);
@@ -307,8 +291,8 @@ void WatchDog::Init()
 		logger->Error("Expected VoronoiHeuristic after SwitchHeuristic(eVoronoi).");
 	}
 	ComputeHeuristic();	 // compute once
-	// HeuristicThread = std::jthread([this](std::stop_token st)
-	//							   { this->HeurristicThreadEntry(st); });
+						 // HeuristicThread = std::jthread([this](std::stop_token st)
+						 //							   { this->HeurristicThreadEntry(st); });
 }
 
 void WatchDog::Cleanup()
@@ -320,38 +304,27 @@ void WatchDog::SetShardCount(uint32 NewCount)
 {
 	ShardCount = NewCount;
 
-	if (const char* k8sHost = std::getenv("KUBERNETES_SERVICE_HOST");
-		k8sHost && *k8sHost)
+	if (const char* k8sHost = std::getenv("KUBERNETES_SERVICE_HOST"); k8sHost && *k8sHost)
 	{
 		const bool scaled = ScaleK8sShardDeployment(logger, NewCount);
 		if (scaled)
 		{
-			logger->DebugFormatted("Scaled k8s shard deployment to {} replicas",
-								   NewCount);
+			logger->DebugFormatted("Scaled k8s shard deployment to {} replicas", NewCount);
 		}
 		else
 		{
-			logger->ErrorFormatted(
-				"Unable to scale k8s shard deployment to {} replicas", NewCount);
+			logger->ErrorFormatted("Unable to scale k8s shard deployment to {} replicas", NewCount);
 		}
 		return;
 	}
 
-	const char* swarmFallback = std::getenv("ATLASNET_ENABLE_SWARM_FALLBACK");
-	if (!swarmFallback || std::string(swarmFallback) != "1")
-	{
-		logger->Warning(
-			"Legacy Swarm scaling is disabled (set ATLASNET_ENABLE_SWARM_FALLBACK=1 to enable).");
-		return;
-	}
+	logger->Warning("Assuming Docker Swarm mode. Fix this code up eventualy stinkler");
 
-	const std::string filter =
-		"%7B%22label%22%3A%5B%22atlasnet.role%3Dshard%22%5D%7D";
+	const std::string filter = "%7B%22label%22%3A%5B%22atlasnet.role%3Dshard%22%5D%7D";
 
 	try
 	{
-		std::string listResp =
-			DockerIO::Get().request("GET", "/services?filters=" + filter);
+		std::string listResp = DockerIO::Get().request("GET", "/services?filters=" + filter);
 		auto services = Json::parse(listResp, nullptr, false);
 
 		if (services.is_discarded() || !services.is_array() || services.empty())
@@ -362,8 +335,7 @@ void WatchDog::SetShardCount(uint32 NewCount)
 		}
 
 		const std::string serviceId = services[0]["ID"];
-		std::string inspectResp =
-			DockerIO::Get().request("GET", "/services/" + serviceId);
+		std::string inspectResp = DockerIO::Get().request("GET", "/services/" + serviceId);
 		auto inspectJson = Json::parse(inspectResp, nullptr, false);
 		if (inspectJson.is_discarded())
 		{
@@ -375,11 +347,10 @@ void WatchDog::SetShardCount(uint32 NewCount)
 		auto spec = inspectJson["Spec"];
 		spec["Mode"]["Replicated"]["Replicas"] = NewCount;
 
-		std::string updatePath = "/services/" + serviceId +
-								 "/update?version=" + std::to_string(version);
+		std::string updatePath =
+			"/services/" + serviceId + "/update?version=" + std::to_string(version);
 
-		std::string updateResp =
-			DockerIO::Get().request("POST", updatePath, &spec);
+		std::string updateResp = DockerIO::Get().request("POST", updatePath, &spec);
 
 		if (!updateResp.empty())
 		{
@@ -387,14 +358,12 @@ void WatchDog::SetShardCount(uint32 NewCount)
 								   Json::parse(updateResp).dump(4));
 		}
 
-		logger->DebugFormatted("Scaled swarm shard service to {} replicas",
-							   NewCount);
+		logger->DebugFormatted("Scaled swarm shard service to {} replicas", NewCount);
 	}
 	catch (const std::exception& e)
 	{
-		logger->WarningFormatted(
-			"Legacy Swarm scaling failed, continuing without autoscale: {}",
-			e.what());
+		logger->WarningFormatted("Legacy Swarm scaling failed, continuing without autoscale: {}",
+								 e.what());
 	}
 }
 void WatchDog::ComputeHeuristic()
@@ -403,13 +372,10 @@ void WatchDog::ComputeHeuristic()
 	for (int i = 0; i < 4; i++)
 	{
 		AtlasEntityMinimal e;
-		e.transform.position = {10 * ((i / 2) ? 1 : -1),
-								10 * ((i % 2) ? 1 : -1), 0};
+		e.transform.position = {10 * ((i / 2) ? 1 : -1), 10 * ((i % 2) ? 1 : -1), 0};
 		entities.push_back(e);
 	}
-	logger->DebugFormatted("Computing Heuristic: {}",
-						   IHeuristic::TypeToString(ActiveHeuristic));
-
+	logger->DebugFormatted("Computing Heuristic: {}", IHeuristic::TypeToString(ActiveHeuristic));
 
 	logger->Debug("IHeuristic::Compute");
 	Heuristic->Compute(std::span(entities));
@@ -418,11 +384,9 @@ void WatchDog::ComputeHeuristic()
 	logger->Debug("IHeuristic::SerializeBounds");
 	Heuristic->SerializeBounds(bws);
 	logger->Debug("HeuristicManifest::GetPendingBoundsCount");
-	const long long pending_count =
-		HeuristicManifest::Get().GetPendingBoundsCount();
+	const long long pending_count = HeuristicManifest::Get().GetPendingBoundsCount();
 	logger->Debug("HeuristicManifest::GetClaimedBoundsCount");
-	const long long claimed_count =
-		HeuristicManifest::Get().GetClaimedBoundsCount();
+	const long long claimed_count = HeuristicManifest::Get().GetClaimedBoundsCount();
 	const long long total_known = pending_count + claimed_count;
 	const long long expected = static_cast<long long>(bws.size());
 	if (total_known < expected)
@@ -432,9 +396,8 @@ void WatchDog::ComputeHeuristic()
 	}
 	else
 	{
-		logger->DebugFormatted(
-			"Skipping pending refresh (pending={}, claimed={}, expected={})",
-			pending_count, claimed_count, expected);
+		logger->DebugFormatted("Skipping pending refresh (pending={}, claimed={}, expected={})",
+							   pending_count, claimed_count, expected);
 	}
 
 	std::vector<std::string> data;
@@ -442,13 +405,12 @@ void WatchDog::ComputeHeuristic()
 	logger->Debug("HeuristicManifest::GetPendingBoundsAsByteReaders");
 	HeuristicManifest::Get().GetPendingBoundsAsByteReaders(data, brs);
 
-	for (auto &[boundID, bound_reader] : brs)
+	for (auto& [boundID, bound_reader] : brs)
 	{
 		GridShape s;
 		s.Deserialize(bound_reader);
 		logger->DebugFormatted("Retreived ID {}, min:{}, max:{}", boundID,
-							   glm::to_string(s.aabb.min),
-							   glm::to_string(s.aabb.max));
+							   glm::to_string(s.aabb.min), glm::to_string(s.aabb.max));
 	}
 	SetShardCount(bws.size());
 }
@@ -487,8 +449,7 @@ void WatchDog::HeuristicThreadEntry(std::stop_token st)
 	ComputeHeuristic();
 	while (!st.stop_requested())
 	{
-		std::this_thread::sleep_for(
-			std::chrono::seconds(_WATCHDOG_COMPUTE_HEURISTIC_INTERVAL_S));
+		std::this_thread::sleep_for(std::chrono::seconds(_WATCHDOG_COMPUTE_HEURISTIC_INTERVAL_S));
 		ComputeHeuristic();
 	}
 }

@@ -5,11 +5,15 @@
 #include <array>
 #include <boost/describe/enum_from_string.hpp>
 #include <boost/describe/enum_to_string.hpp>
+#include <concepts>
 #include <iostream>
 #include <memory>
+#include <mutex>
+#include <shared_mutex>
 #include <stdexcept>
 #include <string>
 #include <string_view>
+#include <type_traits>
 #include <unordered_map>
 
 #include "Debug/Log.hpp"
@@ -26,6 +30,36 @@
 
 class HeuristicManifest : public Singleton<HeuristicManifest>
 {
+	Log logger = Log("HeuristicManifest");
+	/*
+	All available bounds are placed in pending.
+	At first or on change. each Shard goes and Pops from the pending list.
+	Adding it to Claimed with their key.
+	*/
+
+	const std::string HeuristicTypeKey = "Heuristic_Type";
+	const std::string HeuristicTimestampKey = "HeuristicTimestamp";
+	const std::string HeuristicSerializeDataKey = "Heuristic_Data";
+	/*stores a list of available, unclaimed bounds*/
+	/*the bounds id is the shape*/
+	// Shared hash tag keeps pending/claimed in the same Redis Cluster slot.
+	const std::string PendingHashTable = "{Heuristic_Bounds}:Pending";
+	const std::string JSONDataTable = "HeuristicManifest";
+	const std::string JSONPendingEntry = "Pending";
+	const std::string JSONClaimedEntry = "Claimed";
+	const std::string JSONHeuristicData64Entry = "HeuristicData64";
+	const std::string JSONHeuristicTypeEntry = "HeuristicType";
+
+	/*HashTable of claimed Bounds*/
+	const std::string ClaimedTableJson = "{Heuristic_Bounds}:Claimed";
+	const std::string ClaimedHashTableNID2BoundData = "{Heuristic_Bounds}:Claimed_NID2BID";
+	const std::string ClaimedHashTableBoundID2NID = "{Heuristic_Bounds}:Claimed_BID2NID";
+
+	IHeuristic::Type ActiveHeuristic = IHeuristic::Type::eNone;
+	std::shared_ptr<IHeuristic> CachedHeuristic;
+	long long CachedHeuristicTimeStamp = 0;
+	std::shared_mutex HeuristicFetchMutex;
+
    public:
 	struct PendingBoundStruct
 	{
@@ -141,42 +175,92 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 	template <typename BoundType>
 	void GetAllClaimedBounds(std::unordered_map<NetworkIdentity, BoundType>& out_bounds);
 
-	[[nodiscard]] std::unique_ptr<IHeuristic> PullHeuristic();
+	template <typename FN>
+		requires std::is_invocable_v<FN, const IHeuristic&>
+	auto PullHeuristic(FN&& f)
+	{
+		const std::optional<std::tuple<long long, IHeuristic::Type, std::string>> FetchResult =
+			InternalDB::Get()->WithSync(
+				[&](auto& r) -> std::optional<std::tuple<long long, IHeuristic::Type, std::string>>
+				{
+					const std::string FetchScript = R"(
+-- KEYS[1] = Redis JSON key
+-- ARGV[1] = timestamp path (e.g. $.timestamp)
+-- ARGV[2] = path for HeuristicType
+-- ARGV[3] = path for HeuristicData64
+-- ARGV[4] = client timestamp
+
+local client_ts = tonumber(ARGV[4])
+
+-- get stored timestamp
+local stored = redis.call("JSON.GET", KEYS[1], ARGV[1])
+if not stored then
+    return nil
+end
+
+local stored_ts = tonumber(stored)
+
+-- if client timestamp is older, return timestamp and both entries
+if client_ts < stored_ts then
+    local type_val = redis.call("JSON.GET", KEYS[1], ARGV[2])
+    local data_val = redis.call("JSON.GET", KEYS[1], ARGV[3])
+    return {tostring(stored_ts), type_val, data_val}
+end
+
+return nil
+        )";
+
+					const std::optional<std::vector<std::string>> result =
+						r.template eval<std::optional<std::vector<std::string>>>(
+							FetchScript, {JSONDataTable},
+							{HeuristicTimestampKey, JSONHeuristicTypeEntry,
+							 JSONHeuristicData64Entry, std::to_string(CachedHeuristicTimeStamp)});
+
+					if (result.has_value() && result->size() == 3)
+					{
+						logger.Debug("Cached Heuristic out of date. Fetching new...");
+						std::string_view encodedTypeEnum = (*result)[1];
+						if (encodedTypeEnum.size() >= 2 && encodedTypeEnum.front() == '"' && encodedTypeEnum.back() == '"')
+						{
+							encodedTypeEnum = encodedTypeEnum.substr(1, encodedTypeEnum.size() - 2);
+						}
+						//const std::string s =
+						//	result.has_value()
+						//		? ((*result)[0] + " " + (*result)[1] + " " + (*result)[2] + " ")
+						//		: "NOTHING";
+						//logger.DebugFormatted("Pull Heuristic returned {}", s);
+						IHeuristic::Type t;
+						IHeuristic::TypeFromString(encodedTypeEnum, t);
+						return std::make_tuple(std::stoull((*result)[0]),  // timestamp
+											   t,						   // HeuristicType
+											   (*result)[2]				   // HeuristicData64
+						);
+					}
+					return std::nullopt;
+				});
+
+		if (FetchResult.has_value())
+		{
+			std::unique_lock lock(HeuristicFetchMutex);
+			CachedHeuristicTimeStamp = std::get<0>(*FetchResult);
+			Internal_ParseHeuristic64(std::get<1>(*FetchResult), std::get<2>(*FetchResult));
+		}
+
+		std::shared_lock lock(HeuristicFetchMutex);
+
+		return f(*CachedHeuristic);
+	}
 	void PushHeuristic(const IHeuristic& h);
 	[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(const Transform& t);
 
 	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const IBounds::BoundsID id);
 
-	Log logger = Log("HeuristicManifest");
-	/*
-	All available bounds are placed in pending.
-	At first or on change. each Shard goes and Pops from the pending list.
-	Adding it to Claimed with their key.
-	*/
-
-	const std::string HeuristicTypeKey = "Heuristic_Type";
-	const std::string HeuristicSerializeDataKey = "Heuristic_Data";
-	/*stores a list of available, unclaimed bounds*/
-	/*the bounds id is the shape*/
-	// Shared hash tag keeps pending/claimed in the same Redis Cluster slot.
-	const std::string PendingHashTable = "{Heuristic_Bounds}:Pending";
-	const std::string JSONDataTable = "HeuristicManifest";
-	const std::string JSONPendingEntry = "Pending";
-	const std::string JSONClaimedEntry = "Claimed";
-	const std::string JSONHeuristicData64Entry = "HeuristicData64";
-	const std::string JSONHeuristicTypeEntry = "HeuristicType";
-
-	/*HashTable of claimed Bounds*/
-	const std::string ClaimedTableJson = "{Heuristic_Bounds}:Claimed";
-	const std::string ClaimedHashTableNID2BoundData = "{Heuristic_Bounds}:Claimed_NID2BID";
-	const std::string ClaimedHashTableBoundID2NID = "{Heuristic_Bounds}:Claimed_BID2NID";
-
-	IHeuristic::Type ActiveHeuristic = IHeuristic::Type::eNone;
-	std::shared_ptr<IHeuristic> Heuristic;
+   private:
 	void Internal_SetActiveHeuristicType(IHeuristic::Type type);
 	void Internal_InsertPendingBound(const PendingBoundStruct& p);
 	void Internal_InsertClaimedBound(const ClaimedBoundStruct& p);
 	void Internal_EnsureJsonTable();
+	void Internal_ParseHeuristic64(IHeuristic::Type type, std::string_view data64);
 	std::unique_ptr<IBounds> Internal_CreateIBoundInst();
 	std::optional<ClaimedBoundStruct> Internal_PullClaimedBound(IBounds::BoundsID id);
 };

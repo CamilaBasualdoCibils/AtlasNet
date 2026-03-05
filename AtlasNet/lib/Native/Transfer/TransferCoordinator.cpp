@@ -9,6 +9,8 @@
 #include "Entity/Transform.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Global/pch.hpp"
+#include "Heuristic/Database/HeuristicManifest.hpp"
+#include "Heuristic/IHeuristic.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkEnums.hpp"
@@ -23,7 +25,6 @@ void TransferCoordinator::ParseEntitiesForTargets()
 {
 	std::lock_guard<std::mutex> lock(EntityTransferMutex);
 
-	const std::unique_ptr<IHeuristic> heuristic = HeuristicManifest::Get().PullHeuristic();
 	std::unordered_map<IBounds::BoundsID, EntityTransferData> NewEntityTransfers;
 	std::unordered_map<IBounds::BoundsID, ClientTransferData> NewClientTransfers;
 
@@ -62,7 +63,9 @@ void TransferCoordinator::ParseEntitiesForTargets()
 		}
 		// Get the Bounds ID at the entity position
 		const std::optional<IBounds::BoundsID> boundsID =
-			heuristic->QueryPosition(entityTransform->position);
+		HeuristicManifest::Get().PullHeuristic([&](const IHeuristic& h){
+			return h.QueryPosition(entityTransform->position);
+		});
 
 		// if not a bound, aka outside any bound then continue
 		if (!boundsID.has_value())

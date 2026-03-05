@@ -2,8 +2,10 @@
 
 #include <iostream>
 #include <optional>
+#include <stdexcept>
 
 #include "Global/Serialize/ByteWriter.hpp"
+#include "Heuristic/IBounds.hpp"
 GridHeuristic::GridHeuristic() {}
 void GridHeuristic::Compute(const std::span<const AtlasEntityMinimal>& span)
 {
@@ -52,7 +54,7 @@ void GridHeuristic::Deserialize(ByteReader& br)
 	}
 };
 
-std::optional<IBounds::BoundsID> GridHeuristic::QueryPosition(vec3 p)
+std::optional<IBounds::BoundsID> GridHeuristic::QueryPosition(vec3 p) const
 {
 	for (const auto& shape : quads)
 	{
@@ -64,12 +66,14 @@ std::optional<IBounds::BoundsID> GridHeuristic::QueryPosition(vec3 p)
 
 	return std::nullopt;
 }
-std::unique_ptr<IBounds> GridHeuristic::GetBound(IBounds::BoundsID id)
+const IBounds& GridHeuristic::GetBound(IBounds::BoundsID id) const
 {
 	for (const auto& grid : quads)
 	{
 		if (grid.ID == id)
-			return std::make_unique<GridShape>(grid);
+		{
+			return grid;
+		}
 	}
-	return nullptr;
+	throw std::runtime_error("Invalid ID provided");
 }

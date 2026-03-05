@@ -36,4 +36,6 @@ target_compile_definitions(atlasnet_defs INTERFACE
     _REGISTRY_CERT_SECRET_NAME="registry_tls_cert"
     _REGISTRY_KEY_SECRET_NAME="registry_tls_key"
     _BUILDER_CONTAINER_NAME="atlasnet_builder"
+     _ATLASNET_SNAPSHOT_INTERNAL_MS=5000
+     _ATLASNET_HEURISTIC_RECOMPUTE_INTERNAL_MS=5000
 )

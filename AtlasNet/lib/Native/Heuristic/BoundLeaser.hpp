@@ -39,5 +39,6 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	}
 	[[nodiscard]] constexpr bool HasBound() const { return ClaimedBound != nullptr; }
 	[[nodiscard]] constexpr const IBounds& GetBound() const { return *ClaimedBound; }
+	[[nodiscard]] constexpr IBounds::BoundsID GetBoundID() const {return ClaimedBoundID;}
 	
 };

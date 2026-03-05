@@ -3,8 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <random>
+#include <stdexcept>
 
 #include "Global/Serialize/ByteWriter.hpp"
+#include "Heuristic/IBounds.hpp"
 
 VoronoiHeuristic::VoronoiHeuristic() = default;
 
@@ -182,7 +184,7 @@ void VoronoiHeuristic::Deserialize(ByteReader& br)
 	}
 }
 
-std::optional<IBounds::BoundsID> VoronoiHeuristic::QueryPosition(vec3 p)
+std::optional<IBounds::BoundsID> VoronoiHeuristic::QueryPosition(vec3 p) const
 {
 	for (const auto& cell : _cells)
 	{
@@ -194,15 +196,15 @@ std::optional<IBounds::BoundsID> VoronoiHeuristic::QueryPosition(vec3 p)
 	return std::nullopt;
 }
 
-std::unique_ptr<IBounds> VoronoiHeuristic::GetBound(IBounds::BoundsID id)
+const IBounds& VoronoiHeuristic::GetBound(IBounds::BoundsID id) const
 {
 	for (const auto& cell : _cells)
 	{
 		if (cell.ID == id)
 		{
-			return std::make_unique<VoronoiBounds>(cell);
+			return cell;
 		}
 	}
-	return nullptr;
+	throw std::runtime_error("Invalid ID");
 }
 

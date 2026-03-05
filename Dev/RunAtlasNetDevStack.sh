@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
+trap 'echo "ERROR on line $LINENO. Exit code: $?"; exit 1' ERR
 # Stack name (first argument)
 STACK_NAME=${1:-atlasnet_dev}
 
@@ -63,8 +63,8 @@ if docker stack ls --format '{{.Name}}' | grep -w "$STACK_NAME" > /dev/null; the
     docker stack rm "$STACK_NAME" 2>/dev/null
 
     # Wait until the stack is gone
-    echo "Waiting for stack to be fully removed..."
-    while docker stack ls --format '{{.Name}}' | grep -w "$STACK_NAME" > /dev/null; do
+    echo "Waiting for services to terminate..."
+    while docker service ls --format '{{.Name}}' | grep "$STACK_NAME" > /dev/null; do
         sleep 1
     done
 fi
@@ -80,15 +80,11 @@ NETWORK_NAME_PATTERN="AtlasNet"
 
 # Function to remove networks matching the pattern
 remove_networks() {
-    local net
-    while net=$(docker network ls --format '{{.Name}}' | grep "$NETWORK_NAME_PATTERN" || true); do
-        if [[ -z "$net" ]]; then
-            break
+    docker network ls --format '{{.Name}}' | grep "$NETWORK_NAME_PATTERN" || true | while read -r net; do
+        if [ -n "$net" ]; then
+            echo "Removing network: $net"
+            docker network rm "$net" || true
         fi
-        echo "Removing network: $net"
-        echo "$net" | xargs -r docker network rm || true
-        # Wait a bit for Docker to finalize deletion
-        sleep 1
     done
 }
 

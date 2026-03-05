@@ -1,8 +1,10 @@
 #include "QuadtreeHeuristic.hpp"
 
 #include <cmath>
+#include <stdexcept>
 
 #include "Global/Serialize/ByteWriter.hpp"
+#include "Heuristic/IBounds.hpp"
 
 QuadtreeHeuristic::QuadtreeHeuristic() = default;
 
@@ -158,7 +160,7 @@ void QuadtreeHeuristic::Deserialize(ByteReader& br)
 	}
 }
 
-std::optional<IBounds::BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p)
+std::optional<IBounds::BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p) const
 {
 	for (const auto& cell : _cells)
 	{
@@ -170,15 +172,15 @@ std::optional<IBounds::BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p)
 	return std::nullopt;
 }
 
-std::unique_ptr<IBounds> QuadtreeHeuristic::GetBound(IBounds::BoundsID id)
+const IBounds& QuadtreeHeuristic::GetBound(IBounds::BoundsID id) const
 {
 	for (const auto& cell : _cells)
 	{
 		if (cell.ID == id)
 		{
-			return std::make_unique<GridShape>(cell);
+			return cell;
 		}
 	}
-	return nullptr;
+	throw std::runtime_error("Invalid ID");
 }
 

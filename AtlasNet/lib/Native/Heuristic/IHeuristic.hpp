@@ -3,12 +3,12 @@
 #include <boost/describe/enum.hpp>
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <unordered_map>
 #include <vector>
 
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
-
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
@@ -45,8 +45,7 @@ class IHeuristic
 				return "Unknown";
 		}
 	}
-	static inline bool TypeFromString(std::string_view str,
-									  Type& outType) noexcept
+	static inline bool TypeFromString(std::string_view str, Type& outType) noexcept
 	{
 		if (str == "None")
 		{
@@ -86,22 +85,31 @@ class IHeuristic
 	// #endif
 
    protected:
-   Log logger = Log("Heuristic");
+	Log logger = Log("Heuristic");
+
    public:
+	template <typename FN>
+		requires std::is_invocable_v<FN, const IBounds&>
+	void ForEachBound(FN&& f) const
+	{
+		for (IBounds::BoundsID i = 0; i < GetBoundsCount();i++)
+		{
+			f(GetBound(i));
+		}
+	}
 	virtual ~IHeuristic() = default;
 	[[nodiscard]] virtual Type GetType() const = 0;
 
-	virtual void Compute(
-		const std::span<const AtlasEntityMinimal>& span) = 0;
+	virtual void Compute(const std::span<const AtlasEntityMinimal>& span) = 0;
 
 	virtual uint32_t GetBoundsCount() const = 0;
 	/** */
-	virtual void SerializeBounds(
-		std::unordered_map<IBounds::BoundsID, ByteWriter>& bws) = 0;
+	virtual void SerializeBounds(std::unordered_map<IBounds::BoundsID, ByteWriter>& bws) = 0;
 	virtual void Serialize(ByteWriter& bw) const = 0;
+
 	virtual void Deserialize(ByteReader& br) = 0;
-	[[nodiscard]] virtual std::optional<IBounds::BoundsID> QueryPosition(vec3 p) = 0;
-	[[nodiscard]] virtual std::unique_ptr<IBounds> GetBound(IBounds::BoundsID id) = 0;
+	[[nodiscard]] virtual std::optional<IBounds::BoundsID> QueryPosition(vec3 p) const = 0;
+	[[nodiscard]] virtual const IBounds& GetBound(IBounds::BoundsID id) const = 0;
 };
 template <typename BoundType>
 struct TBoundDelta
@@ -115,6 +123,5 @@ class THeuristic : public IHeuristic
 {
    public:
 	virtual void GetBounds(std::vector<BoundType>& out_bounds) const = 0;
-	virtual void GetBoundDeltas(
-		std::vector<TBoundDelta<BoundType>>& out_deltas) const = 0;
+	virtual void GetBoundDeltas(std::vector<TBoundDelta<BoundType>>& out_deltas) const = 0;
 };

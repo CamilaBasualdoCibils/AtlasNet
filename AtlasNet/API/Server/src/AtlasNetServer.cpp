@@ -25,6 +25,7 @@
 #include "Interlink/Telemetry/NetworkManifest.hpp"
 #include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkIdentity.hpp"
+#include "Snapshot/SnapshotService.hpp"
 
 // namespace
 //{
@@ -51,6 +52,7 @@ void IAtlasNetServer::AtlasNet_Initialize()
 
 	EntityLedger::Get().Init();
 	ClientLedger::Ensure();
+	SnapshotService::Ensure();
 	EventSystem::Get().Subscribe<ClientConnectEvent>(
 		[this](const ClientConnectEvent &e)
 		{

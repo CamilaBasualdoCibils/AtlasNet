@@ -41,8 +41,8 @@ class VoronoiHeuristic : public THeuristic<VoronoiBounds>
 	void Serialize(ByteWriter& bw) const override;
 	void Deserialize(ByteReader& br) override;
 
-	std::optional<IBounds::BoundsID> QueryPosition(vec3 p) override;
-	std::unique_ptr<IBounds> GetBound(IBounds::BoundsID id) override;
+	std::optional<IBounds::BoundsID> QueryPosition(vec3 p) const override;
+	const IBounds& GetBound(IBounds::BoundsID id) const override;
 
    private:
 	std::vector<glm::vec2> _seeds;

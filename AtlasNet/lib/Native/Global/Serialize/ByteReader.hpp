@@ -3,6 +3,7 @@
 #include <boost/beast/core/detail/base64.hpp>
 #include <iostream>
 #include <span>
+#include <string_view>
 
 #include "ByteStream.hpp"
 #include "Global/Misc/String_utils.hpp"
@@ -19,6 +20,12 @@ class ByteReader
 			DecodeBase64();
 	}
 	explicit ByteReader(const std::string& s, bool IsEncodedBase64 = false)
+		: p(reinterpret_cast<const uint8_t*>(s.data())), n(s.size())
+	{
+		if (IsEncodedBase64)
+			DecodeBase64();
+	}
+	explicit ByteReader(const std::string_view& s, bool IsEncodedBase64 = false)
 		: p(reinterpret_cast<const uint8_t*>(s.data())), n(s.size())
 	{
 		if (IsEncodedBase64)

@@ -35,7 +35,7 @@ class GridHeuristic : public THeuristic<GridShape>
 	void Deserialize(ByteReader& br) override;
 
 	// std::unique_ptr<IBounds> QueryPosition(vec3 p) override;
-	std::optional<IBounds::BoundsID> QueryPosition(vec3 p) override;
-	std::unique_ptr<IBounds> GetBound(IBounds::BoundsID id) override;
+	std::optional<IBounds::BoundsID> QueryPosition(vec3 p)const override;
+	const IBounds& GetBound(IBounds::BoundsID id) const override;
 	std::span<const GridShape> GetGrids() const { return quads; }
 };
