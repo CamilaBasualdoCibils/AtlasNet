@@ -75,7 +75,15 @@ if ! docker network ls --format '{{.Name}}' | grep -w AtlasNet > /dev/null; then
 fi
 # Deploy the stack using the temporary file
 echo "Deploying Docker stack '$STACK_NAME' with shard image '$SHARD_IMAGE_NAME'..."
+set +e  # temporarily allow failure
 docker stack deploy -c "$TEMP_STACK_FILE" "$STACK_NAME" --detach=true
+DEPLOY_EXIT=$?
+set -e
+if [ $DEPLOY_EXIT -ne 0 ]; then
+    echo "docker stack deploy failed with exit code $DEPLOY_EXIT"
+    docker stack ps "$STACK_NAME"
+    exit $DEPLOY_EXIT
+fi
 
 # Clean up
 rm "$TEMP_STACK_FILE"

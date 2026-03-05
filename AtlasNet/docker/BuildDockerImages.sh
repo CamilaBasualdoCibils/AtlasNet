@@ -69,7 +69,6 @@ else
     docker buildx use "$BUILDER_NAME"
 fi
 
-recreate_builder
 echo "==> Building images in parallel with BuildKit..."
 
 # Conditionally include platforms if specified
