@@ -12,9 +12,11 @@ import {
   computeProjectedShardPositions,
   computeShardAnchorPositions,
   computeShardBoundsById,
+  computeShardPolygonsById,
   computeShardHoverBoundsById,
   isShardIdentity,
   normalizeShardId,
+  type Point2,
   type ShardHoverBounds,
 } from '../mapData';
 import type { ServerBoundsShardSummary } from '../serverBoundsTypes';
@@ -28,6 +30,7 @@ interface UseServerBoundsMinimapDataArgs {
 interface ServerBoundsMinimapData {
   shardSummaries: ServerBoundsShardSummary[];
   shardBoundsByIdWithNetworkFallback: Map<string, ShardHoverBounds>;
+  shardPolygonsById: Map<string, Point2[][]>;
   claimedBoundShardIds: Set<string>;
   networkNodeIds: string[];
   networkNodeIdSet: Set<string>;
@@ -46,6 +49,11 @@ export function useServerBoundsMinimapData({
 
   const shardAnchorPositions = useMemo(
     () => computeShardAnchorPositions(heuristicShapes),
+    [heuristicShapes]
+  );
+
+  const shardPolygonsById = useMemo(
+    () => computeShardPolygonsById(heuristicShapes),
     [heuristicShapes]
   );
 
@@ -187,6 +195,7 @@ export function useServerBoundsMinimapData({
   return {
     shardSummaries,
     shardBoundsByIdWithNetworkFallback,
+    shardPolygonsById,
     claimedBoundShardIds,
     networkNodeIds,
     networkNodeIdSet,

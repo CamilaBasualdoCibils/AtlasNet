@@ -140,6 +140,7 @@ export default function OverviewPage() {
   const {
     shardSummaries,
     shardBoundsByIdWithNetworkFallback,
+    shardPolygonsById,
     claimedBoundShardIds,
     networkNodeIdSet,
     networkEdgeCount,
@@ -340,6 +341,7 @@ export default function OverviewPage() {
       <ServerBoundsMinimapSection
         shardSummaries={shardSummaries}
         boundsByShardId={shardBoundsByIdWithNetworkFallback}
+        shardPolygonsById={shardPolygonsById}
         claimedBoundShardIds={claimedBoundShardIds}
       />
     </div>
