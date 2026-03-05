@@ -12,6 +12,10 @@ interface MapPlaybackBarProps {
   onPause: () => void;
   onStepForward: () => void;
   onStepReverse: () => void;
+  onStepTickForward: () => void;
+  onStepTickReverse: () => void;
+  canStepTickForward: boolean;
+  canStepTickReverse: boolean;
   onSeek: (nextCursorMs: number) => void;
   onResumeLive: () => void;
 }
@@ -36,6 +40,10 @@ export function MapPlaybackBar({
   onPlayReverse,
   onResumeLive,
   onSeek,
+  onStepTickForward,
+  onStepTickReverse,
+  canStepTickForward,
+  canStepTickReverse,
   onStepForward,
   onStepReverse,
   paused,
@@ -151,6 +159,40 @@ export function MapPlaybackBar({
         }}
       >
         {'>|'}
+      </button>
+
+      <button
+        type="button"
+        onClick={onStepTickReverse}
+        disabled={!canStepTickReverse}
+        title="Step back one tick (1 ms)"
+        style={{
+          border: '1px solid rgba(148, 163, 184, 0.45)',
+          borderRadius: 6,
+          padding: '4px 9px',
+          background: 'rgba(15, 23, 42, 0.72)',
+          color: '#e2e8f0',
+          opacity: canStepTickReverse ? 1 : 0.45,
+        }}
+      >
+        {'T<'}
+      </button>
+
+      <button
+        type="button"
+        onClick={onStepTickForward}
+        disabled={!canStepTickForward}
+        title="Step forward one tick (1 ms)"
+        style={{
+          border: '1px solid rgba(148, 163, 184, 0.45)',
+          borderRadius: 6,
+          padding: '4px 9px',
+          background: 'rgba(15, 23, 42, 0.72)',
+          color: '#e2e8f0',
+          opacity: canStepTickForward ? 1 : 0.45,
+        }}
+      >
+        {'T>'}
       </button>
 
       <span
