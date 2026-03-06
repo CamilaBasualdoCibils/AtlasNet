@@ -223,6 +223,8 @@ Local k3d dev deployment is available via:
 ```bash
 cmake --build build --target sandbox_atlasnet_run
 cmake --build build --target sandbox_atlasnet_run_fast
+cmake --build build --target sandbox_atlasnet_run_debug
+cmake --build build --target sandbox_atlasnet_run_debug_profile
 ```
 
 `sandbox_atlasnet_run`:
@@ -238,9 +240,43 @@ cmake --build build --target sandbox_atlasnet_run_fast
 - rebuilds only images whose staged inputs changed (`watchdog`, `proxy`, `shard`, `cartograph`, `sandbox-server`)
 - skips post-deploy prune so caches stay warm
 
+`sandbox_atlasnet_run_debug`:
+- configures a separate build tree at `build-hotspot/`
+- uses Hotspot-friendly flags (`-fno-omit-frame-pointer`, symbols enabled)
+- then runs the same `sandbox_atlasnet_run` pipeline from that build tree (build images + deploy to k3d)
+
+`sandbox_atlasnet_run_debug_profile`:
+- runs `Dev/ProfileK3dHotspot.sh` to record 30-second perf captures on all k3d server/agent nodes
+- opens captures in Hotspot (default open mode: `novnc`, one noVNC URL per capture)
+- does not recreate or redeploy the cluster; it profiles the existing running k3d cluster
+
 Default host endpoints:
 - Cartograph: `http://127.0.0.1:3000`
 - Proxy: `127.0.0.1:2555` (TCP/UDP)
+
+### Hotspot automation (k3d)
+
+Build/run with profiler-friendly flags, then capture profiles for every k3d server/agent node:
+
+```bash
+cmake --build build --target sandbox_atlasnet_run_debug
+Dev/ProfileK3dHotspot.sh atlasnet-dev
+```
+
+What `Dev/ProfileK3dHotspot.sh` does:
+- builds (or reuses) a helper image with `hotspot`, `perf`, and `nsenter` (`Dev/HotspotProfiler.dockerfile`)
+- profiles all `k3d-<cluster>-server-*` and `k3d-<cluster>-agent-*` containers in parallel for 30 seconds
+- writes `*.perf.data` to `/tmp/atlasnet-hotspot/<cluster>-<timestamp>/`
+- opens all captures in Hotspot (noVNC mode by default; separate URL/viewer per capture)
+- records using host `perf` scoped to node-container PID sets (via `docker top`, with process-tree fallback)
+- prefers host-kernel `perf` via `nsenter` (falls back to container `perf` if host perf is unavailable)
+
+Useful overrides:
+- `ATLASNET_HOTSPOT_DURATION_S=30`
+- `ATLASNET_HOTSPOT_OPEN_MODE=novnc|container|host|none`
+- `ATLASNET_HOTSPOT_AUTO_OPEN=1`
+- `ATLASNET_HOTSPOT_NOVNC_PORT_BASE=16080`
+- `ATLASNET_HOTSPOT_NOVNC_AUTO_OPEN_BROWSER=1`
 
 ## Dev container
 
