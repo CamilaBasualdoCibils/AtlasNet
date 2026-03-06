@@ -9,6 +9,7 @@
 
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
+#include "Entity/Transform.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
@@ -99,8 +100,8 @@ class IHeuristic
 	}
 	virtual ~IHeuristic() = default;
 	[[nodiscard]] virtual Type GetType() const = 0;
-
-	virtual void Compute(const std::span<const AtlasEntityMinimal>& span) = 0;
+	
+	virtual void Compute(const std::span<const Transform>& span) = 0;
 
 	virtual uint32_t GetBoundsCount() const = 0;
 	/** */

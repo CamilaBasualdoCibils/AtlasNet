@@ -106,10 +106,10 @@ void TransferCoordinator::ParseEntitiesForTargets()
 			EntitiesInTransfer.insert(std::make_pair(EntityID, TransferData.ID));
 		}
 		TransferManifest::Get().PushTransferInfo(TransferData);
-		logger.DebugFormatted(
+		/* logger.DebugFormatted(
 			"Scheduled new Entity Transfer:\n- ID {}\n- {} entities\n- Target: {}",
 			UUIDGen::ToString(TransferData.ID), TransferData.entityIDs.size(),
-			TransferData.shard.ToString());
+			TransferData.shard.ToString()); */
 
 		++it;
 	}
@@ -136,9 +136,9 @@ void TransferCoordinator::ParseEntitiesForTargets()
 			ClientsInTransfer.insert(std::make_pair(clientID, TransferData.ID));
 		}
 		// TransferManifest::Get().PushTransferInfo(TransferData);
-		logger.DebugFormatted("Scheduled new Client Transfer:\n- ID {}\n- {} clients\n- Target: {}",
+		/* logger.DebugFormatted("Scheduled new Client Transfer:\n- ID {}\n- {} clients\n- Target: {}",
 							  UUIDGen::ToString(TransferData.ID), TransferData.Clients.size(),
-							  TransferData.shard.ToString());
+							  TransferData.shard.ToString()); */
 
 		++it;
 	}
@@ -166,8 +166,8 @@ void TransferCoordinator::TransferTick()
 		newTransfer.stage = EntityTransferStage::ePrepare;
 		auto stageIt = EntityTransfers.insert({newTransfer.ID, newTransfer});
 
-		logger.DebugFormatted("Advanced Entity Transfer {} -> ePrepare",
-							  UUIDGen::ToString(newTransfer.ID));
+		/* logger.DebugFormatted("Advanced Entity Transfer {} -> ePrepare",
+							  UUIDGen::ToString(newTransfer.ID)); */
 	}
 
 	while (!ClientsPreTransfers.empty())
@@ -189,18 +189,18 @@ void TransferCoordinator::TransferTick()
 		newTransfer.stage = ClientTransferStage::ePrepare;
 		auto stageIt = ClientTransfers.insert({newTransfer.ID, newTransfer});
 
-		logger.DebugFormatted("Advanced Client Transfer {} -> ePrepare",
-							  UUIDGen::ToString(newTransfer.ID));
+		/* logger.DebugFormatted("Advanced Client Transfer {} -> ePrepare",
+							  UUIDGen::ToString(newTransfer.ID)); */
 	}
 }
 void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPacket& p,
 														const PacketManager::PacketInfo& info)
 {
 	std::lock_guard<std::mutex> lock(EntityTransferMutex);
-	logger.DebugFormatted("Entity Transfer update\n - ID:{}\n - Stage:{}",
+	/* logger.DebugFormatted("Entity Transfer update\n - ID:{}\n - Stage:{}",
 						  UUIDGen::ToString(p.TransferID),
-						  boost::describe::enum_to_string(p.stage, "INVALID"));
-	TransferManifest::Get().UpdateEntityTransferStage(p.TransferID, p.stage);
+						  boost::describe::enum_to_string(p.stage, "INVALID")); */
+	//TransferManifest::Get().UpdateEntityTransferStage(p.TransferID, p.stage);
 	// Switch depending on the stage of the transfer
 	switch (p.stage)
 	{
@@ -226,9 +226,9 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 			response.SetAsReadyStage();
 			Interlink::Get().SendMessage(info.sender, response,
 										 NetworkMessageSendFlag::eReliableNow);
-			logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(data.ID),
-								  boost::describe::enum_to_string(data.stage, "INVALID"));
+								  boost::describe::enum_to_string(data.stage, "INVALID")); */
 		}
 		break;
 		case EntityTransferStage::eReady:
@@ -262,9 +262,9 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 			}
 			Interlink::Get().SendMessage(info.sender, response,
 										 NetworkMessageSendFlag::eReliableNow);
-			logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(transferEntry.stage, "INVALID"));
+								  boost::describe::enum_to_string(transferEntry.stage, "INVALID")); */
 		}
 		break;
 		case EntityTransferStage::eCommit:
@@ -289,9 +289,9 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 
 			Interlink::Get().SendMessage(info.sender, response,
 										 NetworkMessageSendFlag::eReliableNow);
-			logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(response.stage, "INVALID"));
+								  boost::describe::enum_to_string(response.stage, "INVALID")); */
 			EntityTransfers.erase(transferEntry.ID);
 		}
 		break;
@@ -306,8 +306,8 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 				EntitiesInTransfer.erase(eID);
 			}
 			EntityTransfers.erase(p.TransferID);
-			logger.DebugFormatted("Entity Transfer Complete\n - ID:{}",
-								  UUIDGen::ToString(p.TransferID));
+			/* logger.DebugFormatted("Entity Transfer Complete\n - ID:{}",
+								  UUIDGen::ToString(p.TransferID)); */
 			TransferManifest::Get().DeleteTransferInfo(p.TransferID);
 		}
 		break;
@@ -317,7 +317,7 @@ void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPack
 														const PacketManager::PacketInfo& info)
 {
 	std::lock_guard<std::mutex> lock(EntityTransferMutex);
-	logger.DebugFormatted("Got a client transfer packet ID {}", UUIDGen::ToString(p.TransferID));
+	/* logger.DebugFormatted("Got a client transfer packet ID {}", UUIDGen::ToString(p.TransferID)); */
 
 	switch (p.stage)
 	{
@@ -340,9 +340,9 @@ void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPack
 			ClientTransfers.insert({newTransfer.ID, newTransfer});
 			Interlink::Get().SendMessage(info.sender, response,
 										 NetworkMessageSendFlag::eReliableNow);
-			logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(newTransfer.stage, "INVALID"));
+								  boost::describe::enum_to_string(newTransfer.stage, "INVALID")); */
 		}
 		break;
 
@@ -364,9 +364,9 @@ void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPack
 			Interlink::Get().SendMessage(*Proxy, switchpacket,
 										 NetworkMessageSendFlag::eReliableNow);
 
-			logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(switchpacket.stage, "INVALID"));
+								  boost::describe::enum_to_string(switchpacket.stage, "INVALID")); */
 		}
 		break;
 
@@ -388,9 +388,9 @@ void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPack
 			Interlink::Get().SendMessage(*Proxy, activatePacket,
 										 NetworkMessageSendFlag::eReliableNow);
 
-			logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
+			/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
 								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(activatePacket.stage, "INVALID"));
+								  boost::describe::enum_to_string(activatePacket.stage, "INVALID")); */
 			ClientTransfers.erase(p.TransferID);
 		}
 		break;

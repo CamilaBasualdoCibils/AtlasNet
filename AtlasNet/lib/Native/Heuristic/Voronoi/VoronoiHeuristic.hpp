@@ -29,7 +29,7 @@ class VoronoiHeuristic : public THeuristic<VoronoiBounds>
 	void SetSeedCount(uint32_t count);
 
 	// IHeuristic interface
-	void Compute(const std::span<const AtlasEntityMinimal>& span) override;
+	void Compute(const std::span<const Transform>& span) override;
 	uint32_t GetBoundsCount() const override;
 	void GetBounds(std::vector<VoronoiBounds>& out_bounds) const override;
 	void GetBoundDeltas(

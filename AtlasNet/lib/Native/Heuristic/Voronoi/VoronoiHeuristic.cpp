@@ -19,12 +19,12 @@ void VoronoiHeuristic::SetSeedCount(uint32_t count)
 	options.SeedCount = count;
 }
 
-void VoronoiHeuristic::Compute(const std::span<const AtlasEntityMinimal>&)
+void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 {
 	// Build Voronoi cells by clipping a bounding box polygon with the
 	// perpendicular bisector half-planes of all other seeds.
 
-	const uint32_t seedCount = std::max<uint32_t>(1, options.SeedCount);
+	const uint32_t seedCount = 5;//std::max<uint32_t>(1, options.SeedCount);
 
 	const float minX = -options.NetHalfExtent.x;
 	const float maxX = options.NetHalfExtent.x;
@@ -32,9 +32,9 @@ void VoronoiHeuristic::Compute(const std::span<const AtlasEntityMinimal>&)
 	const float maxY = options.NetHalfExtent.y;
 
 	// Deterministic RNG so WatchDog recompute doesn't reshuffle regions.
-	std::mt19937 rng(0x9E3779B9u ^ seedCount);
-	std::uniform_real_distribution<float> distX(minX, maxX);
-	std::uniform_real_distribution<float> distY(minY, maxY);
+	static std::mt19937 rng(0x9E3779B9u ^ seedCount);
+	static std::uniform_real_distribution<float> distX(minX, maxX);
+	static std::uniform_real_distribution<float> distY(minY, maxY);
 
 	_seeds.clear();
 	_seeds.reserve(seedCount);
