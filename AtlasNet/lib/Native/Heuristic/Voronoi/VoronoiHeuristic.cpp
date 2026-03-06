@@ -122,7 +122,7 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 		}
 
 		VoronoiBounds bound;
-		bound.ID = static_cast<IBounds::BoundsID>(i);
+		bound.ID = static_cast<BoundsID>(i);
 		bound.vertices = std::move(poly);
 		_cells.push_back(std::move(bound));
 	}
@@ -153,7 +153,7 @@ IHeuristic::Type VoronoiHeuristic::GetType() const
 }
 
 void VoronoiHeuristic::SerializeBounds(
-	std::unordered_map<IBounds::BoundsID, ByteWriter>& bws)
+	std::unordered_map<BoundsID, ByteWriter>& bws)
 {
 	bws.clear();
 	for (const VoronoiBounds& cell : _cells)
@@ -184,7 +184,7 @@ void VoronoiHeuristic::Deserialize(ByteReader& br)
 	}
 }
 
-std::optional<IBounds::BoundsID> VoronoiHeuristic::QueryPosition(vec3 p) const
+std::optional<BoundsID> VoronoiHeuristic::QueryPosition(vec3 p) const
 {
 	for (const auto& cell : _cells)
 	{
@@ -196,7 +196,7 @@ std::optional<IBounds::BoundsID> VoronoiHeuristic::QueryPosition(vec3 p) const
 	return std::nullopt;
 }
 
-const IBounds& VoronoiHeuristic::GetBound(IBounds::BoundsID id) const
+const IBounds& VoronoiHeuristic::GetBound(BoundsID id) const
 {
 	for (const auto& cell : _cells)
 	{

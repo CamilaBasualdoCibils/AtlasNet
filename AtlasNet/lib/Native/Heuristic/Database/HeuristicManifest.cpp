@@ -71,7 +71,7 @@ long long HeuristicManifest::GetClaimedBoundsCount() const
 	return InternalDB::Get()->HLen(NID2BoundIDMap);
 }
 
-bool HeuristicManifest::ReleaseClaimedBound(IBounds::BoundsID ID)
+bool HeuristicManifest::ReleaseClaimedBound(BoundsID ID)
 {
 	const std::optional<NetworkIdentity> NetID = ShardFromBoundID(ID);
 	if (!NetID.has_value())
@@ -115,7 +115,7 @@ std::optional<NetworkIdentity> HeuristicManifest::ShardFromPosition(const Transf
 	return ShardFromBoundID(*boundID);
 	// bound->GetID()
 }
-std::optional<NetworkIdentity> HeuristicManifest::ShardFromBoundID(const IBounds::BoundsID id)
+std::optional<NetworkIdentity> HeuristicManifest::ShardFromBoundID(const BoundsID id)
 {
 	const std::optional<std::string> shard =
 		InternalDB::Get()->HGet(BoundID2NIDMap, std::to_string(id));
@@ -159,7 +159,7 @@ void HeuristicManifest::PushHeuristic(const IHeuristic& h)
 	logger.Debug("Heuristic Pushed");
 }
 
-std::optional<IBounds::BoundsID> HeuristicManifest::ClaimNextPendingBound(
+std::optional<BoundsID> HeuristicManifest::ClaimNextPendingBound(
 	const NetworkIdentity& claim_key)
 {
 	const std::optional<std::string> ID_s = InternalDB::Get()->SPop(PendingIDsSet);
@@ -168,7 +168,7 @@ std::optional<IBounds::BoundsID> HeuristicManifest::ClaimNextPendingBound(
 		return std::nullopt;
 	}
 
-	IBounds::BoundsID ID = std::stoi(*ID_s);
+	BoundsID ID = std::stoi(*ID_s);
 
 	ByteWriter bw;
 	claim_key.Serialize(bw);
@@ -209,7 +209,7 @@ void HeuristicManifest::Internal_ParseHeuristic(IHeuristic::Type type, const std
 		throw "FAILURE";
 	}
 }
-std::optional<IBounds::BoundsID> HeuristicManifest::BoundIDFromShard(const NetworkIdentity& id)
+std::optional<BoundsID> HeuristicManifest::BoundIDFromShard(const NetworkIdentity& id)
 {
 	ASSERT(id.Type == NetworkIdentityType::eShard, "Invalid Networking Identity");
 	ByteWriter bw;

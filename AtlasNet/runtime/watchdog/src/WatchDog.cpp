@@ -265,7 +265,7 @@ void WatchDog::Init()
 		{
 			logger->ErrorFormatted("HEALTH CHECK FAIL : {}. Removing from Health Manifest",
 								   ID_fail.ToString());
-			const std::optional<IBounds::BoundsID> boundIdOfShard =
+			const std::optional<BoundsID> boundIdOfShard =
 				HeuristicManifest::Get().BoundIDFromShard(ID_fail);
 			if (boundIdOfShard.has_value())
 			{
@@ -313,7 +313,7 @@ void WatchDog::ComputeHeuristic()
 {
 	/*
 	HeuristicManifest::Get().PushHeuristic(*Heuristic);
-	std::unordered_map<IBounds::BoundsID, ByteWriter> bws;
+	std::unordered_map<BoundsID, ByteWriter> bws;
 	logger->Debug("IHeuristic::SerializeBounds");
 	Heuristic->SerializeBounds(bws);
 	logger->Debug("HeuristicManifest::GetPendingBoundsCount");
@@ -334,7 +334,7 @@ void WatchDog::ComputeHeuristic()
 	}
 
 	std::vector<std::string> data;
-	std::unordered_map<IBounds::BoundsID, ByteReader> brs;
+	std::unordered_map<BoundsID, ByteReader> brs;
 	logger->Debug("HeuristicManifest::GetPendingBoundsAsByteReaders");
 	HeuristicManifest::Get().GetPendingBoundsAsByteReaders(data, brs);
 

@@ -52,7 +52,7 @@ void SnapshotService::UploadSnapshot()
 {
 	if (BoundLeaser::Get().HasBound())
 	{
-		IBounds::BoundsID boundID = BoundLeaser::Get().GetBoundID();
+		BoundsID boundID = BoundLeaser::Get().GetBoundID();
 		ByteWriter entityListWriter;
 		ByteWriter transformWriter;
 		boost::container::static_vector<char, 32> boundString;
@@ -85,7 +85,7 @@ void SnapshotService::UploadSnapshot()
 	}
 }
 void SnapshotService::FetchEntityListSnapshot(
-	std::unordered_map<IBounds::BoundsID, std::vector<AtlasEntity>>& data)
+	std::unordered_map<BoundsID, std::vector<AtlasEntity>>& data)
 {
 	data.clear();
 	const std::unordered_map<std::string, std::string> keyvals =
@@ -94,7 +94,7 @@ void SnapshotService::FetchEntityListSnapshot(
 	data.reserve(keyvals.size());
 	for (const auto& [Key, Val] : keyvals)
 	{
-		const IBounds::BoundsID ID = std::stoi(Key);
+		const BoundsID ID = std::stoi(Key);
 		data.emplace(ID, std::vector<AtlasEntity>{});
 		auto& vec = data.at(ID);
 		ByteReader br(Val);
@@ -105,7 +105,7 @@ void SnapshotService::FetchEntityListSnapshot(
 	}
 }
 void SnapshotService::FetchBoundsTransformList(
-	std::unordered_map<IBounds::BoundsID, std::vector<Transform>>& transforms)
+	std::unordered_map<BoundsID, std::vector<Transform>>& transforms)
 {
 	transforms.clear();
 	const std::unordered_map<std::string, std::string> keyvals =
@@ -114,7 +114,7 @@ void SnapshotService::FetchBoundsTransformList(
 	transforms.reserve(keyvals.size());
 	for (const auto& [Key, Val] : keyvals)
 	{
-		const IBounds::BoundsID ID = std::stoi(Key);
+		const BoundsID ID = std::stoi(Key);
 		transforms.emplace(ID, std::vector<Transform>{});
 		auto& vec = transforms.at(ID);
 		ByteReader br(Val);

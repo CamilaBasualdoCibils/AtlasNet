@@ -61,28 +61,28 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
    public:
 	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const;
 
-	std::optional<IBounds::BoundsID> BoundIDFromShard(const NetworkIdentity& id);
+	std::optional<BoundsID> BoundIDFromShard(const NetworkIdentity& id);
 	/* template <typename BoundType, typename KeyType = std::string> */
 	/* void GetAllPendingBounds(std::vector<BoundType>& out_bounds); */
 
 	/* template <typename BoundType, typename KeyType = std::string> */
 	/* void StorePendingBounds(const std::vector<BoundType>& in_bounds); */
 
-	[[nodiscard]] std::optional<IBounds::BoundsID> ClaimNextPendingBound(
+	[[nodiscard]] std::optional<BoundsID> ClaimNextPendingBound(
 		const NetworkIdentity& claim_key);
 
 	[[nodiscard]] long long GetPendingBoundsCount() const;
 
 	[[nodiscard]] long long GetClaimedBoundsCount() const;
 
-	bool ReleaseClaimedBound(IBounds::BoundsID ID);
+	bool ReleaseClaimedBound(BoundsID ID);
 
 	template <typename FN>
 		requires std::is_invocable_v<FN, const IHeuristic&>
 	auto PullHeuristic(FN&& f);
 	template <typename FN>
 		requires std::is_invocable_v<FN, const IBounds&>
-	auto PullHeuristicBound(IBounds::BoundsID ID, FN&& f)
+	auto PullHeuristicBound(BoundsID ID, FN&& f)
 	{
 		return PullHeuristic([&](const IHeuristic& h) { return f(h.GetBound(ID)); });
 	}
@@ -90,7 +90,7 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 
 	[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(const Transform& t);
 
-	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const IBounds::BoundsID id);
+	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const BoundsID id);
 	// void StorePendingBound(const IBounds& bound);
 
    private:
@@ -131,7 +131,7 @@ inline void HeuristicManifest::GetAllPendingBounds(std::vector<BoundType>& out_b
 {
 	out_bounds.clear();
 	std::vector<std::string> data_for_readers;
-	std::unordered_map<IBounds::BoundsID, ByteReader> brs;
+	std::unordered_map<BoundsID, ByteReader> brs;
 	GetPendingBoundsAsByteReaders(data_for_readers, brs);
 	out_bounds.reserve(brs.size());
 	for (auto& [bound_id, boundByteReader] : brs)

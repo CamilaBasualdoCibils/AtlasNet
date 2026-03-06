@@ -14,7 +14,7 @@
 class BoundLeaser : public Singleton<BoundLeaser>
 {
 	Log logger = Log("BoundLeaser");
-	std::optional<IBounds::BoundsID> ClaimedBoundID;
+	std::optional<BoundsID> ClaimedBoundID;
 
 	std::jthread LoopThread;
 
@@ -53,5 +53,5 @@ class BoundLeaser : public Singleton<BoundLeaser>
 				}
 			});
 	}
-	[[nodiscard]] constexpr IBounds::BoundsID GetBoundID() const { return ClaimedBoundID.value(); }
+	[[nodiscard]] constexpr BoundsID GetBoundID() const { return ClaimedBoundID.value(); }
 };

@@ -25,8 +25,8 @@ void TransferCoordinator::ParseEntitiesForTargets()
 {
 	std::lock_guard<std::mutex> lock(EntityTransferMutex);
 
-	std::unordered_map<IBounds::BoundsID, EntityTransferData> NewEntityTransfers;
-	std::unordered_map<IBounds::BoundsID, ClientTransferData> NewClientTransfers;
+	std::unordered_map<BoundsID, EntityTransferData> NewEntityTransfers;
+	std::unordered_map<BoundsID, ClientTransferData> NewClientTransfers;
 
 	while (!EntitiesToParseForReceiver.empty())
 	{
@@ -62,7 +62,7 @@ void TransferCoordinator::ParseEntitiesForTargets()
 			continue;
 		}
 		// Get the Bounds ID at the entity position
-		const std::optional<IBounds::BoundsID> boundsID =
+		const std::optional<BoundsID> boundsID =
 		HeuristicManifest::Get().PullHeuristic([&](const IHeuristic& h){
 			return h.QueryPosition(entityTransform->position);
 		});

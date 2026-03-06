@@ -20,10 +20,10 @@ class SnapshotService : public Singleton<SnapshotService>
 	SnapshotService();
 
 	void FetchEntityListSnapshot(
-		std::unordered_map<IBounds::BoundsID, std::vector<AtlasEntity>>& data);
+		std::unordered_map<BoundsID, std::vector<AtlasEntity>>& data);
 
 	void FetchBoundsTransformList(
-		std::unordered_map<IBounds::BoundsID, std::vector<Transform>>& transforms);
+		std::unordered_map<BoundsID, std::vector<Transform>>& transforms);
 
 	void FetchAllTransforms(std::vector<Transform>& transforms);
 

@@ -40,13 +40,13 @@ class QuadtreeHeuristic : public THeuristic<GridShape>
 		std::vector<TBoundDelta<GridShape>>& out_deltas) const override;
 	IHeuristic::Type GetType() const override;
 	void SerializeBounds(
-		std::unordered_map<IBounds::BoundsID, ByteWriter>& bws) override;
+		std::unordered_map<BoundsID, ByteWriter>& bws) override;
 
 	void Serialize(ByteWriter& bw) const override;
 	void Deserialize(ByteReader& br) override;
 
-	std::optional<IBounds::BoundsID> QueryPosition(vec3 p) const override;
-	const IBounds& GetBound(IBounds::BoundsID id) const override;
+	std::optional<BoundsID> QueryPosition(vec3 p) const override;
+	const IBounds& GetBound(BoundsID id) const override;
 
    private:
 	std::vector<GridShape> _cells;

@@ -89,7 +89,7 @@ void QuadtreeHeuristic::Compute(const std::span<const Transform>& span)
 	_cells.clear();
 	_cells.resize(leaves.size());
 
-	IBounds::BoundsID nextId = 0;
+	BoundsID nextId = 0;
 	for (size_t i = 0; i < leaves.size(); ++i)
 	{
 		const Node& n = leaves[i];
@@ -130,7 +130,7 @@ IHeuristic::Type QuadtreeHeuristic::GetType() const
 }
 
 void QuadtreeHeuristic::SerializeBounds(
-	std::unordered_map<IBounds::BoundsID, ByteWriter>& bws)
+	std::unordered_map<BoundsID, ByteWriter>& bws)
 {
 	bws.clear();
 	for (const GridShape& cell : _cells)
@@ -160,7 +160,7 @@ void QuadtreeHeuristic::Deserialize(ByteReader& br)
 	}
 }
 
-std::optional<IBounds::BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p) const
+std::optional<BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p) const
 {
 	for (const auto& cell : _cells)
 	{
@@ -172,7 +172,7 @@ std::optional<IBounds::BoundsID> QuadtreeHeuristic::QueryPosition(vec3 p) const
 	return std::nullopt;
 }
 
-const IBounds& QuadtreeHeuristic::GetBound(IBounds::BoundsID id) const
+const IBounds& QuadtreeHeuristic::GetBound(BoundsID id) const
 {
 	for (const auto& cell : _cells)
 	{
