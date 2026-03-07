@@ -291,6 +291,14 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 				EntityLedger::Get().AddEntity(Data.Snapshot);
 			}
 
+			// Acknowledge commit back to source so it can clear EntitiesInTransfer.
+			EntityTransferPacket completeResponse;
+			completeResponse.TransferID = p.TransferID;
+			completeResponse.stage = EntityTransferStage::eComplete;
+			completeResponse.SetAsCompleteStage();
+			Interlink::Get().SendMessage(info.sender, completeResponse,
+										 NetworkMessageSendFlag::eReliableNow);
+
 			// Stage 3: Remove internal record under lock
 			_WriteLock([&]() { EntityTransfers.erase(p.TransferID); });
 		}
