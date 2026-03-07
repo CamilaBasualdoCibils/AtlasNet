@@ -4,13 +4,16 @@
 
 #include <boost/container/small_vector.hpp>
 #include <boost/describe/enum_from_string.hpp>
+#include <charconv>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <system_error>
 #include <unordered_map>
 
+#include "Global/Misc/UUID.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
@@ -62,28 +65,19 @@ static std::string_view StripQuotes(std::string_view str)
 	return str;	 // make a new string to own the memory
 }
 
-long long HeuristicManifest::GetPendingBoundsCount() const
+bool HeuristicManifest::ReleaseClaimedBound(const NetworkIdentity& NetID)
 {
-	return InternalDB::Get()->SCard(PendingIDsSet);
-}
-long long HeuristicManifest::GetClaimedBoundsCount() const
-{
-	return InternalDB::Get()->HLen(NID2BoundIDMap);
-}
+	const std::string NetIDStr = UUIDGen::ToString(NetID.ID);
 
-bool HeuristicManifest::ReleaseClaimedBound(BoundsID ID)
-{
-	const std::optional<NetworkIdentity> NetID = ShardFromBoundID(ID);
-	if (!NetID.has_value())
-		return false;
-	ByteWriter bw;
-	NetID->Serialize(bw);
-
-	const bool claimed = InternalDB::Get()->HExists(BoundID2NIDMap, std::to_string(ID));
+	const bool claimed = InternalDB::Get()->HExists(NID2BoundIDMap, NetIDStr);
 	if (claimed)
 	{
-		InternalDB::Get()->HDel(BoundID2NIDMap, {std::to_string(ID)});
-		InternalDB::Get()->HDel(NID2BoundIDMap, {bw.as_string_view()});
+		const std::optional<std::string> boundID_s =
+			InternalDB::Get()->HGet(NID2BoundIDMap, NetIDStr);
+		ASSERT(boundID_s.has_value(), "INVALID SCENARIO");
+		InternalDB::Get()->HDel(NID2BoundIDMap, {NetIDStr});
+		InternalDB::Get()->SAdd(PendingIDsSet, {boundID_s.value()});
+		Internal_OwnershipTableIncreaseVersion();
 		return true;
 	}
 	return false;
@@ -92,42 +86,6 @@ void HeuristicManifest::Internal_SetActiveHeuristicType(IHeuristic::Type type)
 {
 	logger.DebugFormatted("Set HeuristicType {}", IHeuristic::TypeToString(type));
 	InternalDB::Get()->Set(HeuristicTypeKey, IHeuristic::TypeToString(type));
-}
-IHeuristic::Type HeuristicManifest::GetActiveHeuristicType() const
-{
-	const auto stripped_string =
-		StripQuotes(InternalDB::Get()->Get(HeuristicTypeKey).value_or("INVALID"));
-
-	IHeuristic::Type t;
-	IHeuristic::TypeFromString(stripped_string, t);
-	return t;
-}
-
-std::optional<NetworkIdentity> HeuristicManifest::ShardFromPosition(const Transform& t)
-{
-	const auto boundID =
-		PullHeuristic([&](const IHeuristic& h) { return h.QueryPosition(t.position); });
-	if (!boundID.has_value())
-	{
-		return std::nullopt;
-	}
-	//logger.DebugFormatted("found bound for position {}", *boundID);
-	return ShardFromBoundID(*boundID);
-	// bound->GetID()
-}
-std::optional<NetworkIdentity> HeuristicManifest::ShardFromBoundID(const BoundsID id)
-{
-	const std::optional<std::string> shard =
-		InternalDB::Get()->HGet(BoundID2NIDMap, std::to_string(id));
-
-	if (shard.has_value())
-	{
-		NetworkIdentity shardID;
-		ByteReader br(shard.value());
-		shardID.Deserialize(br);
-		return shardID;
-	}
-	return std::nullopt;
 }
 
 void HeuristicManifest::PushHeuristic(const IHeuristic& h)
@@ -141,26 +99,33 @@ void HeuristicManifest::PushHeuristic(const IHeuristic& h)
 	logger.DebugFormatted("Pushed Heuristic type {} with {} bounds",
 						  IHeuristic::TypeToString(h.GetType()), h.GetBoundsCount());
 	const size_t previousBoundCount =
-		InternalDB::Get()->SCard(PendingIDsSet) + InternalDB::Get()->HLen(BoundID2NIDMap);
+		InternalDB::Get()->SCard(PendingIDsSet) + InternalDB::Get()->HLen(NID2BoundIDMap);
 	boost::container::small_vector<std::string, 16> newEntries;
 	newEntries.reserve(h.GetBoundsCount());
 	std::vector<std::string_view> newEntriesViews;
+	newEntriesViews.reserve(h.GetBoundsCount() - previousBoundCount);
 	for (size_t i = previousBoundCount; i < h.GetBoundsCount(); i++)
 	{
 		newEntries.push_back(std::to_string(i));
 		newEntriesViews.push_back(newEntries.back());
 	}
 	InternalDB::Get()->SAdd(PendingIDsSet, newEntriesViews);
+	Internal_OwnershipTableIncreaseVersion();
 	const auto t = InternalDB::Get()->GetTimeNow();
 
-	const long long ms = t.seconds * 1000 + t.microseconds / 1000;
-	InternalDB::Get()->Set(HeuristicTimestampKey, std::to_string(ms));
+	if (InternalDB::Get()->Exists(HeuristicVersionKey))
+	{
+		InternalDB::Get()->WithSync([&](auto& r) { return r.incr(HeuristicVersionKey); });
+	}
+	else
+	{
+		InternalDB::Get()->Set(HeuristicVersionKey, std::to_string(1));
+	}
 	logger.DebugFormatted("Pushed {} new bounds", newEntriesViews.size());
 	logger.Debug("Heuristic Pushed");
 }
 
-std::optional<BoundsID> HeuristicManifest::ClaimNextPendingBound(
-	const NetworkIdentity& claim_key)
+std::optional<BoundsID> HeuristicManifest::ClaimNextPendingBound(const NetworkIdentity& claim_key)
 {
 	const std::optional<std::string> ID_s = InternalDB::Get()->SPop(PendingIDsSet);
 	if (!ID_s.has_value())
@@ -168,13 +133,17 @@ std::optional<BoundsID> HeuristicManifest::ClaimNextPendingBound(
 		return std::nullopt;
 	}
 
-	BoundsID ID = std::stoi(*ID_s);
+	BoundsID BID;
+	auto [ptr, ec] = std::from_chars(ID_s->data(), ID_s->data() + ID_s->size(), BID);
+	if (ec != std::errc())
+	{
+		return std::nullopt;
+	}
 
-	ByteWriter bw;
-	claim_key.Serialize(bw);
-	InternalDB::Get()->HSet(NID2BoundIDMap, bw.as_string_view(), ID_s.value());
-	InternalDB::Get()->HSet(BoundID2NIDMap, ID_s.value(), bw.as_string_view());
-	return ID;
+	const std::string Claim_Key_s = UUIDGen::ToString(claim_key.ID);
+	InternalDB::Get()->HSet(NID2BoundIDMap, Claim_Key_s, ID_s.value());
+	Internal_OwnershipTableIncreaseVersion();
+	return BID;
 }
 
 void HeuristicManifest::Internal_ParseHeuristic(IHeuristic::Type type, const std::string_view data)
@@ -182,13 +151,13 @@ void HeuristicManifest::Internal_ParseHeuristic(IHeuristic::Type type, const std
 	switch (type)
 	{
 		case IHeuristic::Type::eGridCell:
-			CachedHeuristic = std::make_unique<GridHeuristic>();
+			localHeuristicCache.CachedHeuristic = std::make_unique<GridHeuristic>();
 			break;
 		case IHeuristic::Type::eQuadtree:
-			CachedHeuristic = std::make_unique<QuadtreeHeuristic>();
+			localHeuristicCache.CachedHeuristic = std::make_unique<QuadtreeHeuristic>();
 			break;
 		case IHeuristic::Type::eVoronoi:
-			CachedHeuristic = std::make_unique<VoronoiHeuristic>();
+			localHeuristicCache.CachedHeuristic = std::make_unique<VoronoiHeuristic>();
 			break;
 
 		default:
@@ -201,25 +170,11 @@ void HeuristicManifest::Internal_ParseHeuristic(IHeuristic::Type type, const std
 	try
 	{
 		ByteReader br(data);
-		CachedHeuristic->Deserialize(br);
+		localHeuristicCache.CachedHeuristic->Deserialize(br);
 	}
 	catch (...)
 	{
 		logger.Warning("Failed to deserialize heuristic payload due to unknown error.");
 		throw "FAILURE";
 	}
-}
-std::optional<BoundsID> HeuristicManifest::BoundIDFromShard(const NetworkIdentity& id)
-{
-	ASSERT(id.Type == NetworkIdentityType::eShard, "Invalid Networking Identity");
-	ByteWriter bw;
-	id.Serialize(bw);
-
-	const std::optional<std::string> BoundID_S =
-		InternalDB::Get()->HGet(NID2BoundIDMap, bw.as_string_view());
-	if (BoundID_S.has_value())
-	{
-		return std::stoi(BoundID_S.value());
-	}
-	return std::nullopt;
 }

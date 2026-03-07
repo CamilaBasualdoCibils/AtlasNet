@@ -265,20 +265,16 @@ void WatchDog::Init()
 		{
 			logger->ErrorFormatted("HEALTH CHECK FAIL : {}. Removing from Health Manifest",
 								   ID_fail.ToString());
-			const std::optional<BoundsID> boundIdOfShard =
-				HeuristicManifest::Get().BoundIDFromShard(ID_fail);
-			if (boundIdOfShard.has_value())
+
+			const bool requeued = HeuristicManifest::Get().ReleaseClaimedBound(ID_fail);
+			if (requeued)
 			{
-				const bool requeued = HeuristicManifest::Get().ReleaseClaimedBound(*boundIdOfShard);
-				if (requeued)
-				{
-					logger->DebugFormatted("Requeued claimed bounds for {}", ID_fail.ToString());
-				}
-				HealthManifest::Get().RemovePing(key);
-				if (ID_fail.IsInternal() && ID_fail != NetworkCredentials::Get().GetID())
-				{
-					ServerRegistry::Get().DeRegisterSelf(ID_fail);
-				}
+				logger->DebugFormatted("Requeued claimed bounds for {}", ID_fail.ToString());
+			}
+			HealthManifest::Get().RemovePing(key);
+			if (ID_fail.IsInternal() && ID_fail != NetworkCredentials::Get().GetID())
+			{
+				ServerRegistry::Get().DeRegisterSelf(ID_fail);
 			}
 		});
 	Interlink::Get().Init();

@@ -42,14 +42,14 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	[[nodiscard]] constexpr bool HasBound() const { return ClaimedBoundID.has_value(); }
 	template <typename FN>
 		requires std::is_invocable_v<FN, const IBounds&>
-	void GetBound(FN&& f)
+	auto GetBound(FN&& f)
 	{
 		HeuristicManifest::Get().PullHeuristic(
 			[&](const IHeuristic& h)
 			{
 				if (ClaimedBoundID.has_value())
 				{
-					f(h.GetBound(ClaimedBoundID.value()));
+					return f(h.GetBound(ClaimedBoundID.value()));
 				}
 			});
 	}

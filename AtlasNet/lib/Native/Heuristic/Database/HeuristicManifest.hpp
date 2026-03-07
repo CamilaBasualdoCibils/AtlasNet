@@ -3,8 +3,10 @@
 #include <sw/redis++/redis.h>
 
 #include <array>
+#include <boost/container/flat_map.hpp>
 #include <boost/describe/enum_from_string.hpp>
 #include <boost/describe/enum_to_string.hpp>
+#include <charconv>
 #include <concepts>
 #include <iostream>
 #include <memory>
@@ -20,6 +22,7 @@
 #include "Debug/Log.hpp"
 #include "Entity/Transform.hpp"
 #include "Global/Misc/Singleton.hpp"
+#include "Global/Misc/UUID.hpp"
 #include "Global/Serialize/ByteReader.hpp"
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
@@ -32,50 +35,76 @@
 class HeuristicManifest : public Singleton<HeuristicManifest>
 {
 	Log logger = Log("HeuristicManifest");
-	/*
-	All available bounds are placed in pending.
-	At first or on change. each Shard goes and Pops from the pending list.
-	Adding it to Claimed with their key.
-	*/
+
 	const std::string HeuristicNamespace = "Heuristic:";
 
 	const std::string HeuristicTypeKey = HeuristicNamespace + "Type";
-	const std::string HeuristicTimestampKey = HeuristicNamespace + "Timestamp";
+	const std::string HeuristicVersionKey = HeuristicNamespace + "Version";
 	const std::string HeuristicSerializeDataKey = HeuristicNamespace + "Data";
-	// const std::string PendingHashTable =
-	//	HeuristicNamespace + "Pending";	 //[BoundID,SerializedBound]
 
-	const std::string PendingIDsSet = HeuristicNamespace + "PendingIDs";
-	// const std::string ClaimedHashtable =
-	//	HeuristicNamespace + "Claimed";	 //[NetworkIdentity,SerializedBound]
-	const std::string BoundID2NIDMap =
-		HeuristicNamespace + "BoundID -> NetID Map";  //[BoundID,NetworkIdentity]
+	const std::string OwnershipNamespace = HeuristicNamespace + ":Ownership:";
+
+	const std::string OwnershipTableVersion = OwnershipNamespace + "Version";
+	const std::string PendingIDsSet = OwnershipNamespace + "PendingIDs";
+	// const std::string BoundID2NIDMap =
+	//	OwnershipNamespace + "BoundID -> NetID Map";  //[BoundID,NetworkIdentity]
 	const std::string NID2BoundIDMap =
-		HeuristicNamespace + "NetID -> BoundID Map";  //[BoundID,NetworkIdentity]
+		OwnershipNamespace + "NetID -> BoundID Map";  //[BoundID,NetworkIdentity]
 
-	IHeuristic::Type ActiveHeuristic = IHeuristic::Type::eNone;
-	std::shared_ptr<IHeuristic> CachedHeuristic;
-	long long CachedHeuristicTimeStamp = 0;
+	struct HeuristicLocalCache
+	{
+		IHeuristic::Type ActiveHeuristic = IHeuristic::Type::eNone;
+		std::unique_ptr<IHeuristic> CachedHeuristic;
+		std::atomic<long long> HeuristicVersion = 0;
+	} localHeuristicCache;
 	std::shared_mutex HeuristicFetchMutex;
 
+	struct OwnershipLocalCache
+	{
+		std::atomic<long long> OwnershipTableVersion = 0;
+		boost::container::flat_map<BoundsID, UUID> BoundID2Shard;
+		boost::container::flat_map<UUID, BoundsID> Shard2BoundID;
+		uint32_t PendingBoundCount, ClaimedBountCount;
+	} localownershipCache;
+	std::shared_mutex OwnershitFetchMutex;
+
    public:
-	[[nodiscard]] IHeuristic::Type GetActiveHeuristicType() const;
+	class OwnershipStateWrapper
+	{
+		friend HeuristicManifest;
+		const OwnershipLocalCache& cache;
 
-	std::optional<BoundsID> BoundIDFromShard(const NetworkIdentity& id);
-	/* template <typename BoundType, typename KeyType = std::string> */
-	/* void GetAllPendingBounds(std::vector<BoundType>& out_bounds); */
+	   protected:
+		OwnershipStateWrapper(OwnershipLocalCache& cache) : cache(cache) {}
 
-	/* template <typename BoundType, typename KeyType = std::string> */
-	/* void StorePendingBounds(const std::vector<BoundType>& in_bounds); */
+	   public:
+		std::optional<NetworkIdentity> GetBoundOwner(BoundsID bID) const
+		{
+			if (auto itf = cache.BoundID2Shard.find(bID); itf != cache.BoundID2Shard.end())
+			{
+				return NetworkIdentity::MakeIDShard(itf->second);
+			}
+			return std::nullopt;
+		}
+		std::optional<BoundsID> GetBoundOwner(const NetworkIdentity& NID) const
+		{
+			if (auto itf = cache.Shard2BoundID.find(NID.ID); itf != cache.Shard2BoundID.end())
+			{
+				return itf->second;
+			}
+			return std::nullopt;
+		}
+	};
 
-	[[nodiscard]] std::optional<BoundsID> ClaimNextPendingBound(
-		const NetworkIdentity& claim_key);
+	// std::optional<BoundsID> BoundIDFromShard(const NetworkIdentity& id);
 
-	[[nodiscard]] long long GetPendingBoundsCount() const;
+	[[nodiscard]] std::optional<BoundsID> ClaimNextPendingBound(const NetworkIdentity& claim_key);
 
-	[[nodiscard]] long long GetClaimedBoundsCount() const;
+	//[[nodiscard]] long long GetPendingBoundsCount() const;
 
-	bool ReleaseClaimedBound(BoundsID ID);
+	//[[nodiscard]] long long GetClaimedBoundsCount() const;
+
+	bool ReleaseClaimedBound(const NetworkIdentity& NetID);
 
 	template <typename FN>
 		requires std::is_invocable_v<FN, const IHeuristic&>
@@ -87,91 +116,96 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 		return PullHeuristic([&](const IHeuristic& h) { return f(h.GetBound(ID)); });
 	}
 	void PushHeuristic(const IHeuristic& h);
+	template <typename FN>
+		requires std::is_invocable_v<FN, const OwnershipStateWrapper&>
+	auto QueryOwnershipState(FN&& f)
+	{
+		const std::optional<std::string> version_s = InternalDB::Get()->Get(OwnershipTableVersion);
+		if (!version_s)
+		{
+			throw std::runtime_error("Heuristic timestamp missing");
+		}
+		const long long versionStamp = std::stoll(version_s.value());
+		if (versionStamp != localownershipCache.OwnershipTableVersion)
+		{
+			std::unique_lock lock_unique(OwnershitFetchMutex);
+			if (versionStamp != localownershipCache.OwnershipTableVersion)	// RECHECK WITH LOCK
+			{
+				logger.DebugFormatted("QueryOwnershipState Cache out of date. Fetching version {}",
+									  versionStamp);
+				std::unordered_map<std::string, std::string> values =
+					InternalDB::Get()->HGetAll(NID2BoundIDMap);
+				localownershipCache.ClaimedBountCount = 0;
+				localownershipCache.PendingBoundCount = InternalDB::Get()->SCard(PendingIDsSet);
+				localownershipCache.BoundID2Shard.clear();
+				localownershipCache.Shard2BoundID.clear();
+				for (const auto& [ShardID_s, BoundID_s] : values)
+				{
+					UUID shardID = UUIDGen::FromString(ShardID_s);
+					BoundsID boundID;
+					std::from_chars(BoundID_s.data(), BoundID_s.data() + BoundID_s.size(), boundID);
 
-	[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(const Transform& t);
+					localownershipCache.ClaimedBountCount++;
+					localownershipCache.BoundID2Shard.insert(std::make_pair(boundID, shardID));
+					localownershipCache.Shard2BoundID.insert(std::make_pair(shardID, boundID));
+				}
+				localownershipCache.OwnershipTableVersion = versionStamp;
+				logger.DebugFormatted("QueryOwnershipState Cache Fetch Done");
+			}
+		}
 
-	[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const BoundsID id);
+		std::shared_lock lock_shared(OwnershitFetchMutex);
+
+		OwnershipStateWrapper cacheWrapper(localownershipCache);
+		return f(cacheWrapper);
+	}
+	//[[nodiscard]] std::optional<NetworkIdentity> ShardFromPosition(const Transform& t);
+
+	//[[nodiscard]] std::optional<NetworkIdentity> ShardFromBoundID(const BoundsID id);
 	// void StorePendingBound(const IBounds& bound);
 
    private:
 	void Internal_SetActiveHeuristicType(IHeuristic::Type type);
 	void Internal_ParseHeuristic(IHeuristic::Type type, std::string_view data);
+	void Internal_OwnershipTableIncreaseVersion()
+	{
+		InternalDB::Get()->WithSync([this](auto& r) { r.incr(OwnershipTableVersion); });
+	}
 };
 
 template <typename FN>
 	requires std::is_invocable_v<FN, const IHeuristic&>
 inline auto HeuristicManifest::PullHeuristic(FN&& f)
 {
-	const std::optional<std::string> timestamp_s = InternalDB::Get()->Get(HeuristicTimestampKey);
-	ASSERT(timestamp_s.has_value(), "INVALID SCENARIO");
+
+	const std::optional<std::string> timestamp_s = InternalDB::Get()->Get(HeuristicVersionKey);
+	if (!timestamp_s)
+	{
+		throw std::runtime_error("Heuristic timestamp missing");
+	}
 	const long long PushTimeStamp = std::stoll(timestamp_s.value());
-	if (PushTimeStamp < CachedHeuristicTimeStamp)
-	{
-		std::shared_lock lock(HeuristicFetchMutex);
-		return f(*CachedHeuristic);
-	}
-	else
-	{
-		std::unique_lock lock(HeuristicFetchMutex);
-		const std::optional<std::string> heuData =
-			InternalDB::Get()->Get(HeuristicSerializeDataKey);
-		ASSERT(heuData.has_value(), "INVALID SCENARIO");
 
-		const std::optional<std::string> heuType_s = InternalDB::Get()->Get(HeuristicTypeKey);
-		ASSERT(heuType_s.has_value(), "INVALID SCENARIO");
-		IHeuristic::Type hType;
-		IHeuristic::TypeFromString(heuType_s.value(), hType);
-		Internal_ParseHeuristic(hType, *heuData);
-		CachedHeuristicTimeStamp = PushTimeStamp;
-		return f(*CachedHeuristic);
+	if (PushTimeStamp != localHeuristicCache.HeuristicVersion)
+	{
+		auto heuData = InternalDB::Get()->Get(HeuristicSerializeDataKey);
+		auto heuType_s = InternalDB::Get()->Get(HeuristicTypeKey);
+
+		std::unique_lock lock_unique(HeuristicFetchMutex);
+
+		if (PushTimeStamp != localHeuristicCache.HeuristicVersion)
+		{
+			logger.DebugFormatted("Heuristic Cache out of date. Fetching version {}",
+								  PushTimeStamp);
+			IHeuristic::Type hType;
+			IHeuristic::TypeFromString(*heuType_s, hType);
+
+			Internal_ParseHeuristic(hType, *heuData);
+			localHeuristicCache.HeuristicVersion = PushTimeStamp;
+
+			logger.DebugFormatted("Heuristic Cache Fetch Done");
+		}
 	}
+
+	std::shared_lock lock_shared(HeuristicFetchMutex);
+	return f(*localHeuristicCache.CachedHeuristic);
 }
-/* template <typename BoundType, typename KeyType>
-inline void HeuristicManifest::GetAllPendingBounds(std::vector<BoundType>& out_bounds)
-{
-	out_bounds.clear();
-	std::vector<std::string> data_for_readers;
-	std::unordered_map<BoundsID, ByteReader> brs;
-	GetPendingBoundsAsByteReaders(data_for_readers, brs);
-	out_bounds.reserve(brs.size());
-	for (auto& [bound_id, boundByteReader] : brs)
-	{
-		out_bounds.emplace_back(BoundType());
-		BoundType& b = out_bounds.back();
-		b.Deserialize(boundByteReader);
-	}
-}
-template <typename BoundType, typename KeyType>
-void HeuristicManifest::StorePendingBounds(const std::vector<BoundType>& in_bounds)
-{
-	// std::string_view s_b, s_id;
-	for (int i = 0; i < in_bounds.size(); i++)
-	{
-		const auto& bounds = in_bounds[i];
-
-		ByteWriter bw;
-		bounds.Serialize(bw);
-		// s_b = bw.as_string_view();
-
-		PendingBoundStruct p;
-		p.ID = bounds.GetID();
-		p.BoundsDataBase64 = bw.as_string_base_64();
-		Internal_InsertPendingBound(p);
-	}
-}
-
-template <typename BoundType>
-void HeuristicManifest::GetAllClaimedBounds(
-	std::unordered_map<NetworkIdentity, BoundType>& out_bounds)
-{
-	out_bounds.clear();
-	const auto BoundsTable = InternalDB::Get()->HGetAll(ClaimedHashTableNID2BoundData);
-	out_bounds.reserve(BoundsTable.size());
-
-	for (auto& [id, boundReaderPair] : claimedReaders)
-	{
-		auto [it, inserted] = out_bounds.emplace(id, BoundType());
-		BoundType& b = it->second;
-		b.Deserialize(boundReaderPair.second);
-	}
-} */

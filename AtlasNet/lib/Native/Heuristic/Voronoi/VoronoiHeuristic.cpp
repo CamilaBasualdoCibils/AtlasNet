@@ -24,7 +24,7 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 	// Build Voronoi cells by clipping a bounding box polygon with the
 	// perpendicular bisector half-planes of all other seeds.
 
-	const uint32_t seedCount = 5;//std::max<uint32_t>(1, options.SeedCount);
+	const uint32_t seedCount = 5;  // std::max<uint32_t>(1, options.SeedCount);
 
 	const float minX = -options.NetHalfExtent.x;
 	const float maxX = options.NetHalfExtent.x;
@@ -43,17 +43,15 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 		_seeds.emplace_back(distX(rng), distY(rng));
 	}
 
-	auto clipPolygon = [](const std::vector<glm::vec2>& poly,
-						  const glm::vec2& n, const float c)
-		-> std::vector<glm::vec2>
+	auto clipPolygon = [](const std::vector<glm::vec2>& poly, const glm::vec2& n,
+						  const float c) -> std::vector<glm::vec2>
 	{
 		if (poly.empty())
 		{
 			return {};
 		}
 
-		auto inside = [&](const glm::vec2& p) -> bool
-		{ return glm::dot(p, n) <= c + 1e-5f; };
+		auto inside = [&](const glm::vec2& p) -> bool { return glm::dot(p, n) <= c + 1e-5f; };
 
 		auto intersect = [&](const glm::vec2& a, const glm::vec2& b) -> glm::vec2
 		{
@@ -127,8 +125,8 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 		_cells.push_back(std::move(bound));
 	}
 
-	logger.DebugFormatted("VoronoiHeuristic::Compute: seed_count={} bounds={}",
-						  seedCount, _cells.size());
+	logger.DebugFormatted("VoronoiHeuristic::Compute: seed_count={} bounds={}", seedCount,
+						  _cells.size());
 }
 
 uint32_t VoronoiHeuristic::GetBoundsCount() const
@@ -141,8 +139,7 @@ void VoronoiHeuristic::GetBounds(std::vector<VoronoiBounds>& out_bounds) const
 	out_bounds = _cells;
 }
 
-void VoronoiHeuristic::GetBoundDeltas(
-	std::vector<TBoundDelta<VoronoiBounds>>& out_deltas) const
+void VoronoiHeuristic::GetBoundDeltas(std::vector<TBoundDelta<VoronoiBounds>>& out_deltas) const
 {
 	out_deltas.clear();
 }
@@ -152,8 +149,7 @@ IHeuristic::Type VoronoiHeuristic::GetType() const
 	return IHeuristic::Type::eVoronoi;
 }
 
-void VoronoiHeuristic::SerializeBounds(
-	std::unordered_map<BoundsID, ByteWriter>& bws)
+void VoronoiHeuristic::SerializeBounds(std::unordered_map<BoundsID, ByteWriter>& bws)
 {
 	bws.clear();
 	for (const VoronoiBounds& cell : _cells)
@@ -207,4 +203,3 @@ const IBounds& VoronoiHeuristic::GetBound(BoundsID id) const
 	}
 	throw std::runtime_error("Invalid ID");
 }
-
