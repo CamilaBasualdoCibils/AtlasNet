@@ -20,8 +20,21 @@ export function formatRate(value: number): string {
   return value.toFixed(1);
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 export function normalizeShardId(value: string): string {
-  return value.trim();
+  const text = String(value ?? '').replace(/\0/g, '').trim();
+  if (!text) {
+    return '';
+  }
+  if (text.startsWith('eShard ')) {
+    return text;
+  }
+  if (UUID_PATTERN.test(text)) {
+    return `eShard ${text}`;
+  }
+  return text;
 }
 
 export function isShardIdentity(value: string): boolean {

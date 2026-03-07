@@ -192,10 +192,18 @@ function parseBoundIdText(raw) {
 }
 
 function parseOwnerIdFromOwnershipField(rawField) {
-  if (Buffer.isBuffer(rawField) && rawField.length >= 20) {
-    const decoded = decodeNetworkIdentity(rawField).trim();
-    if (decoded.length > 0) {
-      return decoded;
+  if (Buffer.isBuffer(rawField)) {
+    if (rawField.length === 20) {
+      const decoded = decodeNetworkIdentity(rawField).trim();
+      if (decoded.length > 0) {
+        return decoded;
+      }
+    }
+
+    if (rawField.length === 16) {
+      try {
+        return `eShard ${formatUuid(rawField)}`;
+      } catch {}
     }
   }
 
@@ -1199,8 +1207,9 @@ async function readHeuristicClaimedOwnersFromDatabase() {
         }
       }
 
-      if (ownerId) {
-        legacyOwnerByBoundId[boundId] = ownerId;
+      const normalizedOwnerId = parseOwnerIdFromOwnershipField(ownerId);
+      if (normalizedOwnerId) {
+        legacyOwnerByBoundId[boundId] = normalizedOwnerId;
       }
     }
 

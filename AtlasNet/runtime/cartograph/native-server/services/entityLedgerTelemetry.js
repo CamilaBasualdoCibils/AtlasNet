@@ -46,6 +46,23 @@ function toBoolean(value) {
   );
 }
 
+const UUID_PATTERN =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeOwnerId(value) {
+  const text = String(value ?? '').replace(/\0/g, '').trim();
+  if (!text) {
+    return '';
+  }
+  if (text.startsWith('eShard ')) {
+    return text;
+  }
+  if (UUID_PATTERN.test(text)) {
+    return `eShard ${text}`;
+  }
+  return text;
+}
+
 function readOwnerByBoundIdFromHeuristic(addon) {
   const ownerByBoundId = new Map();
   if (!addon || !addon.HeuristicDraw || !addon.std_vector_IBoundsDrawShape_) {
@@ -60,7 +77,7 @@ function readOwnerByBoundIdFromHeuristic(addon) {
     for (let i = 0; i < shapes.size(); i += 1) {
       const shape = shapes.get(i);
       const boundId = String(shape?.id ?? '').trim();
-      const ownerId = String(shape?.owner_id ?? '').trim();
+      const ownerId = normalizeOwnerId(shape?.owner_id);
       if (!boundId || !ownerId) {
         continue;
       }
@@ -100,7 +117,7 @@ function readEntityLedgersTelemetry(addon, entityLedgersView, options = {}) {
       readField(entry, ['BoundID', 'boundId', 'BoundId']) ?? ''
     ).trim();
     const ownerId =
-      (boundId ? ownerByBoundIdFromDb[boundId] : '') ||
+      normalizeOwnerId(boundId ? ownerByBoundIdFromDb[boundId] : '') ||
       ownerByBoundIdFallback.get(boundId) ||
       (boundId ? `bound:${boundId}` : 'unknown');
 
