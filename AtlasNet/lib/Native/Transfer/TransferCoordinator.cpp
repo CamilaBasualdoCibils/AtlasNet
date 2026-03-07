@@ -24,459 +24,453 @@
 #include "Transfer/TransferManifest.hpp"
 void TransferCoordinator::ParseEntitiesForTargets()
 {
+	// Stage 1: Snapshot all entities to process under lock
+	std::vector<AtlasEntityID> entitiesToProcess;
 	_WriteLock(
 		[&]()
 		{
-			std::unordered_map<BoundsID, EntityTransferData> NewEntityTransfers;
-			std::unordered_map<BoundsID, ClientTransferData> NewClientTransfers;
-
 			while (!EntitiesToParseForReceiver.empty())
 			{
-				AtlasEntityID entityID = EntitiesToParseForReceiver.top();
+				entitiesToProcess.push_back(EntitiesToParseForReceiver.top());
 				EntitiesToParseForReceiver.pop();
+			}
+		});
 
-				if (EntitiesInTransfer.contains(entityID))
-					continue;
+	if (entitiesToProcess.empty())
+		return;
 
-				std::optional<ClientID> clientID;
+	// Stage 2: Process entities outside of the transferMutex
+	struct EntityProcessData
+	{
+		AtlasEntityID entityID;
+		std::optional<ClientID> clientID;
+		std::optional<Transform> transform;
+		std::optional<BoundsID> boundsID;
+	};
+	std::vector<EntityProcessData> processedEntities;
 
-				std::optional<Transform> entityTransform = EntityLedger::Get()._ReadLock(
-					[&]() -> std::optional<Transform>
+	for (auto entityID : entitiesToProcess)
+	{
+		EntityProcessData data;
+		data.entityID = entityID;
+
+		// Read entity from EntityLedger outside our lock
+		data.transform = EntityLedger::Get()._ReadLock(
+			[&]() -> std::optional<Transform>
+			{
+				if (EntityLedger::Get().ExistsEntity(entityID))
+				{
+					auto entityData = EntityLedger::Get().GetEntityMinimal(entityID);
+					if (entityData.IsClient)
+						data.clientID = entityData.Client_ID;
+					return entityData.transform;
+				}
+				return std::nullopt;
+			});
+
+		if (!data.transform.has_value())
+			continue;
+
+		// Query heuristic bounds
+		data.boundsID = HeuristicManifest::Get().PullHeuristic(
+			[&](const IHeuristic& h) { return h.QueryPosition(data.transform->position); });
+
+		if (!data.boundsID.has_value())
+			continue;
+
+		processedEntities.push_back(std::move(data));
+	}
+
+	if (processedEntities.empty())
+		return;
+
+	// Stage 3: Compute ownership map outside lock
+	std::unordered_set<BoundsID> allBounds;
+	for (auto& e : processedEntities) allBounds.insert(*e.boundsID);
+
+	std::unordered_map<BoundsID, ShardID> ownershipMap;
+	if (!allBounds.empty())
+	{
+		ownershipMap = HeuristicManifest::Get().QueryOwnershipState(
+			[&](const HeuristicManifest::OwnershipStateWrapper& w)
+			{
+				std::unordered_map<BoundsID, ShardID> result;
+				for (const BoundsID& bID : allBounds)
+				{
+					auto shard = w.GetBoundOwner(bID);
+					if (shard.has_value() && shard != NetworkCredentials::Get().GetID())
 					{
-						if (EntityLedger::Get().ExistsEntity(entityID))
-						{
-							AtlasEntityMinimal entityData =
-								EntityLedger::Get().GetEntityMinimal(entityID);
+						result[bID] = shard->ID;
+					}
+				}
+				return result;
+			});
+	}
 
-							if (entityData.IsClient)
-								clientID.emplace(entityData.Client_ID);
-
-							return entityData.transform;
-						}
-
-						return std::nullopt;
-					});
-
-				if (!entityTransform.has_value())
+	// Stage 4: Update TransferCoordinator state under lock
+	_WriteLock(
+		[&]()
+		{
+			for (auto& e : processedEntities)
+			{
+				auto ownershipIt = ownershipMap.find(*e.boundsID);
+				if (ownershipIt == ownershipMap.end())
 					continue;
 
-				const std::optional<BoundsID> boundsID = HeuristicManifest::Get().PullHeuristic(
-					[&](const IHeuristic& h)
-					{ return h.QueryPosition(entityTransform->position); });
-
-				if (!boundsID.has_value())
-					continue;
-
-				if (clientID.has_value())
-					NewClientTransfers[*boundsID].Clients.push_back({*clientID, entityID});
+				if (e.clientID.has_value())
+				{
+					ClientTransferData& transfer =
+						ClientsPreTransfers.emplace();	// or push to stack
+					transfer.ID = UUIDGen::Gen();
+					transfer.stage = ClientTransferStage::eNone;
+					transfer.transferMode = TransferMode::eSending;
+					transfer.shard = NetworkIdentity::MakeIDShard(ownershipIt->second);
+					transfer.Clients.push_back({*e.clientID, e.entityID});
+					ClientsInTransfer.insert({*e.clientID, transfer.ID});
+					EntitiesInTransfer.insert({e.entityID, transfer.ID});
+				}
 				else
-					NewEntityTransfers[*boundsID].entityIDs.push_back(entityID);
-			}
-
-			std::unordered_map<BoundsID, ShardID> OwnershipCache;
-			std::unordered_set<BoundsID> allBounds;
-
-			for (const auto& [bID, _] : NewEntityTransfers) allBounds.insert(bID);
-
-			for (const auto& [bID, _] : NewClientTransfers) allBounds.insert(bID);
-
-			if (!allBounds.empty())
-			{
-				const auto OwnershipMap = HeuristicManifest::Get().QueryOwnershipState(
-					[&](const HeuristicManifest::OwnershipStateWrapper& w)
-					{
-						std::unordered_map<BoundsID, ShardID> result;
-
-						for (const BoundsID& bID : allBounds)
-						{
-							const auto shard = w.GetBoundOwner(bID);
-
-							if (shard.has_value() &&
-								shard.value() != NetworkCredentials::Get().GetID())
-							{
-								result[bID] = shard->ID;
-							}
-						}
-
-						return result;
-					});
-
-				OwnershipCache = OwnershipMap;
-			}
-
-			for (auto it = NewEntityTransfers.begin(); it != NewEntityTransfers.end();)
-			{
-				auto ownershipIt = OwnershipCache.find(it->first);
-
-				if (ownershipIt == OwnershipCache.end())
 				{
-					it = NewEntityTransfers.erase(it);
-					continue;
+					EntityTransferData& transfer =
+						EntityPreTransfers.emplace();  // or push to stack
+					transfer.ID = UUIDGen::Gen();
+					transfer.stage = EntityTransferStage::eNone;
+					transfer.transferMode = TransferMode::eSending;
+					transfer.shard = NetworkIdentity::MakeIDShard(ownershipIt->second);
+					transfer.entityIDs.push_back(e.entityID);
+					EntitiesInTransfer.insert({e.entityID, transfer.ID});
 				}
-
-				EntityTransferData& TransferData = it->second;
-
-				TransferData.ID = UUIDGen::Gen();
-				TransferData.transferMode = TransferMode::eSending;
-				TransferData.shard = NetworkIdentity::MakeIDShard(ownershipIt->second);
-				TransferData.stage = EntityTransferStage::eNone;
-
-				EntityPreTransfers.push(TransferData);
-
-				for (const AtlasEntityID EntityID : TransferData.entityIDs)
-					EntitiesInTransfer.insert({EntityID, TransferData.ID});
-
-				++it;
-			}
-
-			for (auto it = NewClientTransfers.begin(); it != NewClientTransfers.end();)
-			{
-				auto ownershipIt = OwnershipCache.find(it->first);
-
-				if (ownershipIt == OwnershipCache.end())
-				{
-					it = NewClientTransfers.erase(it);
-					continue;
-				}
-
-				ClientTransferData& TransferData = it->second;
-
-				TransferData.ID = UUIDGen::Gen();
-				TransferData.transferMode = TransferMode::eSending;
-				TransferData.shard = NetworkIdentity::MakeIDShard(ownershipIt->second);
-				TransferData.stage = ClientTransferStage::eNone;
-
-				ClientsPreTransfers.push(TransferData);
-
-				for (const auto& [clientID, entityID] : TransferData.Clients)
-				{
-					EntitiesInTransfer.insert({entityID, TransferData.ID});
-					ClientsInTransfer.insert({clientID, TransferData.ID});
-				}
-
-				++it;
 			}
 		});
 }
 void TransferCoordinator::TransferTick()
 {
+	// Stage 1: Snapshot all pre-transfers under lock
+	std::vector<EntityTransferData> entityTransfersToSend;
+	std::vector<ClientTransferData> clientTransfersToSend;
+
 	_WriteLock(
 		[&]()
 		{
 			while (!EntityPreTransfers.empty())
 			{
-				const EntityTransferData PreTransfer = EntityPreTransfers.top();
+				entityTransfersToSend.push_back(EntityPreTransfers.top());
 				EntityPreTransfers.pop();
-
-				EntityTransferPacket etPacket;
-				etPacket.TransferID = PreTransfer.ID;
-				etPacket.stage = EntityTransferStage::ePrepare;
-
-				auto& PacketData = etPacket.Data.emplace<EntityTransferPacket::PrepareStageData>();
-
-				PacketData.entityIDs = PreTransfer.entityIDs;
-
-				Interlink::Get().SendMessage(PreTransfer.shard, etPacket,
-											 NetworkMessageSendFlag::eReliableNow);
-
-				EntityTransferData newTransfer = PreTransfer;
-				newTransfer.stage = EntityTransferStage::ePrepare;
-
-				EntityTransfers.insert({newTransfer.ID, newTransfer});
 			}
-
 			while (!ClientsPreTransfers.empty())
 			{
-				const ClientTransferData PreTransfer = ClientsPreTransfers.top();
+				clientTransfersToSend.push_back(ClientsPreTransfers.top());
 				ClientsPreTransfers.pop();
-
-				ClientTransferPacket etPacket;
-				etPacket.TransferID = PreTransfer.ID;
-				etPacket.stage = ClientTransferStage::ePrepare;
-
-				auto& PacketData = etPacket.Data.emplace<ClientTransferPacket::PrepareStageData>();
-
-				PacketData.clients = PreTransfer.Clients;
-
-				Interlink::Get().SendMessage(PreTransfer.shard, etPacket,
-											 NetworkMessageSendFlag::eReliableNow);
-
-				ClientTransferData newTransfer = PreTransfer;
-				newTransfer.stage = ClientTransferStage::ePrepare;
-
-				ClientTransfers.insert({newTransfer.ID, newTransfer});
 			}
 		});
+
+	// Stage 2: Process entity transfers outside lock
+	for (auto& PreTransfer : entityTransfersToSend)
+	{
+		EntityTransferPacket etPacket;
+		etPacket.TransferID = PreTransfer.ID;
+		etPacket.stage = EntityTransferStage::ePrepare;
+
+		auto& PacketData = etPacket.Data.emplace<EntityTransferPacket::PrepareStageData>();
+		PacketData.entityIDs = PreTransfer.entityIDs;
+
+		Interlink::Get().SendMessage(PreTransfer.shard, etPacket,
+									 NetworkMessageSendFlag::eReliableNow);
+
+		PreTransfer.stage = EntityTransferStage::ePrepare;
+
+		// Stage 3: Insert into internal state under lock
+		_WriteLock([&]() { EntityTransfers.insert({PreTransfer.ID, PreTransfer}); });
+	}
+
+	// Stage 2: Process client transfers outside lock
+	for (auto& PreTransfer : clientTransfersToSend)
+	{
+		ClientTransferPacket ctPacket;
+		ctPacket.TransferID = PreTransfer.ID;
+		ctPacket.stage = ClientTransferStage::ePrepare;
+
+		auto& PacketData = ctPacket.Data.emplace<ClientTransferPacket::PrepareStageData>();
+		PacketData.clients = PreTransfer.Clients;
+
+		Interlink::Get().SendMessage(PreTransfer.shard, ctPacket,
+									 NetworkMessageSendFlag::eReliableNow);
+
+		PreTransfer.stage = ClientTransferStage::ePrepare;
+
+		_WriteLock([&]() { ClientTransfers.insert({PreTransfer.ID, PreTransfer}); });
+	}
 }
 void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPacket& p,
 														const PacketManager::PacketInfo& info)
 {
+	// Stage 1: Snapshot needed internal state under lock
+	EntityTransferData transferEntrySnapshot;
+	bool hasTransfer = false;
+
 	_WriteLock(
 		[&]()
 		{
-			/* logger.DebugFormatted("Entity Transfer update\n - ID:{}\n - Stage:{}",
-								  UUIDGen::ToString(p.TransferID),
-								  boost::describe::enum_to_string(p.stage, "INVALID")); */
-			// TransferManifest::Get().UpdateEntityTransferStage(p.TransferID, p.stage);
-			//  Switch depending on the stage of the transfer
-			switch (p.stage)
+			auto it = EntityTransfers.find(p.TransferID);
+			if (it != EntityTransfers.end())
 			{
-				case EntityTransferStage::eNone:
-					ASSERT(false, "This should never happen");
-					break;
-				case EntityTransferStage::ePrepare:
-				{
-					const EntityTransferPacket::PrepareStageData& predataData =
-						p.GetAsPrepareStage();
-					EntityTransferData data;
-					data.entityIDs.resize(predataData.entityIDs.size());
-					std::copy(predataData.entityIDs.begin(), predataData.entityIDs.end(),
-							  data.entityIDs.begin());
-					data.ID = p.TransferID;
-					data.shard = info.sender;
-					data.transferMode = TransferMode::eReceiving;
-					data.stage = EntityTransferStage::eReady;
-					EntityTransfers.insert({data.ID, data});
-
-					EntityTransferPacket response;
-					response.stage = EntityTransferStage::eReady;
-					response.TransferID = p.TransferID;
-					response.SetAsReadyStage();
-					Interlink::Get().SendMessage(info.sender, response,
-												 NetworkMessageSendFlag::eReliableNow);
-					/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(data.ID),
-										  boost::describe::enum_to_string(data.stage, "INVALID"));
-					 */
-				}
-				break;
-				case EntityTransferStage::eReady:
-				{
-					const EntityTransferPacket::ReadyStageData& readyData = p.GetAsReadyStage();
-					ASSERT(EntityTransfers.contains(p.TransferID),
-						   "I was responded to with a ready package but I dont have an internal "
-						   "record of "
-						   "this transfer");
-
-					EntityTransferData& transferEntry = EntityTransfers.at(p.TransferID);
-					transferEntry.stage = EntityTransferStage::eCommit;
-
-					EntityTransferPacket response;
-					response.stage = EntityTransferStage::eCommit;
-					response.TransferID = p.TransferID;
-
-					EntityTransferPacket::CommitStageData& commitData = response.SetAsCommitStage();
-					commitData.entitySnapshots.reserve(transferEntry.entityIDs.size());
-					for (const AtlasEntityID EntityID : transferEntry.entityIDs)
-					{
-						EntityTransferPacket::CommitStageData::Data d;
-						if (!EntityLedger::Get().ExistsEntity(EntityID))
-						{
-							logger.WarningFormatted(
-								"Entity {}  was scheduled for transfer {} but its gone?!?",
-								UUIDGen::ToString(EntityID), UUIDGen::ToString(p.TransferID));
-							continue;
-						}
-						d.Snapshot = EntityLedger::Get().GetAndEraseEntity(EntityID);
-						commitData.entitySnapshots.push_back(d);
-					}
-					Interlink::Get().SendMessage(info.sender, response,
-												 NetworkMessageSendFlag::eReliableNow);
-					/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(p.TransferID),
-										  boost::describe::enum_to_string(transferEntry.stage,
-					   "INVALID"));
-					 */
-				}
-				break;
-				case EntityTransferStage::eCommit:
-				{
-					const EntityTransferPacket::CommitStageData& commitData = p.GetAsCommitStage();
-					ASSERT(EntityTransfers.contains(p.TransferID),
-						   "I was responded to with a ready package but I dont have an internal "
-						   "record of "
-						   "this transfer");
-					EntityTransferData& transferEntry = EntityTransfers.at(p.TransferID);
-					transferEntry.stage = EntityTransferStage::eCommit;
-
-					EntityTransferPacket response;
-					response.stage = EntityTransferStage::eComplete;
-					response.TransferID = p.TransferID;
-
-					EntityTransferPacket::CompleteStageData& completeData =
-						response.SetAsCompleteStage();
-
-					for (const auto& Data : p.GetAsCommitStage().entitySnapshots)
-					{
-						EntityLedger::Get().AddEntity(Data.Snapshot);
-					}
-
-					Interlink::Get().SendMessage(info.sender, response,
-												 NetworkMessageSendFlag::eReliableNow);
-					/* logger.DebugFormatted("Entity Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(p.TransferID),
-										  boost::describe::enum_to_string(response.stage,
-					   "INVALID")); */
-					EntityTransfers.erase(transferEntry.ID);
-				}
-				break;
-				case EntityTransferStage::eComplete:
-				{
-					ASSERT(EntityTransfers.contains(p.TransferID),
-						   "I was responded to with a ready package but I dont have an internal "
-						   "record of "
-						   "this transfer");
-					const EntityTransferData& transferEntry = EntityTransfers.at(p.TransferID);
-					for (const auto& eID : transferEntry.entityIDs)
-					{
-						EntitiesInTransfer.erase(eID);
-					}
-					EntityTransfers.erase(p.TransferID);
-					/* logger.DebugFormatted("Entity Transfer Complete\n - ID:{}",
-										  UUIDGen::ToString(p.TransferID)); */
-					// TransferManifest::Get().DeleteTransferInfo(p.TransferID);
-				}
-				break;
+				transferEntrySnapshot = it->second;
+				hasTransfer = true;
 			}
 		});
+
+	// Stage 2: Process outside the lock
+	switch (p.stage)
+	{
+		case EntityTransferStage::eNone:
+			ASSERT(false, "This should never happen");
+			break;
+
+		case EntityTransferStage::ePrepare:
+		{
+			EntityTransferData data;
+			const auto& predataData = p.GetAsPrepareStage();
+			data.entityIDs = predataData.entityIDs;
+			data.ID = p.TransferID;
+			data.shard = info.sender;
+			data.transferMode = TransferMode::eReceiving;
+			data.stage = EntityTransferStage::eReady;
+
+			// Send response
+			EntityTransferPacket response;
+			response.TransferID = p.TransferID;
+			response.stage = EntityTransferStage::eReady;
+			response.SetAsReadyStage();
+			Interlink::Get().SendMessage(info.sender, response,
+										 NetworkMessageSendFlag::eReliableNow);
+
+			// Stage 3: Update internal state under lock
+			_WriteLock([&]() { EntityTransfers.insert({data.ID, data}); });
+		}
+		break;
+
+		case EntityTransferStage::eReady:
+		{
+			ASSERT(hasTransfer, "No internal record for this transfer");
+			// Collect snapshots from EntityLedger outside lock
+			EntityTransferPacket::CommitStageData commitData;
+			for (const AtlasEntityID EntityID : transferEntrySnapshot.entityIDs)
+			{
+				if (!EntityLedger::Get().ExistsEntity(EntityID))
+					continue;
+				commitData.entitySnapshots.push_back(
+					{EntityLedger::Get().GetAndEraseEntity(EntityID)});
+			}
+
+			EntityTransferPacket response;
+			response.TransferID = p.TransferID;
+			response.stage = EntityTransferStage::eCommit;
+			response.Data.emplace<EntityTransferPacket::CommitStageData>(std::move(commitData));
+
+			Interlink::Get().SendMessage(info.sender, response,
+										 NetworkMessageSendFlag::eReliableNow);
+
+			// Stage 3: Update internal state
+			_WriteLock(
+				[&]()
+				{
+					auto& entry = EntityTransfers.at(p.TransferID);
+					entry.stage = EntityTransferStage::eCommit;
+				});
+		}
+		break;
+
+		case EntityTransferStage::eCommit:
+		{
+			ASSERT(hasTransfer, "No internal record for this transfer");
+
+			// Stage 2: Apply snapshots to EntityLedger outside lock
+			const auto& commitData = p.GetAsCommitStage();
+			for (const auto& Data : commitData.entitySnapshots)
+			{
+				EntityLedger::Get().AddEntity(Data.Snapshot);
+			}
+
+			// Stage 3: Remove internal record under lock
+			_WriteLock([&]() { EntityTransfers.erase(p.TransferID); });
+		}
+		break;
+
+		case EntityTransferStage::eComplete:
+		{
+			ASSERT(hasTransfer, "No internal record for this transfer");
+
+			// Stage 2: Remove entities from EntitiesInTransfer outside lock
+			for (const auto& eID : transferEntrySnapshot.entityIDs)
+			{
+				_WriteLock([&]() { EntitiesInTransfer.erase(eID); });
+			}
+
+			// Stage 3: Remove transfer entry
+			_WriteLock([&]() { EntityTransfers.erase(p.TransferID); });
+		}
+		break;
+	}
 }
 void TransferCoordinator::OnClientTransferPacketArrival(const ClientTransferPacket& p,
 														const PacketManager::PacketInfo& info)
 {
+	// Stage 1: Snapshot internal state
+	ClientTransferData transferSnapshot;
+	bool hasTransfer = false;
+
 	_WriteLock(
 		[&]()
 		{
-			/* logger.DebugFormatted("Got a client transfer packet ID {}",
-			 * UUIDGen::ToString(p.TransferID));
-			 */
-
-			switch (p.stage)
+			auto it = ClientTransfers.find(p.TransferID);
+			if (it != ClientTransfers.end())
 			{
-				case ClientTransferStage::eNone:
-					ASSERT(false, "This should never happen");
-				case ClientTransferStage::ePrepare:
-
-				{
-					ClientTransferPacket response;
-					response.stage = ClientTransferStage::eReady;
-					response.TransferID = p.TransferID;
-					response.SetAsReadyStage();
-
-					ClientTransferData newTransfer;
-					newTransfer.ID = p.TransferID;
-					newTransfer.shard = info.sender;
-					newTransfer.stage = ClientTransferStage::eReady;
-					newTransfer.transferMode = TransferMode::eReceiving;
-					newTransfer.Clients = p.GetAsPrepareStage().clients;
-					ClientTransfers.insert({newTransfer.ID, newTransfer});
-					Interlink::Get().SendMessage(info.sender, response,
-												 NetworkMessageSendFlag::eReliableNow);
-					/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(p.TransferID),
-										  boost::describe::enum_to_string(newTransfer.stage,
-					   "INVALID")); */
-				}
-				break;
-
-				case ClientTransferStage::eReady:
-				{
-					ClientSwitchPacket switchpacket;
-					switchpacket.TransferID = p.TransferID;
-					switchpacket.stage = ClientSwitchStage::eRequestSwitch;
-					auto& switchdata = switchpacket.SetAsRequestSwitchStage();
-
-					ASSERT(ClientTransfers.contains(p.TransferID), "This should never happen");
-					const std::optional<NetworkIdentity> Proxy =
-						ClientManifest::Get().GetClientProxy(
-							ClientTransfers.at(p.TransferID).Clients.front().first);
-					ASSERT(Proxy.has_value(), "This should never happen");
-					for (const auto& [clientID, entityID] :
-						 ClientTransfers.at(p.TransferID).Clients)
-					{
-						switchdata.clientIDs.push_back(clientID);
-					}
-					Interlink::Get().SendMessage(*Proxy, switchpacket,
-												 NetworkMessageSendFlag::eReliableNow);
-
-					/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(p.TransferID),
-										  boost::describe::enum_to_string(switchpacket.stage,
-					   "INVALID"));
-					 */
-				}
-				break;
-
-				case ClientTransferStage::eDrained:
-
-				{
-					for (const auto& entity : p.GetAsDrainedStage().clientPayloads)
-					{
-						EntityLedger::Get().AddEntity(entity);
-					}
-					ClientSwitchPacket activatePacket;
-					activatePacket.TransferID = p.TransferID;
-					activatePacket.stage = ClientSwitchStage::eActivate;
-					activatePacket.SetAsActivateStage();
-					ASSERT(ClientTransfers.contains(p.TransferID), "This should never happen");
-					const std::optional<NetworkIdentity> Proxy =
-						ClientManifest::Get().GetClientProxy(
-							ClientTransfers.at(p.TransferID).Clients.front().first);
-					ASSERT(Proxy.has_value(), "This should never happen");
-					Interlink::Get().SendMessage(*Proxy, activatePacket,
-												 NetworkMessageSendFlag::eReliableNow);
-
-					/* logger.DebugFormatted("Client Transfer responding\n - ID:{}\n - Stage:{}",
-										  UUIDGen::ToString(p.TransferID),
-										  boost::describe::enum_to_string(activatePacket.stage,
-					   "INVALID"));
-					 */
-					ClientTransfers.erase(p.TransferID);
-				}
-				break;
+				transferSnapshot = it->second;
+				hasTransfer = true;
 			}
 		});
+
+	// Stage 2: Process outside lock
+	switch (p.stage)
+	{
+		case ClientTransferStage::eNone:
+			ASSERT(false, "This should never happen");
+			break;
+
+		case ClientTransferStage::ePrepare:
+		{
+			ClientTransferData newTransfer;
+			newTransfer.ID = p.TransferID;
+			newTransfer.shard = info.sender;
+			newTransfer.stage = ClientTransferStage::eReady;
+			newTransfer.transferMode = TransferMode::eReceiving;
+			newTransfer.Clients = p.GetAsPrepareStage().clients;
+
+			// Send ready response
+			ClientTransferPacket response;
+			response.TransferID = p.TransferID;
+			response.stage = ClientTransferStage::eReady;
+			response.SetAsReadyStage();
+			Interlink::Get().SendMessage(info.sender, response,
+										 NetworkMessageSendFlag::eReliableNow);
+
+			// Stage 3: Update internal state under lock
+			_WriteLock([&]() { ClientTransfers.insert({newTransfer.ID, newTransfer}); });
+		}
+		break;
+
+		case ClientTransferStage::eReady:
+		{
+			ASSERT(hasTransfer, "This should never happen");
+
+			// Snapshot for switch
+			std::vector<ClientID> clientIDs;
+			for (const auto& [clientID, entityID] : transferSnapshot.Clients)
+				clientIDs.push_back(clientID);
+
+			// Lookup proxy outside lock
+			auto proxyOpt = ClientManifest::Get().GetClientProxy(clientIDs.front());
+			ASSERT(proxyOpt.has_value(), "Proxy not found");
+
+			// Send switch packet
+			ClientSwitchPacket switchpacket;
+			switchpacket.TransferID = p.TransferID;
+			switchpacket.stage = ClientSwitchStage::eRequestSwitch;
+			auto& switchData = switchpacket.SetAsRequestSwitchStage();
+			switchData.clientIDs.assign(clientIDs.begin(), clientIDs.end());
+			Interlink::Get().SendMessage(*proxyOpt, switchpacket,
+										 NetworkMessageSendFlag::eReliableNow);
+		}
+		break;
+
+		case ClientTransferStage::eDrained:
+		{
+			ASSERT(hasTransfer, "This should never happen");
+
+			// Apply entities outside lock
+			for (const auto& entity : p.GetAsDrainedStage().clientPayloads)
+			{
+				EntityLedger::Get().AddEntity(entity);
+			}
+
+			// Send activate packet
+			auto proxyOpt =
+				ClientManifest::Get().GetClientProxy(transferSnapshot.Clients.front().first);
+			ASSERT(proxyOpt.has_value(), "Proxy not found");
+
+			ClientSwitchPacket activatePacket;
+			activatePacket.TransferID = p.TransferID;
+			activatePacket.stage = ClientSwitchStage::eActivate;
+			activatePacket.SetAsActivateStage();
+			Interlink::Get().SendMessage(*proxyOpt, activatePacket,
+										 NetworkMessageSendFlag::eReliableNow);
+
+			// Stage 3: Remove transfer under lock
+			_WriteLock([&]() { ClientTransfers.erase(p.TransferID); });
+		}
+		break;
+	}
 }
 void TransferCoordinator::OnClientSwitchPacketArrival(const ClientSwitchPacket& p,
 													  const PacketManager::PacketInfo& info)
 {
+	// Stage 1: Snapshot internal state
+	ClientTransferData transferSnapshot;
+	bool hasTransfer = false;
+
 	_WriteLock(
 		[&]()
 		{
-			switch (p.stage)
+			auto it = ClientTransfers.find(p.TransferID);
+			if (it != ClientTransfers.end())
 			{
-				case ClientSwitchStage::eNone:
-				case ClientSwitchStage::eRequestSwitch:	 // This one is a shard response to proxy,
-														 // it should never be received
-				case ClientSwitchStage::eActivate:	// This one is a shard response to proxy, it
-													// should never be received
-					ASSERT(false, "This should never happen");
-					break;
+				transferSnapshot = it->second;
+				hasTransfer = true;
+			}
+		});
 
-				case ClientSwitchStage::eFreeze:
+	// Stage 2: Process outside lock
+	switch (p.stage)
+	{
+		case ClientSwitchStage::eNone:
+		case ClientSwitchStage::eRequestSwitch:
+		case ClientSwitchStage::eActivate:
+			ASSERT(false, "This should never happen");
+			break;
+
+		case ClientSwitchStage::eFreeze:
+		{
+			ASSERT(hasTransfer, "No transfer record");
+
+			std::vector<AtlasEntity> payloads;
+			for (const auto& [clientID, entityID] : transferSnapshot.Clients)
+			{
+				payloads.push_back(EntityLedger::Get().GetAndEraseEntity(entityID));
+			}
+
+			ClientTransferPacket response;
+			response.TransferID = p.TransferID;
+			response.stage = ClientTransferStage::eDrained;
+			auto& drainData = response.SetAsDrainedStage();
+			drainData.clientPayloads.assign(payloads.begin(), payloads.end());
+
+			Interlink::Get().SendMessage(transferSnapshot.shard, response,
+										 NetworkMessageSendFlag::eReliableNow);
+
+			// Stage 3: Update internal state under lock
+			_WriteLock(
+				[&]()
 				{
-					ClientTransferPacket response;
-					response.stage = ClientTransferStage::eDrained;
-					response.TransferID = p.TransferID;
-
-					ClientTransferPacket::DrainedStageData& DrainData =
-						response.SetAsDrainedStage();
-
-					for (const auto& [clientID, entityID] :
-						 ClientTransfers.at(p.TransferID).Clients)
+					for (const auto& [clientID, entityID] : transferSnapshot.Clients)
 					{
-						AtlasEntity entity = EntityLedger::Get().GetAndEraseEntity(entityID);
-						DrainData.clientPayloads.push_back(entity);
 						ClientsInTransfer.erase(clientID);
 						EntitiesInTransfer.erase(entityID);
 					}
-
-					Interlink::Get().SendMessage(ClientTransfers.at(p.TransferID).shard, response,
-												 NetworkMessageSendFlag::eReliableNow);
 					ClientTransfers.erase(p.TransferID);
-				}
-				break;
-			}
-		});
+				});
+		}
+		break;
+	}
 }
 void TransferCoordinator::MarkEntitiesForTransfer(const std::span<AtlasEntityID> entities)
 {

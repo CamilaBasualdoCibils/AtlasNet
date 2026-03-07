@@ -82,17 +82,18 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 				for (const auto& [ID, entity] : entities)
 					snapshot.emplace_back(ID, entity.transform.position);
 			});
-			if (snapshot.empty()) continue;
+		if (snapshot.empty())
+			continue;
 
 		const NetworkIdentity selfId = NetworkCredentials::Get().GetID();
-		if (!BoundLeaser::Get().HasBound()) continue;
+		if (!BoundLeaser::Get().HasBound())
+			continue;
 		BoundLeaser::Get().GetBound(
 			[&](const IBounds& b)
 			{
 				for (const auto& [ID, pos] : snapshot)
 				{
 					// Skip entities already in an active transfer.
-
 					if (TransferCoordinator::Get().IsEntityInTransfer(ID))
 					{
 						continue;
@@ -113,6 +114,5 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
-
 	}
 }
