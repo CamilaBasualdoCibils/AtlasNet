@@ -11,7 +11,8 @@ need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it fi
 # shellcheck disable=SC1090
 source "$ENV_FILE"
 
-: "${SERVER_IP:?Set SERVER_IP in .env}"
+# At least one server required
+: "${SERVER_IPS:?Set SERVER_IPS in .env}"
 : "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
 : "${SSH_KEY:=${HOME}/.ssh/id_ed25519}"
 : "${WORKER_IPS:=}"
@@ -59,13 +60,30 @@ echo "  Done. Reboot this node for cgroup changes to take effect (e.g. sudo rebo
 REMOTE
 }
 
-# Server
-run_on_node "$SERVER_SSH_USER" "$SERVER_IP"
+# Servers
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  run_on_node "$user" "$host"
+done
 
 # Workers
-for ip in $WORKER_IPS; do
-  [[ -n "$ip" ]] || continue
-  run_on_node "$WORKER_SSH_USER" "$ip"
+for entry in $WORKER_IPS; do
+  [[ -n "$entry" ]] || continue
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  run_on_node "$user" "$host"
 done
 
 echo

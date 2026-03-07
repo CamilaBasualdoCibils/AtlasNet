@@ -9,7 +9,7 @@ CONTEXT_NAME="k3s-homelab"
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it first."; }
 
-CLI_SERVER_IP=""
+CLI_SERVER_IPS=""
 CLI_SERVER_SSH_USER=""
 CLI_SSH_KEY=""
 CLI_WORKER_SSH_USER=""
@@ -22,9 +22,9 @@ CLI_K3SUP_USE_SUDO=""
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
-    --server-ip)
-      [[ $# -ge 2 ]] || die "--server-ip requires a value"
-      CLI_SERVER_IP="$2"
+    --server-ips)
+      [[ $# -ge 2 ]] || die "--server-ips requires a value"
+      CLI_SERVER_IPS="$2"
       shift 2
       ;;
     --server-user)
@@ -83,7 +83,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-[[ -n "$CLI_SERVER_IP" ]] && SERVER_IP="$CLI_SERVER_IP"
+[[ -n "$CLI_SERVER_IPS" ]] && SERVER_IPS="$CLI_SERVER_IPS"
 [[ -n "$CLI_SERVER_SSH_USER" ]] && SERVER_SSH_USER="$CLI_SERVER_SSH_USER"
 [[ -n "$CLI_SSH_KEY" ]] && SSH_KEY="$CLI_SSH_KEY"
 [[ -n "$CLI_WORKER_SSH_USER" ]] && WORKER_SSH_USER="$CLI_WORKER_SSH_USER"
@@ -94,7 +94,8 @@ done
 [[ -n "$CLI_K3SUP_VERSION" ]] && K3SUP_VERSION="$CLI_K3SUP_VERSION"
 [[ -n "$CLI_K3SUP_USE_SUDO" ]] && K3SUP_USE_SUDO="$CLI_K3SUP_USE_SUDO"
 
-: "${SERVER_IP:?SERVER_IP is required (pass --server-ip from Makefile/linux-pi)}"
+# At least one server required
+: "${SERVER_IPS:?At least one server required (set SERVER_IPS in .env)}"
 : "${SERVER_SSH_USER:?SERVER_SSH_USER is required (pass --server-user from Makefile/linux-pi)}"
 : "${SSH_KEY:?SSH_KEY is required (pass --ssh-key from Makefile/linux-pi)}"
 : "${WORKER_SSH_USER:=pi}"
@@ -102,8 +103,20 @@ done
 : "${K3S_EXTRA_ARGS:=}"
 : "${K3S_VERSION:=}"
 : "${K3SUP_VERSION:=}"
-: "${K3S_API_ENDPOINT:=$SERVER_IP}"
 : "${K3SUP_USE_SUDO:=true}"
+
+# Derive primary server entry (may be \"user@ip\" or just \"ip\")
+PRIMARY_SERVER_ENTRY="${SERVER_IPS%% *}"
+# Strip any stray double quotes that might sneak in from .env formatting
+PRIMARY_SERVER_ENTRY="${PRIMARY_SERVER_ENTRY//\"/}"
+if [[ "$PRIMARY_SERVER_ENTRY" == *@* ]]; then
+  PRIMARY_SERVER_USER_DEFAULT="${PRIMARY_SERVER_ENTRY%@*}"
+  PRIMARY_SERVER_IP="${PRIMARY_SERVER_ENTRY#*@}"
+else
+  PRIMARY_SERVER_USER_DEFAULT="$SERVER_SSH_USER"
+  PRIMARY_SERVER_IP="$PRIMARY_SERVER_ENTRY"
+fi
+: "${K3S_API_ENDPOINT:=$PRIMARY_SERVER_IP}"
 
 [[ "$K3SUP_USE_SUDO" == "true" || "$K3SUP_USE_SUDO" == "false" ]] || \
   die "K3SUP_USE_SUDO must be 'true' or 'false' (got: $K3SUP_USE_SUDO)"
@@ -145,13 +158,14 @@ check_sudo_access() {
 }
 
 check_server_api_port_conflict() {
+  local server_ip="$1"
   local listeners
   listeners="$(
     ssh -i "$SSH_KEY" \
       -o BatchMode=yes \
       -o StrictHostKeyChecking=accept-new \
       -o ConnectTimeout=5 \
-      "${SERVER_SSH_USER}@${SERVER_IP}" \
+      "${SERVER_SSH_USER}@${server_ip}" \
       "sudo ss -ltnp '( sport = :6443 )' 2>/dev/null | awk 'NR>1 {print}'" \
       2>/dev/null || true
   )"
@@ -164,7 +178,7 @@ check_server_api_port_conflict() {
   fi
 
   cat >&2 <<EOF2
-ERROR: Server API port 6443 is already in use on ${SERVER_IP}.
+ERROR: Server API port 6443 is already in use on ${server_ip}.
 Current listeners:
 ${listeners}
 
@@ -194,6 +208,36 @@ install_k3sup_if_missing() {
   fi
 
   command -v k3sup >/dev/null 2>&1 || die "k3sup install failed"
+}
+
+K3SUP_RETRIES="${K3SUP_RETRIES:-3}"
+K3SUP_RETRY_SLEEP_SECS="${K3SUP_RETRY_SLEEP_SECS:-5}"
+
+k3sup_retry() {
+  local attempt=1
+  local max="$K3SUP_RETRIES"
+  local sleep_s="$K3SUP_RETRY_SLEEP_SECS"
+
+  while true; do
+    if k3sup "$@"; then
+      return 0
+    fi
+
+    if [[ "$attempt" -ge "$max" ]]; then
+      cat >&2 <<EOF2
+ERROR: k3sup failed after ${attempt} attempt(s).
+
+This is often caused by upstream download errors (for example GitHub release endpoints returning 5xx)
+while fetching k3s binaries/hashes. If you saw a "Download failed" message, try rerunning later,
+or set K3S_VERSION in your .env to a pinned version and retry.
+EOF2
+      return 1
+    fi
+
+    echo "WARN: k3sup failed (attempt ${attempt}/${max}). Retrying in ${sleep_s}s..." >&2
+    sleep "$sleep_s"
+    attempt=$((attempt + 1))
+  done
 }
 
 sync_project_kubeconfig_copy() {
@@ -226,22 +270,62 @@ prepare_target_kubeconfig_path() {
 }
 
 echo "Checking SSH access to nodes ..."
-check_ssh_access "$SERVER_IP" "$SERVER_SSH_USER"
-for ip in $WORKER_IPS; do
-  check_ssh_access "$ip" "$WORKER_SSH_USER"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  check_ssh_access "$host" "$user"
+done
+for entry in $WORKER_IPS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  check_ssh_access "$host" "$user"
 done
 
 echo "Checking sudo access on nodes ..."
-check_sudo_access "$SERVER_IP" "$SERVER_SSH_USER"
-for ip in $WORKER_IPS; do
-  check_sudo_access "$ip" "$WORKER_SSH_USER"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  check_sudo_access "$host" "$user"
+done
+for entry in $WORKER_IPS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  check_sudo_access "$host" "$user"
 done
 
-check_server_api_port_conflict
+check_server_api_port_conflict "$PRIMARY_SERVER_IP"
 
 install_k3sup_if_missing
 
-echo "Installing k3s server on $SERVER_IP ..."
+echo "Installing k3s server on $PRIMARY_SERVER_IP (first server) ..."
 K3S_SERVER_ARGS="--write-kubeconfig-mode 644"
 if [[ -n "$K3S_EXTRA_ARGS" ]]; then
   K3S_SERVER_ARGS+=" ${K3S_EXTRA_ARGS}"
@@ -249,8 +333,8 @@ fi
 
 K3SUP_INSTALL_ARGS=(
   install
-  --ip "$SERVER_IP"
-  --user "$SERVER_SSH_USER"
+  --ip "$PRIMARY_SERVER_IP"
+  --user "$PRIMARY_SERVER_USER_DEFAULT"
   --ssh-key "$SSH_KEY"
   --tls-san "$K3S_API_ENDPOINT"
   --local-path "$TARGET_KUBECONFIG_PATH"
@@ -264,27 +348,97 @@ if [[ -n "$K3S_VERSION" ]]; then
 fi
 
 prepare_target_kubeconfig_path
-k3sup "${K3SUP_INSTALL_ARGS[@]}"
+k3sup_retry "${K3SUP_INSTALL_ARGS[@]}"
 
 sync_project_kubeconfig_copy
 
 export KUBECONFIG="$TARGET_KUBECONFIG_PATH"
+
+# Join additional servers (HA) if any
+SERVER_IPS_ARR=($SERVER_IPS)
+if [[ ${#SERVER_IPS_ARR[@]} -gt 1 ]]; then
+  echo
+  echo "Joining additional server(s) ..."
+  join_pids=()
+  join_labels=()
+  for ip in "${SERVER_IPS_ARR[@]:1}"; do
+    [[ -n "$ip" ]] || continue
+    ip="${ip//\"/}"
+    if [[ "$ip" == *@* ]]; then
+      join_user="${ip%@*}"
+      join_host="${ip#*@}"
+    else
+      join_user="$SERVER_SSH_USER"
+      join_host="$ip"
+    fi
+    echo " - server: $join_user@$join_host"
+    k3sup_retry join \
+      --server-ip "$PRIMARY_SERVER_IP" \
+      --server-user "$PRIMARY_SERVER_USER_DEFAULT" \
+      --ip "$join_host" \
+      --user "$join_user" \
+      --server \
+      --sudo "$K3SUP_USE_SUDO" \
+      --ssh-key "$SSH_KEY" &
+    join_pids+=($!)
+    join_labels+=("server $join_user@$join_host")
+  done
+
+  join_failed=0
+  for i in "${!join_pids[@]}"; do
+    pid="${join_pids[$i]}"
+    label="${join_labels[$i]}"
+    if ! wait "$pid"; then
+      echo "ERROR: k3sup join failed for ${label}" >&2
+      join_failed=1
+    fi
+  done
+  if [[ "$join_failed" -ne 0 ]]; then
+    die "One or more additional server joins failed."
+  fi
+fi
 
 echo
 echo "Joining workers (if any) ..."
 if [[ -z "${WORKER_IPS// }" ]]; then
   echo " - no workers configured"
 else
-  for ip in $WORKER_IPS; do
-    echo " - worker: $ip"
-    k3sup join \
-      --server-ip "$SERVER_IP" \
-      --server-user "$SERVER_SSH_USER" \
-      --ip "$ip" \
-      --user "$WORKER_SSH_USER" \
+  worker_pids=()
+  worker_labels=()
+  for entry in $WORKER_IPS; do
+    [[ -n "$entry" ]] || continue
+    entry="${entry//\"/}"
+    if [[ "$entry" == *@* ]]; then
+      worker_user="${entry%@*}"
+      worker_host="${entry#*@}"
+    else
+      worker_user="$WORKER_SSH_USER"
+      worker_host="$entry"
+    fi
+    echo " - worker: $worker_user@$worker_host"
+    k3sup_retry join \
+      --server-ip "$PRIMARY_SERVER_IP" \
+      --server-user "$PRIMARY_SERVER_USER_DEFAULT" \
+      --ip "$worker_host" \
+      --user "$worker_user" \
       --sudo "$K3SUP_USE_SUDO" \
-      --ssh-key "$SSH_KEY"
+      --ssh-key "$SSH_KEY" &
+    worker_pids+=($!)
+    worker_labels+=("worker $worker_user@$worker_host")
   done
+
+  worker_failed=0
+  for i in "${!worker_pids[@]}"; do
+    pid="${worker_pids[$i]}"
+    label="${worker_labels[$i]}"
+    if ! wait "$pid"; then
+      echo "ERROR: k3sup join failed for ${label}" >&2
+      worker_failed=1
+    fi
+  done
+  if [[ "$worker_failed" -ne 0 ]]; then
+    die "One or more worker joins failed."
+  fi
 fi
 
 echo "Cluster context: $CONTEXT_NAME"

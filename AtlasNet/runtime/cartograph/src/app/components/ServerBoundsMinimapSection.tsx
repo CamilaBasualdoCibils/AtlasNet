@@ -1,12 +1,13 @@
 'use client';
 
 import { useMemo } from 'react';
-import type { ShardHoverBounds } from '../lib/mapData';
+import type { Point2, ShardHoverBounds } from '../lib/mapData';
 import type { ServerBoundsShardSummary } from '../lib/serverBoundsTypes';
 
 interface ServerBoundsMinimapSectionProps {
   shardSummaries: ServerBoundsShardSummary[];
   boundsByShardId: Map<string, ShardHoverBounds>;
+  shardPolygonsById: Map<string, Point2[][]>;
   claimedBoundShardIds: Set<string>;
   title?: string;
   emptyMessage?: string;
@@ -62,11 +63,13 @@ function computeGlobalBounds(boundsByShardId: Map<string, ShardHoverBounds>): Sh
 
 function MiniShardMap({
   boundsByShardId,
+  shardPolygonsById,
   claimedBoundShardIds,
   focusShardId,
   highlightFocus,
 }: {
   boundsByShardId: Map<string, ShardHoverBounds>;
+  shardPolygonsById: Map<string, Point2[][]>;
   claimedBoundShardIds: Set<string>;
   focusShardId: string;
   highlightFocus: boolean;
@@ -80,6 +83,28 @@ function MiniShardMap({
     }
     return out;
   }, [boundsByShardId, claimedBoundShardIds]);
+
+  const visiblePolygonsByShardId = useMemo(() => {
+    const out = new Map<string, Point2[][]>();
+    for (const [shardId, polygons] of shardPolygonsById) {
+      if (!claimedBoundShardIds.has(shardId) || !Array.isArray(polygons)) {
+        continue;
+      }
+      const validPolygons: Point2[][] = [];
+      for (const polygon of polygons) {
+        const cleanPolygon = polygon.filter(
+          (point) => Number.isFinite(point.x) && Number.isFinite(point.y)
+        );
+        if (cleanPolygon.length >= 3) {
+          validPolygons.push(cleanPolygon);
+        }
+      }
+      if (validPolygons.length > 0) {
+        out.set(shardId, validPolygons);
+      }
+    }
+    return out;
+  }, [claimedBoundShardIds, shardPolygonsById]);
 
   const globalBounds = useMemo(
     () => computeGlobalBounds(visibleBoundsByShardId),
@@ -121,6 +146,29 @@ function MiniShardMap({
       aria-label={`Bounds minimap for ${focusShardId}`}
     >
       {Array.from(visibleBoundsByShardId.entries()).map(([shardId, bounds]) => {
+        const isFocus = highlightFocus && shardId === focusShardId;
+        const polygons = visiblePolygonsByShardId.get(shardId) ?? [];
+        const fill = isFocus ? 'rgba(56, 189, 248, 0.28)' : 'rgba(100, 116, 139, 0.08)';
+        const stroke = isFocus ? 'rgba(56, 189, 248, 0.95)' : 'rgba(71, 85, 105, 0.55)';
+        const strokeWidth = isFocus ? 1.8 : 1;
+
+        if (polygons.length > 0) {
+          return (
+            <g key={shardId}>
+              {polygons.map((polygon, index) => (
+                <polygon
+                  key={`${shardId}:${index}`}
+                  points={polygon.map((point) => `${toX(point.x)},${toY(point.y)}`).join(' ')}
+                  fill={fill}
+                  stroke={stroke}
+                  strokeWidth={strokeWidth}
+                  strokeLinejoin="round"
+                />
+              ))}
+            </g>
+          );
+        }
+
         const x1 = toX(bounds.minX);
         const x2 = toX(bounds.maxX);
         const y1 = toY(bounds.minY);
@@ -129,7 +177,6 @@ function MiniShardMap({
         const top = Math.min(y1, y2);
         const rectWidth = Math.max(1, Math.abs(x2 - x1));
         const rectHeight = Math.max(1, Math.abs(y2 - y1));
-        const isFocus = highlightFocus && shardId === focusShardId;
 
         return (
           <rect
@@ -138,9 +185,9 @@ function MiniShardMap({
             y={top}
             width={rectWidth}
             height={rectHeight}
-            fill={isFocus ? 'rgba(56, 189, 248, 0.28)' : 'rgba(100, 116, 139, 0.08)'}
-            stroke={isFocus ? 'rgba(56, 189, 248, 0.95)' : 'rgba(71, 85, 105, 0.55)'}
-            strokeWidth={isFocus ? 1.8 : 1}
+            fill={fill}
+            stroke={stroke}
+            strokeWidth={strokeWidth}
           />
         );
       })}
@@ -151,10 +198,12 @@ function MiniShardMap({
 function ShardSummaryCard({
   summary,
   boundsByShardId,
+  shardPolygonsById,
   claimedBoundShardIds,
 }: {
   summary: ServerBoundsShardSummary;
   boundsByShardId: Map<string, ShardHoverBounds>;
+  shardPolygonsById: Map<string, Point2[][]>;
   claimedBoundShardIds: Set<string>;
 }) {
   return (
@@ -171,6 +220,7 @@ function ShardSummaryCard({
 
       <MiniShardMap
         boundsByShardId={boundsByShardId}
+        shardPolygonsById={shardPolygonsById}
         claimedBoundShardIds={claimedBoundShardIds}
         focusShardId={summary.shardId}
         highlightFocus={summary.hasClaimedBound}
@@ -197,6 +247,7 @@ function ShardSummaryCard({
 export function ServerBoundsMinimapSection({
   shardSummaries,
   boundsByShardId,
+  shardPolygonsById,
   claimedBoundShardIds,
   title = 'Server Bounds Minimap',
   emptyMessage = 'Waiting for shard telemetry and map bounds...',
@@ -219,6 +270,7 @@ export function ServerBoundsMinimapSection({
               key={summary.shardId}
               summary={summary}
               boundsByShardId={boundsByShardId}
+              shardPolygonsById={shardPolygonsById}
               claimedBoundShardIds={claimedBoundShardIds}
             />
           ))}

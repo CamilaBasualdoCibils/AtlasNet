@@ -15,7 +15,7 @@ fi
 
 # Optional config sources:
 # - .env is the primary project config
-# - config/cluster.env remains supported for legacy/override use
+# - config/cluster.env can override values when present
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
   source "$ENV_FILE"

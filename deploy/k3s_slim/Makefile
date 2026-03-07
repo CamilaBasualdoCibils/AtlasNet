@@ -13,7 +13,7 @@ SHELL := /usr/bin/env bash
 
 
 ENV_FILE ?= .env
-ENV_EXPORTS := SERVER_IP SERVER_SSH_USER WORKER_IPS WORKER_SSH_USER SSH_KEY K3S_API_ENDPOINT K3SUP_USE_SUDO SERVER_NODE_NAME ATLASNET_K8S_NAMESPACE DOCKERHUB_NAMESPACE ATLASNET_IMAGE_TAG ATLASNET_IMAGE_TAG_AMD64 ATLASNET_IMAGE_TAG_ARM64 ATLASNET_WATCHDOG_IMAGE ATLASNET_PROXY_IMAGE ATLASNET_SHARD_IMAGE ATLASNET_CARTOGRAPH_IMAGE ATLASNET_IMAGE_PULL_POLICY DOCKERHUB_REQUIRE_AUTH DOCKERHUB_USERNAME DOCKERHUB_TOKEN DOCKERHUB_EMAIL DOCKERHUB_SECRET_NAME ATLASNET_MULTIARCH_PLATFORMS ATLASNET_MULTIARCH_BUILDER_NAME
+ENV_EXPORTS := SERVER_IPS SERVER_SSH_USER WORKER_IPS WORKER_SSH_USER SSH_KEY K3S_API_ENDPOINT K3SUP_USE_SUDO SERVER_NODE_NAME ATLASNET_K8S_NAMESPACE DOCKERHUB_NAMESPACE ATLASNET_IMAGE_TAG ATLASNET_IMAGE_TAG_AMD64 ATLASNET_IMAGE_TAG_ARM64 ATLASNET_WATCHDOG_IMAGE ATLASNET_PROXY_IMAGE ATLASNET_SHARD_IMAGE ATLASNET_CARTOGRAPH_IMAGE ATLASNET_IMAGE_PULL_POLICY DOCKERHUB_REQUIRE_AUTH DOCKERHUB_USERNAME DOCKERHUB_TOKEN DOCKERHUB_EMAIL DOCKERHUB_SECRET_NAME ATLASNET_MULTIARCH_PLATFORMS ATLASNET_MULTIARCH_BUILDER_NAME
 
 -include $(ENV_FILE)
 export $(ENV_EXPORTS)
@@ -42,19 +42,20 @@ cleanup-cluster:
 	./scripts/cleanup_cluster.sh
 
 linux-pi:
-	@: "$${SERVER_IP:?Set SERVER_IP in .env or pass SERVER_IP=...}"
-	@: "$${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env or pass SERVER_SSH_USER=...}"
-	@: "$${WORKER_IPS:?Set WORKER_IPS in .env or pass WORKER_IPS=\"ip1 ip2\" ...}"; \
-	  workers="$$(echo "$$WORKER_IPS" | xargs)"; \
-	  ./scripts/port_cleanup.sh; \
-	  ./scripts/bootstrap.sh \
-	    --server-ip "$$SERVER_IP" \
-	    --server-user "$$SERVER_SSH_USER" \
-	    --worker-ips "$$workers" \
-	    --worker-user "$${WORKER_SSH_USER:-pi}" \
-	    --ssh-key "$${SSH_KEY:-$$HOME/.ssh/id_ed25519}" \
-	    --use-sudo "$${K3SUP_USE_SUDO:-true}" \
-	    --api-endpoint "$${K3S_API_ENDPOINT:-$$SERVER_IP}"
+	@servers="$${SERVER_IPS}"; \
+	primary="$${servers%% *}"; \
+	: "$${servers:?Set SERVER_IPS in .env}"; \
+	: "$${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"; \
+	workers="$$(echo "$${WORKER_IPS:-}" | xargs)"; \
+	./scripts/port_cleanup.sh; \
+	./scripts/bootstrap.sh \
+	  --server-ips "$$servers" \
+	  --server-user "$$SERVER_SSH_USER" \
+	  --worker-ips "$$workers" \
+	  --worker-user "$${WORKER_SSH_USER:-pi}" \
+	  --ssh-key "$${SSH_KEY:-$$HOME/.ssh/id_ed25519}" \
+	  --use-sudo "$${K3SUP_USE_SUDO:-true}" \
+	  --api-endpoint "$${K3S_API_ENDPOINT:-$$primary}"
 
 atlasnet-deploy:
 	./scripts/deploy_atlasnet.sh

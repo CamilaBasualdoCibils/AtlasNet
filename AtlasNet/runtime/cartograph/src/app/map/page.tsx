@@ -46,8 +46,12 @@ const DEFAULT_INTERACTION_SENSITIVITY = 1;
 const SNAPSHOT_WINDOW_MS = 30_000;
 const SNAPSHOT_RECORD_SPACING_MS = 10;
 const PLAYBACK_TICK_INTERVAL_MS = 16;
-const TRANSFER_STATE_REPLAY_STEP_MS = 2;
-const TRANSFER_STATE_PLAYBACK_DISPLAY_MS = 20;
+const TRANSFER_STATE_TIMESTAMP_SLOT_MS = 10;
+const DEFAULT_PLAYBACK_TIME_TICK_MS = 10;
+const MIN_PLAYBACK_TIME_TICK_MS = 10;
+const MAX_PLAYBACK_TIME_TICK_MS = 100;
+const PLAYBACK_TIME_TICK_STEP_MS = 10;
+const TRANSFER_EVENT_MAX_AGE_MS = 1;
 
 const EMPTY_DETAILS_STATE: EntityDatabaseDetailsState = {
   loading: false,
@@ -67,7 +71,11 @@ interface PlaybackFrame {
 
 interface ActiveTransferQueueEvent {
   event: TransferStateQueueTelemetry;
-  startedAtMs: number;
+}
+
+interface LatestTransferEventByEntity {
+  event: TransferStateQueueTelemetry;
+  sourceTimestampMs: number;
 }
 
 function clonePlaybackPayload(
@@ -123,6 +131,19 @@ function snapshotDetailsByEntityId(
   return out;
 }
 
+function normalizeTimestampMs(value: unknown, fallbackMs: number): number {
+  const timestampMsRaw = Number(value);
+  if (!Number.isFinite(timestampMsRaw) || timestampMsRaw <= 0) {
+    return fallbackMs;
+  }
+  return Math.floor(timestampMsRaw);
+}
+
+function snapToNearestTickMs(valueMs: number, tickMs: number): number {
+  const safeTickMs = Math.max(1, Math.floor(tickMs));
+  return Math.round(valueMs / safeTickMs) * safeTickMs;
+}
+
 function resolveTransferManifestAtCursor(
   events: TransferStateQueueTelemetry[],
   cursorMs: number,
@@ -132,21 +153,35 @@ function resolveTransferManifestAtCursor(
     return [];
   }
 
+  const minTimestampMs = cursorMs - Math.max(0, holdMs);
   const latestByEntity = new Map<string, TransferStateQueueTelemetry>();
+
   for (const event of events) {
-    if (!event || event.timestampMs > cursorMs) {
-      break;
-    }
-
-    if (cursorMs - event.timestampMs > holdMs) {
+    if (!event) {
       continue;
     }
 
-    const entityId = String(event.entityIds?.[0] || '').trim();
-    if (!entityId) {
+    const timestampMs = normalizeTimestampMs(event.timestampMs, 0);
+    if (timestampMs <= 0) {
       continue;
     }
-    latestByEntity.set(entityId, event);
+    if (timestampMs < minTimestampMs || timestampMs > cursorMs) {
+      continue;
+    }
+
+    const entityIds = Array.isArray(event.entityIds) ? event.entityIds : [];
+    for (const rawEntityId of entityIds) {
+      const entityId = String(rawEntityId || '').trim();
+      if (!entityId) {
+        continue;
+      }
+
+      latestByEntity.set(entityId, {
+        ...event,
+        entityIds: [entityId],
+        timestampMs,
+      });
+    }
   }
 
   const rows: TransferManifestTelemetry[] = [];
@@ -158,6 +193,7 @@ function resolveTransferManifestAtCursor(
       stage: event.stage,
       state: event.state,
       entityIds: [entityId],
+      timestampMs: event.timestampMs,
     });
   }
   return rows;
@@ -167,11 +203,9 @@ export default function MapPage() {
   const containerRef = useRef<HTMLDivElement>(null);
   const rendererRef = useRef<ReturnType<typeof createMapRenderer> | null>(null);
   const historyRef = useRef<PlaybackFrame[]>([]);
-  const playbackLastTickMsRef = useRef<number | null>(null);
-  const transferQueueByEntityRef = useRef<Map<string, TransferStateQueueTelemetry[]>>(
-    new Map()
-  );
+  const transferLastTimestampByEntityRef = useRef<Map<string, number>>(new Map());
   const transferTimelineRef = useRef<TransferStateQueueTelemetry[]>([]);
+  const transferPollStartedAtMsRef = useRef<number>(0);
   const [showGnsConnections, setShowGnsConnections] = useState(true);
   const [showAuthorityEntities, setShowAuthorityEntities] = useState(true);
   const [authorityLinkMode, setAuthorityLinkMode] =
@@ -199,6 +233,9 @@ export default function MapPage() {
     TransferStateQueueTelemetry[] | null
   >(null);
   const [playbackCursorMs, setPlaybackCursorMs] = useState(0);
+  const [playbackTimeTickMs, setPlaybackTimeTickMs] = useState(
+    DEFAULT_PLAYBACK_TIME_TICK_MS
+  );
   const [playbackPaused, setPlaybackPaused] = useState(true);
   const [playbackDirection, setPlaybackDirection] = useState<1 | -1>(1);
   const [activeTransferQueueByEntity, setActiveTransferQueueByEntity] = useState<
@@ -226,6 +263,12 @@ export default function MapPage() {
     intervalMs: telemetryPollIntervalMs,
     resetOnException: true,
     resetOnHttpError: false,
+    onPollResult: (meta) => {
+      if (!meta.succeeded) {
+        return;
+      }
+      transferPollStartedAtMsRef.current = Math.floor(meta.pollStartedAtMs);
+    },
   });
   const shardPlacementLive = useShardPlacement({
     intervalMs:
@@ -236,98 +279,73 @@ export default function MapPage() {
   });
 
   useEffect(() => {
-    if (!Array.isArray(transferStateQueueLive) || transferStateQueueLive.length === 0) {
-      return;
-    }
-
-    const ingestStartedAtMs = Date.now();
-    let ingestOffsetMs = 0;
-    const queues = transferQueueByEntityRef.current;
+    const events = Array.isArray(transferStateQueueLive) ? transferStateQueueLive : [];
+    const nowMs = Date.now();
+    const pollStartedAtMs =
+      transferPollStartedAtMsRef.current > 0
+        ? transferPollStartedAtMsRef.current
+        : nowMs;
     const timeline = transferTimelineRef.current;
-    for (const event of transferStateQueueLive) {
-      const entityIds = Array.isArray(event.entityIds) ? event.entityIds : [];
+    const lastTimestampByEntity = transferLastTimestampByEntityRef.current;
+    const latestEventByEntity = new Map<string, LatestTransferEventByEntity>();
+    const latestByEntity: Record<string, ActiveTransferQueueEvent> = {};
+
+    for (const event of events) {
+      const baseTimestampMs = normalizeTimestampMs(event?.timestampMs, nowMs);
+      const snappedTimestampMs = snapToNearestTickMs(
+        baseTimestampMs,
+        TRANSFER_STATE_TIMESTAMP_SLOT_MS
+      );
+      const entityIds = Array.isArray(event?.entityIds) ? event.entityIds : [];
       for (const rawEntityId of entityIds) {
         const entityId = String(rawEntityId || '').trim();
         if (!entityId) {
           continue;
         }
 
+        const previousTimestampMs = lastTimestampByEntity.get(entityId) ?? -1;
+        let adjustedTimestampMs = snappedTimestampMs;
+        while (adjustedTimestampMs <= previousTimestampMs) {
+          adjustedTimestampMs += TRANSFER_STATE_TIMESTAMP_SLOT_MS;
+        }
+        lastTimestampByEntity.set(entityId, adjustedTimestampMs);
+
         const perEntityEvent: TransferStateQueueTelemetry = {
           ...event,
           entityIds: [entityId],
-          // Use local ingest time so playback cursor and event timeline share one clock.
-          timestampMs: ingestStartedAtMs + ingestOffsetMs,
+          timestampMs: adjustedTimestampMs,
         };
-        ingestOffsetMs += 1;
-
-        const queue = queues.get(entityId);
-        if (queue) {
-          queue.push(perEntityEvent);
-        } else {
-          queues.set(entityId, [perEntityEvent]);
-        }
         timeline.push(perEntityEvent);
+        const currentLatest = latestEventByEntity.get(entityId);
+        if (
+          !currentLatest ||
+          baseTimestampMs > currentLatest.sourceTimestampMs ||
+          (baseTimestampMs === currentLatest.sourceTimestampMs &&
+            perEntityEvent.timestampMs >= currentLatest.event.timestampMs)
+        ) {
+          latestEventByEntity.set(entityId, {
+            event: perEntityEvent,
+            sourceTimestampMs: baseTimestampMs,
+          });
+        }
       }
     }
 
-    const cutoffMs = Date.now() - SNAPSHOT_WINDOW_MS;
+    const cutoffMs = nowMs - SNAPSHOT_WINDOW_MS;
     while (timeline.length > 0 && timeline[0].timestampMs < cutoffMs) {
       timeline.shift();
     }
+
+    for (const [entityId, latest] of latestEventByEntity.entries()) {
+      const ageMs = Math.max(0, pollStartedAtMs - latest.sourceTimestampMs);
+      if (ageMs > TRANSFER_EVENT_MAX_AGE_MS) {
+        continue;
+      }
+      latestByEntity[entityId] = { event: latest.event };
+    }
+
+    setActiveTransferQueueByEntity(latestByEntity);
   }, [transferStateQueueLive]);
-
-  useEffect(() => {
-    const intervalId = setInterval(() => {
-      const nowMs = Date.now();
-      const queues = transferQueueByEntityRef.current;
-
-      setActiveTransferQueueByEntity((previous) => {
-        let next = previous;
-        let changed = false;
-
-        for (const [entityId, active] of Object.entries(next)) {
-          if (nowMs - active.startedAtMs < TRANSFER_STATE_REPLAY_STEP_MS) {
-            continue;
-          }
-
-          if (next === previous) {
-            next = { ...previous };
-          }
-          delete next[entityId];
-          changed = true;
-        }
-
-        for (const [entityId, queue] of queues.entries()) {
-          if (next[entityId]) {
-            continue;
-          }
-
-          const event = queue.shift();
-          if (queue.length === 0) {
-            queues.delete(entityId);
-          }
-          if (!event) {
-            continue;
-          }
-
-          if (next === previous) {
-            next = { ...previous };
-          }
-          next[entityId] = {
-            event,
-            startedAtMs: nowMs,
-          };
-          changed = true;
-        }
-
-        return changed ? next : previous;
-      });
-    }, 1);
-
-    return () => {
-      clearInterval(intervalId);
-    };
-  }, []);
 
   const transferManifestLiveResolved = useMemo(() => {
     const rows: TransferManifestTelemetry[] = [];
@@ -340,6 +358,7 @@ export default function MapPage() {
         stage: event.stage,
         state: event.state,
         entityIds: [entityId],
+        timestampMs: event.timestampMs,
       });
     }
     return rows;
@@ -475,18 +494,12 @@ export default function MapPage() {
 
   useEffect(() => {
     if (!playbackActive || playbackPaused) {
-      playbackLastTickMsRef.current = null;
       return;
     }
 
     const intervalId = setInterval(() => {
-      const now = performance.now();
-      const previousTick = playbackLastTickMsRef.current ?? now;
-      playbackLastTickMsRef.current = now;
-      const elapsedMs = Math.max(0, now - previousTick);
-
       setPlaybackCursorMs((prev) => {
-        const next = prev + playbackDirection * elapsedMs;
+        const next = prev + playbackDirection * playbackTimeTickMs;
         if (playbackDirection < 0) {
           return Math.max(playbackStartMs, next);
         }
@@ -503,6 +516,7 @@ export default function MapPage() {
     playbackEndMs,
     playbackPaused,
     playbackStartMs,
+    playbackTimeTickMs,
   ]);
 
   useEffect(() => {
@@ -538,23 +552,28 @@ export default function MapPage() {
     }
     const snapshot = [...frames];
     const endMs = snapshot[snapshot.length - 1].capturedAtMs;
-    const transferEvents = transferTimelineRef.current.filter(
+    const timeline = transferTimelineRef.current;
+    let transferEvents = timeline.filter(
       (event) =>
         event.timestampMs >= endMs - SNAPSHOT_WINDOW_MS && event.timestampMs <= endMs
     );
+    if (transferEvents.length === 0 && timeline.length > 0) {
+      const latestEventTimestampMs = timeline[timeline.length - 1].timestampMs;
+      transferEvents = timeline.filter(
+        (event) => event.timestampMs >= latestEventTimestampMs - SNAPSHOT_WINDOW_MS
+      );
+    }
     setPlaybackFrames(snapshot);
     setPlaybackTransferEvents(transferEvents);
     setPlaybackCursorMs(endMs);
     setPlaybackDirection(1);
     setPlaybackPaused(true);
-    playbackLastTickMsRef.current = null;
   }
 
   function resumeLive(): void {
     setPlaybackFrames(null);
     setPlaybackTransferEvents(null);
     setPlaybackPaused(true);
-    playbackLastTickMsRef.current = null;
   }
 
   function seekPlayback(nextCursorMs: number): void {
@@ -564,8 +583,8 @@ export default function MapPage() {
     const minMs = playbackStartMs;
     const maxMs = playbackEndMs;
     const clamped = Math.max(minMs, Math.min(maxMs, nextCursorMs));
-    setPlaybackCursorMs(clamped);
-    playbackLastTickMsRef.current = null;
+    const snapped = snapToNearestTickMs(clamped, playbackTimeTickMs);
+    setPlaybackCursorMs(Math.max(minMs, Math.min(maxMs, snapped)));
   }
 
   function playForward(): void {
@@ -574,7 +593,6 @@ export default function MapPage() {
     }
     setPlaybackDirection(1);
     setPlaybackPaused(false);
-    playbackLastTickMsRef.current = null;
   }
 
   function playReverse(): void {
@@ -583,7 +601,6 @@ export default function MapPage() {
     }
     setPlaybackDirection(-1);
     setPlaybackPaused(false);
-    playbackLastTickMsRef.current = null;
   }
 
   function pausePlayback(): void {
@@ -591,7 +608,6 @@ export default function MapPage() {
       return;
     }
     setPlaybackPaused(true);
-    playbackLastTickMsRef.current = null;
   }
 
   function stepPlaybackFrame(direction: 1 | -1): void {
@@ -600,7 +616,6 @@ export default function MapPage() {
     }
 
     setPlaybackPaused(true);
-    playbackLastTickMsRef.current = null;
 
     setPlaybackCursorMs((previousCursorMs) => {
       const currentIndex = getFrameIndexAtCursor(playbackFrames, previousCursorMs);
@@ -617,6 +632,26 @@ export default function MapPage() {
     });
   }
 
+  function updatePlaybackTimeTickMs(nextTickMs: number): void {
+    if (!Number.isFinite(nextTickMs)) {
+      return;
+    }
+    const roundedToStepMs =
+      Math.round(nextTickMs / PLAYBACK_TIME_TICK_STEP_MS) * PLAYBACK_TIME_TICK_STEP_MS;
+    const clampedTickMs = Math.max(
+      MIN_PLAYBACK_TIME_TICK_MS,
+      Math.min(MAX_PLAYBACK_TIME_TICK_MS, roundedToStepMs)
+    );
+    setPlaybackTimeTickMs(clampedTickMs);
+    if (!playbackActive) {
+      return;
+    }
+    setPlaybackCursorMs((previousCursorMs) => {
+      const snapped = snapToNearestTickMs(previousCursorMs, clampedTickMs);
+      return Math.max(playbackStartMs, Math.min(playbackEndMs, snapped));
+    });
+  }
+
   const baseShapes = playbackFrame?.baseShapes ?? baseShapesLive;
   const networkTelemetry = playbackFrame?.networkTelemetry ?? networkTelemetryLive;
   const authorityEntities =
@@ -627,10 +662,10 @@ export default function MapPage() {
         ? resolveTransferManifestAtCursor(
             playbackTransferEvents,
             playbackCursorMs,
-            TRANSFER_STATE_PLAYBACK_DISPLAY_MS
+            playbackTimeTickMs
           )
         : [],
-    [playbackActive, playbackCursorMs, playbackTransferEvents]
+    [playbackActive, playbackCursorMs, playbackTimeTickMs, playbackTransferEvents]
   );
   const transferManifest = playbackActive
     ? playbackTransferManifest
@@ -858,6 +893,10 @@ export default function MapPage() {
           onPause={pausePlayback}
           onStepForward={() => stepPlaybackFrame(1)}
           onStepReverse={() => stepPlaybackFrame(-1)}
+          timeTickMs={playbackTimeTickMs}
+          minTimeTickMs={MIN_PLAYBACK_TIME_TICK_MS}
+          maxTimeTickMs={MAX_PLAYBACK_TIME_TICK_MS}
+          onTimeTickChange={updatePlaybackTimeTickMs}
           onSeek={seekPlayback}
           onResumeLive={resumeLive}
         />

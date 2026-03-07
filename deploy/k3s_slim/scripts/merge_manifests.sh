@@ -58,4 +58,3 @@ echo "  - ${DOCKERHUB_NAMESPACE}/watchdog:${ATLASNET_IMAGE_TAG}"
 echo "  - ${DOCKERHUB_NAMESPACE}/proxy:${ATLASNET_IMAGE_TAG}"
 echo "  - ${DOCKERHUB_NAMESPACE}/shard:${ATLASNET_IMAGE_TAG}"
 echo "  - ${DOCKERHUB_NAMESPACE}/cartograph:${ATLASNET_IMAGE_TAG}"
-*** End Patch```} ***!

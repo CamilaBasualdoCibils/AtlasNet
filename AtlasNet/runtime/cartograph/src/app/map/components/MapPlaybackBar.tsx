@@ -12,6 +12,10 @@ interface MapPlaybackBarProps {
   onPause: () => void;
   onStepForward: () => void;
   onStepReverse: () => void;
+  timeTickMs: number;
+  minTimeTickMs: number;
+  maxTimeTickMs: number;
+  onTimeTickChange: (nextTickMs: number) => void;
   onSeek: (nextCursorMs: number) => void;
   onResumeLive: () => void;
 }
@@ -36,6 +40,10 @@ export function MapPlaybackBar({
   onPlayReverse,
   onResumeLive,
   onSeek,
+  timeTickMs,
+  minTimeTickMs,
+  maxTimeTickMs,
+  onTimeTickChange,
   onStepForward,
   onStepReverse,
   paused,
@@ -169,7 +177,7 @@ export function MapPlaybackBar({
         type="range"
         min={0}
         max={durationMs}
-        step={1}
+        step={Math.max(1, Math.floor(timeTickMs))}
         value={relativeMs}
         onChange={(event) =>
           onSeek(
@@ -189,6 +197,37 @@ export function MapPlaybackBar({
       >
         {formatSeconds(durationMs)}
       </span>
+
+      <label
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          fontSize: 11,
+          opacity: 0.85,
+          minWidth: 180,
+        }}
+      >
+        tick
+        <input
+          type="range"
+          min={minTimeTickMs}
+          max={maxTimeTickMs}
+          step={10}
+          value={timeTickMs}
+          onChange={(event) => onTimeTickChange(Number(event.target.value))}
+          style={{ width: 86 }}
+        />
+        <span
+          style={{
+            minWidth: 42,
+            textAlign: 'right',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {(timeTickMs / 1000).toFixed(2)}s
+        </span>
+      </label>
 
       <button
         type="button"

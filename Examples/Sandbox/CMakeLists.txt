@@ -22,7 +22,7 @@ endif()
 
 
 
-add_custom_target(sandbox_atlasnet_run_K8s
+add_custom_target(sandbox_atlasnet_run_k3d
      COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/FreePortsAndServices.sh
      COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetK3dDev.sh atlasnet-dev ${SANDBOX_SERVER_IMAGE_NAME}
      COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/PruneUnusedDockerResources.sh
@@ -34,4 +34,11 @@ add_custom_target(sandbox_atlasnet_run_Docker
      COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh atlasnet_dev ${SANDBOX_SERVER_IMAGE_NAME}
      USES_TERMINAL
      DEPENDS SandboxServerDockerBuild AtlasnetDockerBuild_Fast 
+     )
+
+add_custom_target(sandbox_atlasnet_run_k3d_fast
+     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/FreePortsAndServices.sh
+     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetK3dDev.sh atlasnet-dev ${SANDBOX_SERVER_IMAGE_NAME}
+     USES_TERMINAL
+     DEPENDS AtlasnetDockerBuild_FastCached SandboxServerDockerBuild_Fast
      )

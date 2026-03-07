@@ -71,6 +71,7 @@ export default function NetworkTelemetryPage() {
   const {
     shardSummaries,
     shardBoundsByIdWithNetworkFallback,
+    shardPolygonsById,
     claimedBoundShardIds,
   } = useServerBoundsMinimapData({
     heuristicShapes,
@@ -196,6 +197,7 @@ export default function NetworkTelemetryPage() {
           <ServerBoundsMinimapSection
             shardSummaries={shardSummaries}
             boundsByShardId={shardBoundsByIdWithNetworkFallback}
+            shardPolygonsById={shardPolygonsById}
             claimedBoundShardIds={claimedBoundShardIds}
             title="Server Bounds Minimap"
             emptyMessage="Waiting for shard telemetry and map bounds..."

@@ -49,3 +49,13 @@ add_custom_target(SandboxServerDockerBuild
     COMMENT "Building SandboxServer Docker image with live logs"
 )
 add_dependencies(SandboxServerDockerBuild SandboxServerStage)
+
+add_custom_target(SandboxServerDockerBuild_Fast
+    COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev
+        ${CMAKE_SOURCE_DIR}/Dev/BuildSandboxServerImageIfChanged.sh
+        ${SANDBOX_ROOT}
+        ${SANDBOX_SERVER_IMAGE_NAME}
+    COMMAND ${CMAKE_COMMAND} -E rm -rf ${SANDBOX_ROOT}/.stage
+    COMMENT "Staging AtlasNetServer (changed-only image rebuild)"
+)
+add_dependencies(SandboxServerDockerBuild_Fast SandboxServerStage)

@@ -4,11 +4,12 @@ set -euo pipefail
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install openssh-client."; }
 
-: "${SERVER_IP:?Set SERVER_IP in .env or pass SERVER_IP=...}"
-: "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env or pass SERVER_SSH_USER=...}"
+# At least one server required
+: "${SERVER_IPS:?Set SERVER_IPS in .env}"
+: "${SERVER_SSH_USER:?Set SERVER_SSH_USER in .env}"
 : "${WORKER_SSH_USER:=pi}"
 : "${SSH_KEY:=$HOME/.ssh/id_ed25519}"
-: "${WORKER_IPS:?Set WORKER_IPS in .env or pass WORKER_IPS=\"ip1 ip2\" ...}"
+: "${WORKER_IPS:=}"
 
 WORKERS="$(echo "$WORKER_IPS" | xargs)"
 
@@ -74,14 +75,55 @@ ensure_passwordless_sudo() {
 }
 
 echo "Checking SSH access before sudo setup ..."
-check_ssh_access "$SERVER_IP" "$SERVER_SSH_USER"
-for worker_ip in $WORKERS; do
-  check_ssh_access "$worker_ip" "$WORKER_SSH_USER"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  # Strip any stray double quotes that might sneak in from .env formatting
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  check_ssh_access "$host" "$user"
+done
+for entry in $WORKERS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  check_ssh_access "$host" "$user"
 done
 
-ensure_passwordless_sudo "$SERVER_IP" "$SERVER_SSH_USER" "server"
-for worker_ip in $WORKERS; do
-  ensure_passwordless_sudo "$worker_ip" "$WORKER_SSH_USER" "worker ${worker_ip}"
+for entry in $SERVER_IPS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$SERVER_SSH_USER"
+    host="$entry"
+  fi
+  ensure_passwordless_sudo "$host" "$user" "server ${host}"
+done
+for entry in $WORKERS; do
+  [[ -n "$entry" ]] || continue
+  entry="${entry//\"/}"
+  if [[ "$entry" == *@* ]]; then
+    user="${entry%@*}"
+    host="${entry#*@}"
+  else
+    user="$WORKER_SSH_USER"
+    host="$entry"
+  fi
+  ensure_passwordless_sudo "$host" "$user" "worker ${host}"
 done
 
 echo "Sudo setup done. Run 'make linux-pi'."

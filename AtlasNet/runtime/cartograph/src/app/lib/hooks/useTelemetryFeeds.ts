@@ -24,6 +24,12 @@ interface PolledResourceOptions<T> {
   resetOnHttpError?: boolean;
   onException?: (err: unknown) => void;
   onHttpError?: (statusCode: number) => void;
+  onPollResult?: (meta: {
+    pollStartedAtMs: number;
+    pollCompletedAtMs: number;
+    succeeded: boolean;
+    statusCode: number | null;
+  }) => void;
 }
 
 function toShapeArray(raw: unknown): ShapeJS[] {
@@ -72,17 +78,20 @@ function usePolledResource<T>({
   resetOnHttpError = false,
   onException,
   onHttpError,
+  onPollResult,
 }: PolledResourceOptions<T>): T {
   const [data, setData] = useState<T>(() => createInitialValue());
   const createInitialValueRef = useRef(createInitialValue);
   const mapResponseRef = useRef(mapResponse);
   const onExceptionRef = useRef(onException);
   const onHttpErrorRef = useRef(onHttpError);
+  const onPollResultRef = useRef(onPollResult);
 
   createInitialValueRef.current = createInitialValue;
   mapResponseRef.current = mapResponse;
   onExceptionRef.current = onException;
   onHttpErrorRef.current = onHttpError;
+  onPollResultRef.current = onPollResult;
 
   useEffect(() => {
     if (!enabled) {
@@ -98,11 +107,18 @@ function usePolledResource<T>({
         return;
       }
       inFlight = true;
+      const pollStartedAtMs = Date.now();
 
       try {
         const response = await fetch(url, { cache: 'no-store' });
         if (!response.ok) {
           onHttpErrorRef.current?.(response.status);
+          onPollResultRef.current?.({
+            pollStartedAtMs,
+            pollCompletedAtMs: Date.now(),
+            succeeded: false,
+            statusCode: response.status,
+          });
           if (alive && resetOnHttpError) {
             setData(createInitialValueRef.current());
           }
@@ -115,8 +131,20 @@ function usePolledResource<T>({
         }
 
         setData(mapResponseRef.current(raw));
+        onPollResultRef.current?.({
+          pollStartedAtMs,
+          pollCompletedAtMs: Date.now(),
+          succeeded: true,
+          statusCode: response.status,
+        });
       } catch (err) {
         onExceptionRef.current?.(err);
+        onPollResultRef.current?.({
+          pollStartedAtMs,
+          pollCompletedAtMs: Date.now(),
+          succeeded: false,
+          statusCode: null,
+        });
         if (alive && resetOnException) {
           setData(createInitialValueRef.current());
         }
@@ -158,6 +186,12 @@ interface TelemetryPollingOptions {
   resetOnHttpError?: boolean;
   onException?: (err: unknown) => void;
   onHttpError?: (statusCode: number) => void;
+  onPollResult?: (meta: {
+    pollStartedAtMs: number;
+    pollCompletedAtMs: number;
+    succeeded: boolean;
+    statusCode: number | null;
+  }) => void;
 }
 
 export function useHeuristicShapes({
@@ -251,6 +285,7 @@ export function useTransferStateQueue({
   resetOnHttpError = false,
   onException,
   onHttpError,
+  onPollResult,
 }: TelemetryPollingOptions): TransferStateQueueTelemetry[] {
   return usePolledResource<TransferStateQueueTelemetry[]>({
     url: '/api/transferstatequeue',
@@ -262,6 +297,7 @@ export function useTransferStateQueue({
     resetOnHttpError,
     onException,
     onHttpError,
+    onPollResult,
   });
 }
 

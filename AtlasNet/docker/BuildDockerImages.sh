@@ -12,18 +12,20 @@ BUILDER_NAME="atlasnet-builder"
 BUILDKITD_CONFIG="${BUILDKITD_CONFIG:-$(dirname "$0")/buildkitd.toml}"
 
 usage() {
-    echo "Usage: $0 [-p platforms] [-f bake_file]"
+    echo "Usage: $0 [-p platforms] [-f bake_file] [-c]"
     echo "  -p    Comma-separated platforms (default: use bake file settings)"
     echo "  -f    Path to docker-bake.json (default: $BAKE_FILE)"
+    echo "  -c    Compatibility flag (accepted, no-op)"
     exit 1
 }
 
 PLATFORMS=""
 
-while getopts "p:f:h" opt; do
+while getopts "p:f:ch" opt; do
     case "$opt" in
         p) PLATFORMS="$OPTARG" ;;
         f) BAKE_FILE="$OPTARG" ;;
+        c) ;;
         h) usage ;;
         *) usage ;;
     esac
