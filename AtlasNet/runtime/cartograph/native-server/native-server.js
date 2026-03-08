@@ -4,11 +4,6 @@ const express = require('express');
 const cors = require('cors');
 const { DEFAULT_PORT, getDatabaseTargets } = require('./config');
 const {
-  COLLECTION_MODE_INTERLINK_HYBRID,
-  normalizeCollectionMode,
-  resolveCollectionMode,
-} = require('./services/collectionMode');
-const {
   probeDatabase,
   readDatabaseRecords,
   resolveSelectedSource,
@@ -23,7 +18,7 @@ const {
 const {
   readHeuristicTypeFromDatabase,
   readShardPlacementFromDatabase,
-} = require('./services/pureDatabaseTelemetry');
+} = require('./services/databaseTelemetry');
 const { readWorkersSnapshot } = require('./services/workersSnapshot');
 
 const app = express();
@@ -37,7 +32,7 @@ try {
 } catch (err) {
   addonLoadError = err;
   console.warn(
-    '[cartograph] Native addon unavailable; pure_database mode will be used when possible.'
+    '[cartograph] Native addon unavailable; using database-backed telemetry where applicable.'
   );
 }
 
@@ -105,36 +100,13 @@ function parseBooleanQueryFlag(value, defaultValue) {
   return defaultValue;
 }
 
-function getRequestedCollectionMode(query) {
-  if (!query || typeof query !== 'object') {
-    return null;
-  }
-
-  const rawCollectionMode =
-    typeof query.collectionMode === 'string'
-      ? query.collectionMode
-      : typeof query.mode === 'string'
-      ? query.mode
-      : '';
-
-  const normalized = normalizeCollectionMode(rawCollectionMode);
-  return normalized || null;
-}
-
-app.get('/networktelemetry', async (req, res) => {
+app.get('/networktelemetry', async (_req, res) => {
   try {
-    const requestedMode = getRequestedCollectionMode(req.query);
-    const mode = resolveCollectionMode(requestedMode);
-    const hybridCollectors =
-      mode === COLLECTION_MODE_INTERLINK_HYBRID
-        ? ensureHybridCollectors()
-        : { addon: null, networkTelemetry: null };
-    const { modeUsed, data } = await collectNetworkTelemetry({
+    const hybridCollectors = ensureHybridCollectors();
+    const data = await collectNetworkTelemetry({
       addon: hybridCollectors.addon,
       networkTelemetry: hybridCollectors.networkTelemetry,
-      requestedMode: mode,
     });
-    res.set('x-cartograph-collection-mode', String(modeUsed));
     res.json(data);
   } catch (err) {
     if (addonLoadError) {
@@ -145,20 +117,13 @@ app.get('/networktelemetry', async (req, res) => {
   }
 });
 
-app.get('/authoritytelemetry', async (req, res) => {
+app.get('/authoritytelemetry', async (_req, res) => {
   try {
-    const requestedMode = getRequestedCollectionMode(req.query);
-    const mode = resolveCollectionMode(requestedMode);
-    const hybridCollectors =
-      mode === COLLECTION_MODE_INTERLINK_HYBRID
-        ? ensureHybridCollectors()
-        : { addon: null, entityLedgersView: null };
-    const { modeUsed, data } = await collectAuthorityTelemetry({
+    const hybridCollectors = ensureHybridCollectors();
+    const data = await collectAuthorityTelemetry({
       addon: hybridCollectors.addon,
       entityLedgersView: hybridCollectors.entityLedgersView,
-      requestedMode: mode,
     });
-    res.set('x-cartograph-collection-mode', String(modeUsed));
     res.json(data);
   } catch (err) {
     if (addonLoadError) {
@@ -169,14 +134,9 @@ app.get('/authoritytelemetry', async (req, res) => {
   }
 });
 
-app.get('/transfermanifest', async (req, res) => {
+app.get('/transfermanifest', async (_req, res) => {
   try {
-    const requestedMode = getRequestedCollectionMode(req.query);
-    const mode = resolveCollectionMode(requestedMode);
-    const { modeUsed, data } = await collectTransferManifest({
-      requestedMode: mode,
-    });
-    res.set('x-cartograph-collection-mode', String(modeUsed));
+    const data = await collectTransferManifest();
     res.json(data);
   } catch (err) {
     if (addonLoadError) {
@@ -187,20 +147,13 @@ app.get('/transfermanifest', async (req, res) => {
   }
 });
 
-app.get('/transferstatequeue', async (req, res) => {
+app.get('/transferstatequeue', async (_req, res) => {
   try {
-    const requestedMode = getRequestedCollectionMode(req.query);
-    const mode = resolveCollectionMode(requestedMode);
-    const hybridCollectors =
-      mode === COLLECTION_MODE_INTERLINK_HYBRID
-        ? ensureHybridCollectors()
-        : { addon: null, transferStateQueueView: null };
-    const { modeUsed, data } = await collectTransferStateQueue({
+    const hybridCollectors = ensureHybridCollectors();
+    const data = await collectTransferStateQueue({
       addon: hybridCollectors.addon,
       transferStateQueueView: hybridCollectors.transferStateQueueView,
-      requestedMode: mode,
     });
-    res.set('x-cartograph-collection-mode', String(modeUsed));
     res.json(data);
   } catch (err) {
     if (addonLoadError) {
@@ -211,19 +164,12 @@ app.get('/transferstatequeue', async (req, res) => {
   }
 });
 
-app.get('/heuristic', async (req, res) => {
+app.get('/heuristic', async (_req, res) => {
   try {
-    const requestedMode = getRequestedCollectionMode(req.query);
-    const mode = resolveCollectionMode(requestedMode);
-    const hybridCollectors =
-      mode === COLLECTION_MODE_INTERLINK_HYBRID
-        ? ensureHybridCollectors()
-        : { addon: null };
-    const { modeUsed, data } = await collectHeuristicShapes({
+    const hybridCollectors = ensureHybridCollectors();
+    const data = await collectHeuristicShapes({
       addon: hybridCollectors.addon,
-      requestedMode: mode,
     });
-    res.set('x-cartograph-collection-mode', String(modeUsed));
     res.json(data);
   } catch (err) {
     if (addonLoadError) {
