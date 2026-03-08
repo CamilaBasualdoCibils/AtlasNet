@@ -19,8 +19,6 @@ void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids, st
         NetworkIdentity id;
         id.Deserialize(br);
 
-        std::cerr << id.ToString() << std::endl;
-
         out_live_ids.push_back(id.ToString());
         out_health.push_back(std::to_string(pair.second));
     }

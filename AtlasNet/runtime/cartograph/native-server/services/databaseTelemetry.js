@@ -815,20 +815,22 @@ async function readTransferManifestFromDatabase() {
   );
 }
 
-async function readNetworkTelemetryFromDatabase() {
+async function readNetworkTelemetryFromDatabase(options = {}) {
+  const includeLiveIds = options.includeLiveIds !== false;
   return (
     (await withInternalDatabase(async (client) => {
-      const idsRaw =
-        typeof client.hkeysBuffer === 'function'
-          ? await client.hkeysBuffer(HEALTH_PING_KEY)
-          : await client.hkeys(HEALTH_PING_KEY);
-
       const liveShardIds = [];
-      if (Array.isArray(idsRaw)) {
-        for (const rawId of idsRaw) {
-          const decoded = decodeNetworkIdentity(rawId).trim();
-          if (decoded.length > 0) {
-            liveShardIds.push(decoded);
+      if (includeLiveIds) {
+        const idsRaw =
+          typeof client.hkeysBuffer === 'function'
+            ? await client.hkeysBuffer(HEALTH_PING_KEY)
+            : await client.hkeys(HEALTH_PING_KEY);
+        if (Array.isArray(idsRaw)) {
+          for (const rawId of idsRaw) {
+            const decoded = decodeNetworkIdentity(rawId).trim();
+            if (decoded.length > 0) {
+              liveShardIds.push(decoded);
+            }
           }
         }
       }

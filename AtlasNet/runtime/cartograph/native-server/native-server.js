@@ -112,14 +112,16 @@ async function respondJson(res, readData, errorMessage, includeAddonError = true
   }
 }
 
-app.get('/networktelemetry', async (_req, res) => {
+app.get('/networktelemetry', async (req, res) => {
   return respondJson(
     res,
     async () => {
       const hybridCollectors = ensureHybridCollectors();
+      const includeLiveIds = parseBooleanQueryFlag(req.query.liveIds, true);
       return collectNetworkTelemetry({
         addon: hybridCollectors.addon,
         networkTelemetry: hybridCollectors.networkTelemetry,
+        includeLiveIds,
       });
     },
     'Network telemetry fetch failed'

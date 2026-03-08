@@ -178,6 +178,7 @@ export default function MapPage() {
   });
   const networkTelemetryLive = useNetworkTelemetry({
     intervalMs: telemetryPollIntervalMs,
+    includeLiveIds: false,
     resetOnException: true,
     resetOnHttpError: false,
   });

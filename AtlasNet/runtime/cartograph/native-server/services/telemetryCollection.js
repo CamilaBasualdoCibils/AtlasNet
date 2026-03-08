@@ -62,7 +62,11 @@ function readTransferStateQueueTelemetry(addon, transferStateQueueView) {
   return events;
 }
 
-async function collectNetworkTelemetry({ addon, networkTelemetry }) {
+async function collectNetworkTelemetry({
+  addon,
+  networkTelemetry,
+  includeLiveIds = true,
+}) {
   const hasAddon = Boolean(
     addon &&
       networkTelemetry &&
@@ -70,9 +74,9 @@ async function collectNetworkTelemetry({ addon, networkTelemetry }) {
       addon.std_vector_std_vector_std_string__
   );
   if (hasAddon) {
-    return readNetworkTelemetry(addon, networkTelemetry);
+    return readNetworkTelemetry(addon, networkTelemetry, { includeLiveIds });
   }
-  return readNetworkTelemetryFromDatabase();
+  return readNetworkTelemetryFromDatabase({ includeLiveIds });
 }
 
 async function collectAuthorityTelemetry({ addon, entityLedgersView }) {

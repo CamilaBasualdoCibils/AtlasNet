@@ -111,7 +111,7 @@ function buildNetworkTelemetry(ids, rows) {
   });
 }
 
-function readNetworkTelemetry(addon, networkTelemetry) {
+function readNetworkTelemetry(addon, networkTelemetry, options = {}) {
   if (
     !addon ||
     !networkTelemetry ||
@@ -120,6 +120,7 @@ function readNetworkTelemetry(addon, networkTelemetry) {
   ) {
     return [];
   }
+  const includeLiveIds = options.includeLiveIds !== false;
 
   const {
     std_vector_std_string_,
@@ -130,7 +131,9 @@ function readNetworkTelemetry(addon, networkTelemetry) {
   const healthVec = new std_vector_std_string_();
   const telemetryVec = new std_vector_std_vector_std_string__();
 
-  networkTelemetry.GetLivePingIDs(idsVec, healthVec);
+  if (includeLiveIds) {
+    networkTelemetry.GetLivePingIDs(idsVec, healthVec);
+  }
   networkTelemetry.GetAllTelemetry(telemetryVec);
 
   const ids = [];

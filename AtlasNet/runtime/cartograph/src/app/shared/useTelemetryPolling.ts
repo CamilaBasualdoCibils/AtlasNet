@@ -266,9 +266,11 @@ export function useNetworkTelemetry({
   resetOnHttpError = false,
   onException,
   onHttpError,
-}: TelemetryPollingOptions): ShardTelemetry[] {
+  includeLiveIds = true,
+}: TelemetryPollingOptions & { includeLiveIds?: boolean }): ShardTelemetry[] {
+  const query = includeLiveIds ? '' : '?liveIds=0';
   return usePolledResource<ShardTelemetry[]>({
-    url: '/api/networktelemetry',
+    url: `/api/networktelemetry${query}`,
     intervalMs,
     enabled,
     createInitialValue: () => [],
