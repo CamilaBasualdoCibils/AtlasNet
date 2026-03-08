@@ -1,7 +1,10 @@
 #pragma once
 
+#include <algorithm>
 #include <boost/describe/enum_to_string.hpp>
+#include <chrono>
 #include <cstddef>
+#include <cstdint>
 #include <deque>
 #include <mutex>
 #include <string>
@@ -14,9 +17,24 @@
 class TransferStateQueueView
 {
 	static constexpr std::size_t kMaxBufferedEvents = 8192;
+	static constexpr std::chrono::milliseconds kEventTTL = std::chrono::milliseconds(45000);
 
 	std::mutex queueMutex;
 	std::deque<EntityHandoffTransferEvent> eventQueue;
+
+	void PruneExpiredEvents(uint64_t nowMs)
+	{
+		const uint64_t ttlMs = static_cast<uint64_t>(kEventTTL.count());
+		const uint64_t cutoffMs = nowMs > ttlMs ? nowMs - ttlMs : 0;
+		eventQueue.erase(
+			std::remove_if(
+				eventQueue.begin(), eventQueue.end(),
+				[cutoffMs](const EntityHandoffTransferEvent& event)
+				{
+					return event.timestampMs < cutoffMs;
+				}),
+			eventQueue.end());
+	}
 
    public:
 	TransferStateQueueView()
@@ -25,6 +43,11 @@ class TransferStateQueueView
 			[this](const EntityHandoffTransferEvent& event)
 			{
 				std::lock_guard<std::mutex> lock(queueMutex);
+				const uint64_t nowMs = static_cast<uint64_t>(
+					std::chrono::duration_cast<std::chrono::milliseconds>(
+						std::chrono::system_clock::now().time_since_epoch())
+						.count());
+				PruneExpiredEvents(nowMs);
 				eventQueue.push_back(event);
 				if (eventQueue.size() > kMaxBufferedEvents)
 				{
@@ -38,6 +61,11 @@ class TransferStateQueueView
 		std::deque<EntityHandoffTransferEvent> drained;
 		{
 			std::lock_guard<std::mutex> lock(queueMutex);
+			const uint64_t nowMs = static_cast<uint64_t>(
+				std::chrono::duration_cast<std::chrono::milliseconds>(
+					std::chrono::system_clock::now().time_since_epoch())
+					.count());
+			PruneExpiredEvents(nowMs);
 			if (eventQueue.empty())
 			{
 				outRows.clear();

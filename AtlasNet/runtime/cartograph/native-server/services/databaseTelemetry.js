@@ -17,13 +17,11 @@ const SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY = 'Snapshot:BoundIDs -> EntityList';
 const SNAPSHOT_BOUNDIDS_TO_TRANSFORMS_KEY = 'Snapshot:BoundIDs -> Transforms';
 const NODE_MANIFEST_SHARD_NODE_KEY = 'Node Manifest Shard_Node';
 const TRANSFER_MANIFEST_KEY = 'Transfer::TransferManifest';
-const TRANSFER_STATE_QUEUE_KEY = 'Transfer::TransferStateQueue';
 
 const AUTHORITY_TELEMETRY_COLUMN_COUNT = 7;
 const NETWORK_TELEMETRY_COLUMN_COUNT = 13;
 const GRID_SHAPE_SERIALIZED_SIZE_BYTES = 28;
 const CLAIMED_OWNER_MAP_CACHE_TTL_MS = 500;
-const TRANSFER_STATE_QUEUE_ENTRY_TTL_MS = 30_000;
 const TRANSFER_STAGE_SOURCE_STATES = new Set(['eNone', 'ePrepare', 'eUnknown']);
 const VALID_TRANSFER_STAGES = new Set([
   'eNone',
@@ -666,72 +664,6 @@ function parseTransferEntityIds(raw) {
   return out;
 }
 
-function normalizeTransferState(value, stage) {
-  const raw = toTrimmedString(value).toLowerCase();
-  if (raw === 'source' || raw === 'target') {
-    return raw;
-  }
-  return deriveTransferLinkState(stage);
-}
-
-function normalizeTransferStateQueueEventPayload(payload) {
-  if (payload == null) {
-    return null;
-  }
-
-  let parsed = null;
-  if (Buffer.isBuffer(payload)) {
-    try {
-      parsed = JSON.parse(payload.toString('utf8'));
-    } catch {
-      return null;
-    }
-  } else if (typeof payload === 'string') {
-    const raw = payload.trim();
-    if (!raw) {
-      return null;
-    }
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return null;
-    }
-  } else if (payload && typeof payload === 'object') {
-    parsed = payload;
-  }
-
-  if (!parsed || typeof parsed !== 'object') {
-    return null;
-  }
-
-  const stage = normalizeTransferStage(parsed.stage ?? parsed.Stage);
-  const fromId = resolveTransferIdentity(parsed, 'fromId', 'From(64)');
-  const toId = resolveTransferIdentity(parsed, 'toId', 'To(64)');
-  const entityIds = parseTransferEntityIds(parsed.entityIds ?? parsed.EntityIDs);
-  if (!fromId || !toId || entityIds.length === 0) {
-    return null;
-  }
-
-  const transferId =
-    toTrimmedString(parsed.transferId ?? parsed.id ?? parsed.TransferID) ||
-    `${fromId}->${toId}:${stage}`;
-
-  const timestampMsRaw = Number(parsed.timestampMs ?? parsed.tsMs);
-  const timestampMs = Number.isFinite(timestampMsRaw)
-    ? Math.floor(timestampMsRaw)
-    : Date.now();
-
-  return {
-    transferId,
-    fromId,
-    toId,
-    stage,
-    state: normalizeTransferState(parsed.state ?? parsed.linkState ?? parsed.State, stage),
-    entityIds,
-    timestampMs,
-  };
-}
-
 async function readHeuristicOwnershipMapFromDatabase(client) {
   const versionRaw =
     typeof client.getBuffer === 'function'
@@ -878,38 +810,6 @@ async function readTransferManifestFromDatabase() {
       }
 
       rows.sort((left, right) => left.transferId.localeCompare(right.transferId));
-      return rows;
-    })) || []
-  );
-}
-
-async function readTransferStateQueueFromDatabase() {
-  return (
-    (await withInternalDatabase(async (client) => {
-      const results = await client
-        .multi()
-        .lrange(TRANSFER_STATE_QUEUE_KEY, 0, -1)
-        .del(TRANSFER_STATE_QUEUE_KEY)
-        .exec();
-
-      const [lrangeErr, rawEntries] = Array.isArray(results) ? results[0] || [] : [];
-      if (lrangeErr || !Array.isArray(rawEntries)) {
-        return [];
-      }
-
-      const rows = [];
-      const cutoffMs = Date.now() - TRANSFER_STATE_QUEUE_ENTRY_TTL_MS;
-      for (const rawEntry of rawEntries) {
-        const row = normalizeTransferStateQueueEventPayload(rawEntry);
-        if (!row) {
-          continue;
-        }
-        if (row.timestampMs < cutoffMs) {
-          continue;
-        }
-        rows.push(row);
-      }
-
       return rows;
     })) || []
   );
@@ -1263,7 +1163,6 @@ async function readHeuristicTypeFromDatabase() {
 module.exports = {
   readAuthorityTelemetryFromDatabase,
   readTransferManifestFromDatabase,
-  readTransferStateQueueFromDatabase,
   readNetworkTelemetryFromDatabase,
   readShardPlacementFromDatabase,
   readHeuristicShapesFromDatabase,

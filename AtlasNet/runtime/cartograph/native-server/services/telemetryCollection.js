@@ -8,7 +8,6 @@ const {
   readNetworkTelemetryFromDatabase,
   readHeuristicShapesFromDatabase,
   readTransferManifestFromDatabase,
-  readTransferStateQueueFromDatabase,
 } = require('./databaseTelemetry');
 
 async function collectNetworkTelemetry({ addon, networkTelemetry }) {
@@ -58,7 +57,7 @@ async function collectTransferStateQueue({ addon, transferStateQueueView }) {
   if (hasAddon) {
     return readTransferStateQueueTelemetry(addon, transferStateQueueView);
   }
-  return readTransferStateQueueFromDatabase();
+  return [];
 }
 
 module.exports = {
