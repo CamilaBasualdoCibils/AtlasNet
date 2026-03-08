@@ -59,7 +59,6 @@ const DEFAULT_PLAYBACK_TIME_TICK_MS = 10;
 const MIN_PLAYBACK_TIME_TICK_MS = 10;
 const MAX_PLAYBACK_TIME_TICK_MS = 100;
 const PLAYBACK_TIME_TICK_STEP_MS = 10;
-const TRANSFER_EVENT_MAX_AGE_MS = 1;
 
 const EMPTY_DETAILS_STATE: EntityDatabaseDetailsState = {
   loading: false,
@@ -175,6 +174,10 @@ export default function MapPage() {
 
   const telemetryPollIntervalMs =
     pollIntervalMs >= POLL_DISABLED_AT_MS ? 0 : pollIntervalMs;
+  const transferEventMaxAgeMs =
+    telemetryPollIntervalMs > 0
+      ? telemetryPollIntervalMs
+      : Math.max(MIN_POLL_INTERVAL_MS, pollIntervalMs);
   const baseShapesLive = useHeuristicShapes({
     intervalMs: telemetryPollIntervalMs,
     resetOnException: true,
@@ -224,13 +227,13 @@ export default function MapPage() {
       lastTimestampByEntity: transferLastTimestampByEntityRef.current,
       snapshotWindowMs: SNAPSHOT_WINDOW_MS,
       timestampSlotMs: TRANSFER_STATE_TIMESTAMP_SLOT_MS,
-      maxEventAgeMs: TRANSFER_EVENT_MAX_AGE_MS,
+      maxEventAgeMs: transferEventMaxAgeMs,
     });
 
     transferTimelineRef.current = ingested.timeline;
     transferLastTimestampByEntityRef.current = ingested.lastTimestampByEntity;
     setActiveTransferQueueByEntity(ingested.activeByEntity);
-  }, [transferStateQueueLive]);
+  }, [transferEventMaxAgeMs, transferStateQueueLive]);
 
   const transferManifestLiveResolved = useMemo(
     () => buildLiveTransferManifest(activeTransferQueueByEntity),
