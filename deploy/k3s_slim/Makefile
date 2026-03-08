@@ -7,8 +7,8 @@ SHELL := /usr/bin/env bash
 # ssh-setup
 # sudo-setup
 # k3s-deploy
+# platform (if want exposed proxy)
 # atlasnet-deploy
-
 
 
 
@@ -18,7 +18,7 @@ ENV_EXPORTS := SERVER_IPS SERVER_SSH_USER WORKER_IPS WORKER_SSH_USER SSH_KEY K3S
 -include $(ENV_FILE)
 export $(ENV_EXPORTS)
 
-.PHONY: bootstrap nodes k3s-deploy ssh-setup sudo-setup port-cleanup cleanup-cluster dependency-setup atlasnet-push atlasnet-deploy atlasnet-status atlasnet-merge-manifests
+.PHONY: bootstrap nodes k3s-deploy platform ssh-setup sudo-setup port-cleanup cleanup-cluster dependency-setup atlasnet-push atlasnet-deploy atlasnet-status atlasnet-merge-manifests
 
 bootstrap:
 	./scripts/bootstrap.sh
@@ -56,6 +56,9 @@ k3s-deploy:
 	  --ssh-key "$${SSH_KEY:-$$HOME/.ssh/id_ed25519}" \
 	  --use-sudo "$${K3SUP_USE_SUDO:-true}" \
 	  --api-endpoint "$${K3S_API_ENDPOINT:-$$primary}"
+
+platform:
+	./scripts/platform.sh
 
 atlasnet-deploy:
 	./scripts/deploy_atlasnet.sh

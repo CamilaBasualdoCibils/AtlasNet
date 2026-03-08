@@ -96,6 +96,7 @@ Use a single multi-arch image tag (e.g. `ATLASNET_IMAGE_TAG=latest` with a manif
 - `make dependency-setup`: install iptables and set cgroup flags on all nodes (run once; reboot nodes if cmdline changed).
 - `make port-cleanup`: free configured required ports on server(s) + worker(s).
 - `make k3s-deploy`: install k3s on first server, join additional servers (HA) and workers.
+- `make platform`: install optional platform add-ons via `scripts/platform.sh` (metrics-server, MetalLB, ingress-nginx, cert-manager) based on `.env` flags.
 - `make nodes`: quick `kubectl get nodes -o wide` using project kubeconfig.
 - `make atlasnet-push`: tag and push existing local AtlasNet images to Docker Hub.
 - `make atlasnet-merge-manifests`: create multi-arch manifest tag from per-arch tags (see .env `ATLASNET_IMAGE_TAG_*`).
