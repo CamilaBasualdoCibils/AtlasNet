@@ -22,6 +22,15 @@ interface EdgeLabelOverlay {
   text: string;
 }
 
+interface EdgeLabelStyle {
+  fontPx?: number;
+  boxHeight?: number;
+  padX?: number;
+  background?: string;
+  border?: string;
+  text?: string;
+}
+
 interface Vec3 {
   x: number;
   y: number;
@@ -61,6 +70,14 @@ const MIN_INTERACTION_SENSITIVITY = 0;
 const MIN_PITCH = -Math.PI / 2 + 0.02;
 const MAX_PITCH = Math.PI / 2 - 0.02;
 const AUTHORITY_ENTITY_WORLD_RADIUS = 1.8;
+const TRANSFER_STATE_LABEL_STYLE: EdgeLabelStyle = {
+  fontPx: 12.5,
+  boxHeight: 18,
+  padX: 7,
+  background: 'rgba(15, 23, 42, 0.94)',
+  border: 'rgba(148, 163, 184, 0.5)',
+  text: 'rgba(241, 245, 249, 0.98)',
+};
 
 function clamp(value: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, value));
@@ -518,27 +535,34 @@ export function createMapRenderer({
     }
   }
 
-  function drawEdgeLabel(screenX: number, screenY: number, text: string): void {
+  function drawEdgeLabel(
+    screenX: number,
+    screenY: number,
+    text: string,
+    style: EdgeLabelStyle = {}
+  ): void {
     if (!text) {
       return;
     }
 
+    const fontPx = Number.isFinite(style.fontPx) ? Number(style.fontPx) : 11;
+    const padX = Number.isFinite(style.padX) ? Number(style.padX) : 6;
+    const boxHeight = Number.isFinite(style.boxHeight) ? Number(style.boxHeight) : 16;
+
     ctx.save();
-    ctx.font = '11px sans-serif';
+    ctx.font = `${fontPx}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     const textWidth = ctx.measureText(text).width;
-    const padX = 6;
-    const boxHeight = 16;
     const boxWidth = textWidth + padX * 2;
     const boxX = screenX - boxWidth / 2;
     const boxY = screenY - boxHeight / 2;
-    ctx.fillStyle = 'rgba(15, 23, 42, 0.86)';
-    ctx.strokeStyle = 'rgba(148, 163, 184, 0.35)';
+    ctx.fillStyle = style.background ?? 'rgba(15, 23, 42, 0.86)';
+    ctx.strokeStyle = style.border ?? 'rgba(148, 163, 184, 0.35)';
     ctx.lineWidth = 1;
     ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
     ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
-    ctx.fillStyle = '#cbd5e1';
+    ctx.fillStyle = style.text ?? '#cbd5e1';
     ctx.fillText(text, screenX, screenY + 0.5);
     ctx.restore();
   }
@@ -611,7 +635,7 @@ export function createMapRenderer({
       const from = worldToScreen2D(pts[0].x, pts[0].y);
       const to = worldToScreen2D(pts[pts.length - 1].x, pts[pts.length - 1].y);
       const position = offsetLineLabelPosition(from, to);
-      drawEdgeLabel(position.x, position.y, text);
+      drawEdgeLabel(position.x, position.y, text, TRANSFER_STATE_LABEL_STYLE);
     }
   }
 
@@ -637,7 +661,7 @@ export function createMapRenderer({
         continue;
       }
       const position = offsetLineLabelPosition(from, to);
-      drawEdgeLabel(position.x, position.y, text);
+      drawEdgeLabel(position.x, position.y, text, TRANSFER_STATE_LABEL_STYLE);
     }
   }
 
