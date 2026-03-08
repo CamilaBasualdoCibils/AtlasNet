@@ -33,6 +33,14 @@ import { useCtrlDragEntitySelection } from './entityInspector/useCtrlDragEntityS
 import { MapHud } from './components/MapHud';
 import { MapPlaybackBar } from './components/MapPlaybackBar';
 import { ShardHoverTooltip } from './components/ShardHoverTooltip';
+import {
+  buildLiveTransferManifest,
+  ingestTransferQueueEvents,
+  resolveTransferManifestAtCursor,
+  selectSnapshotTransferEvents,
+  snapToNearestTickMs,
+  type ActiveTransferQueueEvent,
+} from './playback/transferPlaybackTimeline';
 
 const DEFAULT_POLL_INTERVAL_MS = 50;
 const MIN_POLL_INTERVAL_MS = 1;
@@ -67,15 +75,6 @@ interface PlaybackFrame {
   transferManifest: TransferManifestTelemetry[];
   shardPlacement: ShardPlacementTelemetry[];
   entityDetailsByEntityId: Record<string, EntityDatabaseDetailsState>;
-}
-
-interface ActiveTransferQueueEvent {
-  event: TransferStateQueueTelemetry;
-}
-
-interface LatestTransferEventByEntity {
-  event: TransferStateQueueTelemetry;
-  sourceTimestampMs: number;
 }
 
 function clonePlaybackPayload(
@@ -129,74 +128,6 @@ function snapshotDetailsByEntityId(
     out[entityId] = state;
   }
   return out;
-}
-
-function normalizeTimestampMs(value: unknown, fallbackMs: number): number {
-  const timestampMsRaw = Number(value);
-  if (!Number.isFinite(timestampMsRaw) || timestampMsRaw <= 0) {
-    return fallbackMs;
-  }
-  return Math.floor(timestampMsRaw);
-}
-
-function snapToNearestTickMs(valueMs: number, tickMs: number): number {
-  const safeTickMs = Math.max(1, Math.floor(tickMs));
-  return Math.round(valueMs / safeTickMs) * safeTickMs;
-}
-
-function resolveTransferManifestAtCursor(
-  events: TransferStateQueueTelemetry[],
-  cursorMs: number,
-  holdMs: number
-): TransferManifestTelemetry[] {
-  if (!Array.isArray(events) || events.length === 0) {
-    return [];
-  }
-
-  const minTimestampMs = cursorMs - Math.max(0, holdMs);
-  const latestByEntity = new Map<string, TransferStateQueueTelemetry>();
-
-  for (const event of events) {
-    if (!event) {
-      continue;
-    }
-
-    const timestampMs = normalizeTimestampMs(event.timestampMs, 0);
-    if (timestampMs <= 0) {
-      continue;
-    }
-    if (timestampMs < minTimestampMs || timestampMs > cursorMs) {
-      continue;
-    }
-
-    const entityIds = Array.isArray(event.entityIds) ? event.entityIds : [];
-    for (const rawEntityId of entityIds) {
-      const entityId = String(rawEntityId || '').trim();
-      if (!entityId) {
-        continue;
-      }
-
-      latestByEntity.set(entityId, {
-        ...event,
-        entityIds: [entityId],
-        timestampMs,
-      });
-    }
-  }
-
-  const rows: TransferManifestTelemetry[] = [];
-  for (const [entityId, event] of latestByEntity.entries()) {
-    rows.push({
-      transferId: `${event.transferId}:${entityId}:${event.timestampMs}`,
-      fromId: event.fromId,
-      toId: event.toId,
-      stage: event.stage,
-      state: event.state,
-      entityIds: [entityId],
-      timestampMs: event.timestampMs,
-    });
-  }
-  return rows;
 }
 
 export default function MapPage() {
@@ -285,84 +216,26 @@ export default function MapPage() {
       transferPollStartedAtMsRef.current > 0
         ? transferPollStartedAtMsRef.current
         : nowMs;
-    const timeline = transferTimelineRef.current;
-    const lastTimestampByEntity = transferLastTimestampByEntityRef.current;
-    const latestEventByEntity = new Map<string, LatestTransferEventByEntity>();
-    const latestByEntity: Record<string, ActiveTransferQueueEvent> = {};
+    const ingested = ingestTransferQueueEvents({
+      events,
+      nowMs,
+      pollStartedAtMs,
+      timeline: transferTimelineRef.current,
+      lastTimestampByEntity: transferLastTimestampByEntityRef.current,
+      snapshotWindowMs: SNAPSHOT_WINDOW_MS,
+      timestampSlotMs: TRANSFER_STATE_TIMESTAMP_SLOT_MS,
+      maxEventAgeMs: TRANSFER_EVENT_MAX_AGE_MS,
+    });
 
-    for (const event of events) {
-      const baseTimestampMs = normalizeTimestampMs(event?.timestampMs, nowMs);
-      const snappedTimestampMs = snapToNearestTickMs(
-        baseTimestampMs,
-        TRANSFER_STATE_TIMESTAMP_SLOT_MS
-      );
-      const entityIds = Array.isArray(event?.entityIds) ? event.entityIds : [];
-      for (const rawEntityId of entityIds) {
-        const entityId = String(rawEntityId || '').trim();
-        if (!entityId) {
-          continue;
-        }
-
-        const previousTimestampMs = lastTimestampByEntity.get(entityId) ?? -1;
-        let adjustedTimestampMs = snappedTimestampMs;
-        while (adjustedTimestampMs <= previousTimestampMs) {
-          adjustedTimestampMs += TRANSFER_STATE_TIMESTAMP_SLOT_MS;
-        }
-        lastTimestampByEntity.set(entityId, adjustedTimestampMs);
-
-        const perEntityEvent: TransferStateQueueTelemetry = {
-          ...event,
-          entityIds: [entityId],
-          timestampMs: adjustedTimestampMs,
-        };
-        timeline.push(perEntityEvent);
-        const currentLatest = latestEventByEntity.get(entityId);
-        if (
-          !currentLatest ||
-          baseTimestampMs > currentLatest.sourceTimestampMs ||
-          (baseTimestampMs === currentLatest.sourceTimestampMs &&
-            perEntityEvent.timestampMs >= currentLatest.event.timestampMs)
-        ) {
-          latestEventByEntity.set(entityId, {
-            event: perEntityEvent,
-            sourceTimestampMs: baseTimestampMs,
-          });
-        }
-      }
-    }
-
-    const cutoffMs = nowMs - SNAPSHOT_WINDOW_MS;
-    while (timeline.length > 0 && timeline[0].timestampMs < cutoffMs) {
-      timeline.shift();
-    }
-
-    for (const [entityId, latest] of latestEventByEntity.entries()) {
-      const ageMs = Math.max(0, pollStartedAtMs - latest.sourceTimestampMs);
-      if (ageMs > TRANSFER_EVENT_MAX_AGE_MS) {
-        continue;
-      }
-      latestByEntity[entityId] = { event: latest.event };
-    }
-
-    setActiveTransferQueueByEntity(latestByEntity);
+    transferTimelineRef.current = ingested.timeline;
+    transferLastTimestampByEntityRef.current = ingested.lastTimestampByEntity;
+    setActiveTransferQueueByEntity(ingested.activeByEntity);
   }, [transferStateQueueLive]);
 
-  const transferManifestLiveResolved = useMemo(() => {
-    const rows: TransferManifestTelemetry[] = [];
-    for (const [entityId, active] of Object.entries(activeTransferQueueByEntity)) {
-      const event = active.event;
-      rows.push({
-        transferId: `${event.transferId}:${entityId}:${event.timestampMs}`,
-        fromId: event.fromId,
-        toId: event.toId,
-        stage: event.stage,
-        state: event.state,
-        entityIds: [entityId],
-        timestampMs: event.timestampMs,
-      });
-    }
-    return rows;
-  }, [activeTransferQueueByEntity]);
+  const transferManifestLiveResolved = useMemo(
+    () => buildLiveTransferManifest(activeTransferQueueByEntity),
+    [activeTransferQueueByEntity]
+  );
 
   const playbackStartMs =
     playbackFrames && playbackFrames.length > 0
@@ -552,17 +425,11 @@ export default function MapPage() {
     }
     const snapshot = [...frames];
     const endMs = snapshot[snapshot.length - 1].capturedAtMs;
-    const timeline = transferTimelineRef.current;
-    let transferEvents = timeline.filter(
-      (event) =>
-        event.timestampMs >= endMs - SNAPSHOT_WINDOW_MS && event.timestampMs <= endMs
-    );
-    if (transferEvents.length === 0 && timeline.length > 0) {
-      const latestEventTimestampMs = timeline[timeline.length - 1].timestampMs;
-      transferEvents = timeline.filter(
-        (event) => event.timestampMs >= latestEventTimestampMs - SNAPSHOT_WINDOW_MS
-      );
-    }
+    const transferEvents = selectSnapshotTransferEvents({
+      timeline: transferTimelineRef.current,
+      endMs,
+      snapshotWindowMs: SNAPSHOT_WINDOW_MS,
+    });
     setPlaybackFrames(snapshot);
     setPlaybackTransferEvents(transferEvents);
     setPlaybackCursorMs(endMs);
