@@ -274,6 +274,7 @@ void WatchDog::Init()
 			HealthManifest::Get().RemovePing(key);
 			if (ID_fail.IsInternal() && ID_fail != NetworkCredentials::Get().GetID())
 			{
+				NetworkManifest::Get().RemoveTelemetry(ID_fail);
 				ServerRegistry::Get().DeRegisterSelf(ID_fail);
 			}
 		});

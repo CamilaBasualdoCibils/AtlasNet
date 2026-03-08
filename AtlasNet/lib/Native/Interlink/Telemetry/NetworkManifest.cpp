@@ -65,6 +65,17 @@ void NetworkManifest::TelemetryUpdate(const NetworkIdentity& identifier)
 	}
 }
 
+void NetworkManifest::RemoveTelemetry(const NetworkIdentity& identifier)
+{
+#if NETWORK_MANIFEST_USE_PLAIN_STRING_DB
+	InternalDB::Get()->HDel(NetworkTelemetryTable, {identifier.ToString()});
+#else
+	ByteWriter fieldBW;
+	fieldBW.uuid(identifier.ID);
+	InternalDB::Get()->HDel(NetworkTelemetryTable, {std::string(fieldBW.as_string_view())});
+#endif
+}
+
 // Produces rows of telemetry, one row per connection.
 // Column 0 is shardId (the Redis hash field), then ConnectionTelemetry fields after it.
 void NetworkManifest::GetAllTelemetry(std::vector<std::vector<std::string>>& out_telemetry)

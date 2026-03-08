@@ -29,11 +29,11 @@ public:
  void ScheduleNetworkPings();
 
  void TelemetryUpdate(const NetworkIdentity& identifier);
+ void RemoveTelemetry(const NetworkIdentity& identifier);
 
  //=================================
  //===          GET              ===
  //=================================
  void GetAllTelemetry(std::vector<std::vector<std::string>>& out_telemetry);
 };
-
 
