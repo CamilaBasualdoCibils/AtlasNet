@@ -43,8 +43,9 @@ const NETWORK_IDENTITY_TYPE_BY_CODE = {
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-let internalDbClient = null;
-let internalDbConnectPromise = null;
+const DEFAULT_INTERNAL_DB_CLIENT_SCOPE = 'default';
+const internalDbClients = new Map();
+const internalDbConnectPromises = new Map();
 let heuristicClaimedOwnerCache = null;
 let heuristicClaimedOwnerCacheAtMs = 0;
 let heuristicClaimedOwnerCacheVersion = null;
@@ -67,49 +68,73 @@ function createRedisClient(target, connectTimeout) {
   });
 }
 
-async function getInternalDatabaseClient() {
+function resolveInternalDbClientScope(rawScope) {
+  const scope = String(rawScope ?? '').trim();
+  return scope.length > 0 ? scope : DEFAULT_INTERNAL_DB_CLIENT_SCOPE;
+}
+
+function resetInternalDatabaseClient(scope, client) {
+  try {
+    if (client && typeof client.disconnect === 'function') {
+      client.disconnect();
+    }
+  } catch {}
+  internalDbClients.delete(scope);
+  internalDbConnectPromises.delete(scope);
+}
+
+async function getInternalDatabaseClient(options = {}) {
+  const scope = resolveInternalDbClientScope(options.clientScope);
   const target = getInternalDatabaseTarget();
   if (!target) {
     return null;
   }
 
-  if (!internalDbClient) {
-    internalDbClient = createRedisClient(target, SNAPSHOT_CONNECT_TIMEOUT_MS);
+  if (!internalDbClients.has(scope)) {
+    internalDbClients.set(
+      scope,
+      createRedisClient(target, SNAPSHOT_CONNECT_TIMEOUT_MS)
+    );
+  }
+  const client = internalDbClients.get(scope);
+  if (!client) {
+    return null;
   }
 
-  const status = String(internalDbClient.status || '');
+  const status = String(client.status || '');
   if (status === 'ready') {
-    return internalDbClient;
+    return client;
   }
 
-  if (!internalDbConnectPromise) {
-    internalDbConnectPromise = internalDbClient
+  if (!internalDbConnectPromises.has(scope)) {
+    internalDbConnectPromises.set(
+      scope,
+      client
       .connect()
       .catch((err) => {
-        internalDbClient = null;
+        resetInternalDatabaseClient(scope, client);
         throw err;
       })
       .finally(() => {
-        internalDbConnectPromise = null;
-      });
+        internalDbConnectPromises.delete(scope);
+      })
+    );
   }
 
-  await internalDbConnectPromise;
-  return internalDbClient;
+  await internalDbConnectPromises.get(scope);
+  return internalDbClients.get(scope) || null;
 }
 
-async function withInternalDatabase(readFn) {
-  const client = await getInternalDatabaseClient();
+async function withInternalDatabase(readFn, options = {}) {
+  const scope = resolveInternalDbClientScope(options.clientScope);
+  const client = await getInternalDatabaseClient({ clientScope: scope });
   if (!client) {
     return null;
   }
   try {
     return await readFn(client);
   } catch (err) {
-    try {
-      client.disconnect();
-    } catch {}
-    internalDbClient = null;
+    resetInternalDatabaseClient(scope, client);
     throw err;
   }
 }
@@ -704,7 +729,8 @@ async function readLegacyHeuristicManifest(client) {
   return normalizeRedisJsonPayload(payload);
 }
 
-async function readAuthorityTelemetryFromDatabase() {
+async function readAuthorityTelemetryFromDatabase(options = {}) {
+  const clientScope = options.dbClientScope || 'authority-telemetry';
   return (
     (await withInternalDatabase(async (client) => {
       const all = await client.hgetall(AUTHORITY_TELEMETRY_KEY);
@@ -767,7 +793,7 @@ async function readAuthorityTelemetryFromDatabase() {
 
       snapshotRows.sort((left, right) => left[0].localeCompare(right[0]));
       return snapshotRows;
-    })) || []
+    }, { clientScope })) || []
   );
 }
 
@@ -817,6 +843,7 @@ async function readTransferManifestFromDatabase() {
 
 async function readNetworkTelemetryFromDatabase(options = {}) {
   const includeLiveIds = options.includeLiveIds !== false;
+  const clientScope = options.dbClientScope || 'network-telemetry';
   return (
     (await withInternalDatabase(async (client) => {
       const liveShardIds = [];
@@ -855,7 +882,7 @@ async function readNetworkTelemetryFromDatabase(options = {}) {
       }
 
       return buildNetworkTelemetry(liveShardIds, rows);
-    })) || []
+    }, { clientScope })) || []
   );
 }
 
@@ -1053,7 +1080,8 @@ async function readHeuristicShapesFromDatabase() {
   );
 }
 
-async function readHeuristicClaimedOwnersFromDatabase() {
+async function readHeuristicClaimedOwnersFromDatabase(options = {}) {
+  const clientScope = options.dbClientScope || 'authority-owners';
   const now = Date.now();
   const owners = await withInternalDatabase(async (client) => {
     const { version, ownerByBoundId } =
@@ -1119,7 +1147,7 @@ async function readHeuristicClaimedOwnersFromDatabase() {
     heuristicClaimedOwnerCacheAtMs = Date.now();
     heuristicClaimedOwnerCacheVersion = version;
     return legacyOwnerByBoundId;
-  });
+  }, { clientScope });
 
   return owners && typeof owners === 'object'
     ? owners
