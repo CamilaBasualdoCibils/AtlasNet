@@ -47,12 +47,15 @@ kubectl get pods -A -o wide
 
 `kubectl` should work directly because `make k3s-deploy` writes `~/.kube/config`.
 
-## Optional: Apply custom manifests
-Use the project kubeconfig produced by this workflow:
+## Optional: Render chart locally
+Use the project kubeconfig and render/apply the shared AtlasNet chart manually:
 ```bash
 export KUBECONFIG="$(pwd)/config/kubeconfig"
-kubectl apply -f ../manifests/
-kubectl get deploy,svc -n default
+helm template atlasnet ../charts/atlasnet \
+  --namespace "${ATLASNET_K8S_NAMESPACE:-atlasnet}" \
+  --set-string serverNodeName="<control-plane-node-name>" \
+  | kubectl apply -f -
+kubectl get deploy,statefulset,daemonset,svc -n "${ATLASNET_K8S_NAMESPACE:-atlasnet}"
 ```
 
 ## 4) Deploy AtlasNet workloads (Docker Hub images)

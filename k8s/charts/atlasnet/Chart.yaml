@@ -1,6 +1,6 @@
 apiVersion: v2
 name: atlasnet
-description: AtlasNet runtime workloads for k3s
+description: AtlasNet runtime workloads for k3s and k3d
 type: application
 version: 0.1.0
 appVersion: "0.1.0"

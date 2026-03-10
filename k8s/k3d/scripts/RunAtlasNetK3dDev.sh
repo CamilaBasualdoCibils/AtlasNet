@@ -8,7 +8,7 @@ SWARM_STACK_PREFIX="${ATLASNET_SWARM_STACK_PREFIX:-atlasnet_dev}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K3D_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${K3D_DIR}/../.." && pwd)"
-MANIFEST_TEMPLATE="${REPO_ROOT}/k8s/manifests/atlasnet-dev.yaml"
+CHART_DIR="${REPO_ROOT}/k8s/charts/atlasnet"
 K3D_SERVER_COUNT="${ATLASNET_K3D_SERVERS:-1}"
 K3D_AGENT_COUNT="${ATLASNET_K3D_AGENTS:-2}"
 PORT_WAIT_TIMEOUT="${ATLASNET_K3D_PORT_WAIT_TIMEOUT:-15}"
@@ -16,6 +16,11 @@ SERVER_NODE_NAME="${ATLASNET_SERVER_NODE_NAME:-k3d-${CLUSTER_NAME}-server-0}"
 SKIP_RESTART_ON_FRESH_CLUSTER="${ATLASNET_K3D_SKIP_RESTART_ON_FRESH_CLUSTER:-1}"
 CORE_ROLLOUT_MODE="${ATLASNET_K3D_CORE_ROLLOUT_MODE:-parallel}"
 WAIT_FOR_SHARD_READY="${ATLASNET_K3D_WAIT_FOR_SHARD_READY:-1}"
+IMAGE_PULL_POLICY="${ATLASNET_IMAGE_PULL_POLICY:-IfNotPresent}"
+WATCHDOG_IMAGE_NAME="${ATLASNET_WATCHDOG_IMAGE:-watchdog:latest}"
+PROXY_IMAGE_NAME="${ATLASNET_PROXY_IMAGE:-proxy:latest}"
+CARTOGRAPH_IMAGE_NAME="${ATLASNET_CARTOGRAPH_IMAGE:-cartograph:latest}"
+HELM_RELEASE_NAME="${ATLASNET_HELM_RELEASE_NAME:-atlasnet}"
 HOST_KUBECONFIG_PATH=""
 
 is_nonnegative_int() {
@@ -53,14 +58,15 @@ require_cmd() {
 
 require_cmd docker "Hint: ensure Docker CLI is installed and /var/run/docker.sock is mounted."
 require_cmd k3d "Hint: rebuild devcontainer with feature ghcr.io/rio/features/k3d:1 enabled."
+require_cmd helm "Hint: install helm (devcontainer feature ghcr.io/devcontainers/features/kubectl-helm-minikube:1)."
 
 if ! docker info >/dev/null 2>&1; then
     echo "Error: docker daemon is not reachable."
     exit 1
 fi
 
-if [[ ! -f "$MANIFEST_TEMPLATE" ]]; then
-    echo "Error: manifest template not found at '$MANIFEST_TEMPLATE'."
+if [[ ! -d "$CHART_DIR" ]]; then
+    echo "Error: Helm chart not found at '$CHART_DIR'."
     exit 1
 fi
 
@@ -578,11 +584,21 @@ mkdir -p "$(dirname "$IMAGE_CACHE_FILE")"
     done | sort
 } >"$IMAGE_CACHE_FILE"
 
-sed \
-    -e "s|__NAMESPACE__|$NAMESPACE|g" \
-    -e "s|__SHARD_IMAGE__|$SHARD_IMAGE_NAME|g" \
-    -e "s|__SERVER_NODE_NAME__|$SERVER_NODE_NAME|g" \
-    "$MANIFEST_TEMPLATE" >"$TEMP_MANIFEST"
+helm template "$HELM_RELEASE_NAME" "$CHART_DIR" \
+    --namespace "$NAMESPACE" \
+    --set-string serverNodeName="$SERVER_NODE_NAME" \
+    --set-string imagePullPolicy="$IMAGE_PULL_POLICY" \
+    --set-string images.watchdog="$WATCHDOG_IMAGE_NAME" \
+    --set-string images.proxy="$PROXY_IMAGE_NAME" \
+    --set-string images.shard="$SHARD_IMAGE_NAME" \
+    --set-string images.cartograph="$CARTOGRAPH_IMAGE_NAME" \
+    >"$TEMP_MANIFEST"
+
+if [[ "$KUBECTL_MODE" == "incluster" ]]; then
+    printf 'apiVersion: v1\nkind: Namespace\nmetadata:\n  name: %s\n' "$NAMESPACE" | "${KUBECTL[@]}" apply -f - >/dev/null
+else
+    kctl create namespace "$NAMESPACE" --dry-run=client -o yaml | kctl apply -f - >/dev/null
+fi
 
 echo "==> Applying Kubernetes manifest..."
 if [[ "$KUBECTL_MODE" == "incluster" ]]; then
