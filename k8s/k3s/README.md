@@ -69,7 +69,7 @@ make atlasnet-deploy
 make atlasnet-status
 ```
 
-The deploy script reuses the AtlasNet Kubernetes runtime manifest and rewrites images to Docker Hub refs.
+The deploy script installs/upgrades the `atlasnet` Helm release from `../charts/atlasnet` and injects image refs from `.env`.
 
 `make atlasnet-push` now assumes you have already built local Docker images on your dev machine
 (for example via the CMake target `sandbox_atlasnet_run`, which runs `AtlasnetDockerBuild_Fast`

@@ -1,0 +1,10 @@
+serverNodeName: ""
+
+imagePullPolicy: IfNotPresent
+
+images:
+  watchdog: watchdog:latest
+  proxy: proxy:latest
+  shard: sandbox-server:latest
+  cartograph: cartograph:latest
+  internaldb: valkey/valkey-bundle:latest

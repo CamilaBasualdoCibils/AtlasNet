@@ -2,17 +2,12 @@
 set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-REPO_ROOT="$(cd "$ROOT_DIR/../.." && pwd)"
 ENV_FILE="$ROOT_DIR/.env"
 KUBECONFIG_PATH="$ROOT_DIR/config/kubeconfig"
-BASE_TEMPLATE="$REPO_ROOT/k8s/manifests/atlasnet-dev.yaml"
+CHART_DIR="$ROOT_DIR/../charts/atlasnet"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it first."; }
-
-escape_sed_replacement() {
-  printf '%s' "$1" | sed -e 's/[&|]/\\&/g'
-}
 
 ensure_namespace() {
   kubectl create namespace "$ATLASNET_K8S_NAMESPACE" --dry-run=client -o yaml | kubectl apply -f - >/dev/null
@@ -116,7 +111,7 @@ wait_for_shard_ready() {
 }
 
 [[ -f "$KUBECONFIG_PATH" ]] || die "Missing kubeconfig: $KUBECONFIG_PATH (run make k3s-deploy first)"
-[[ -f "$BASE_TEMPLATE" ]] || die "Missing base template: $BASE_TEMPLATE"
+[[ -d "$CHART_DIR" ]] || die "Missing Helm chart dir: $CHART_DIR"
 
 if [[ -f "$ENV_FILE" ]]; then
   # shellcheck disable=SC1090
@@ -131,6 +126,7 @@ fi
 : "${DOCKERHUB_SECRET_NAME:=dockerhub-regcred}"
 : "${DOCKERHUB_EMAIL:=atlasnet@example.invalid}"
 : "${ATLASNET_WAIT_FOR_SHARD_READY:=true}"
+: "${ATLASNET_HELM_RELEASE_NAME:=atlasnet}"
 
 if [[ -z "${DOCKERHUB_NAMESPACE}" ]] && [[ -z "${ATLASNET_WATCHDOG_IMAGE:-}" || -z "${ATLASNET_PROXY_IMAGE:-}" || -z "${ATLASNET_SANDBOX_SERVER_IMAGE:-}" || -z "${ATLASNET_CARTOGRAPH_IMAGE:-}" ]]; then
   die "Set DOCKERHUB_NAMESPACE in .env, or explicitly set all ATLASNET_*_IMAGE values."
@@ -142,6 +138,7 @@ fi
 : "${ATLASNET_SANDBOX_SERVER_IMAGE:=${DOCKERHUB_NAMESPACE}/sandbox-server:${ATLASNET_IMAGE_TAG}}"
 
 need_cmd kubectl
+need_cmd helm
 
 export KUBECONFIG="$KUBECONFIG_PATH"
 
@@ -161,20 +158,15 @@ warn_if_mixed_arch_cluster
 ensure_namespace
 configure_dockerhub_pull_secret
 
-TMP_MANIFEST="$(mktemp /tmp/atlasnet-k3s-deploy-XXXX.yaml)"
-trap 'rm -f "$TMP_MANIFEST"' EXIT
-
-sed \
-  -e "s|__NAMESPACE__|$(escape_sed_replacement "$ATLASNET_K8S_NAMESPACE")|g" \
-  -e "s|__SHARD_IMAGE__|$(escape_sed_replacement "$ATLASNET_SANDBOX_SERVER_IMAGE")|g" \
-  -e "s|__SERVER_NODE_NAME__|$(escape_sed_replacement "$SERVER_NODE_NAME")|g" \
-  -e "s|image: watchdog:latest|image: $(escape_sed_replacement "$ATLASNET_WATCHDOG_IMAGE")|g" \
-  -e "s|image: proxy:latest|image: $(escape_sed_replacement "$ATLASNET_PROXY_IMAGE")|g" \
-  -e "s|image: cartograph:latest|image: $(escape_sed_replacement "$ATLASNET_CARTOGRAPH_IMAGE")|g" \
-  -e "s|imagePullPolicy: IfNotPresent|imagePullPolicy: $(escape_sed_replacement "$ATLASNET_IMAGE_PULL_POLICY")|g" \
-  "$BASE_TEMPLATE" >"$TMP_MANIFEST"
-
-kubectl apply -f "$TMP_MANIFEST" >/dev/null
+helm upgrade --install "$ATLASNET_HELM_RELEASE_NAME" "$CHART_DIR" \
+  --namespace "$ATLASNET_K8S_NAMESPACE" \
+  --set-string serverNodeName="$SERVER_NODE_NAME" \
+  --set-string imagePullPolicy="$ATLASNET_IMAGE_PULL_POLICY" \
+  --set-string images.watchdog="$ATLASNET_WATCHDOG_IMAGE" \
+  --set-string images.proxy="$ATLASNET_PROXY_IMAGE" \
+  --set-string images.shard="$ATLASNET_SANDBOX_SERVER_IMAGE" \
+  --set-string images.cartograph="$ATLASNET_CARTOGRAPH_IMAGE" \
+  --wait >/dev/null
 
 # Migration cleanup for earlier revisions where workload kinds differed.
 kubectl -n "$ATLASNET_K8S_NAMESPACE" delete daemonset atlasnet-watchdog --ignore-not-found >/dev/null || true
