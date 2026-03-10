@@ -116,27 +116,19 @@ if docker stack ls --format '{{.Name}}' | grep -w "$STACK_NAME" > /dev/null; the
         sleep 1
     done
 fi
-# Ensure overlay network exists
-#if ! docker network ls --format '{{.Name}}' | grep -w AtlasNet > /dev/null; then
-#    echo "Creating overlay network 'AtlasNet'..."
-#    docker network create --driver overlay AtlasNet
-#fi
-# Deploy the stack using the temporary file
-# Remove any existing networks with "AtlasNet" in the name
+# Ensure the old stack network is fully gone before redeploy.
+STACK_NETWORK_NAME="${STACK_NAME}_AtlasNet"
+if docker network ls --format '{{.Name}}' | grep -Fx "$STACK_NETWORK_NAME" > /dev/null; then
+    echo "Removing network $STACK_NETWORK_NAME"
+    docker network rm "$STACK_NETWORK_NAME" > /dev/null 2>&1 || true
 
-NETWORK_NAME_PATTERN="AtlasNet"
-
-# Function to remove networks matching the pattern
-remove_networks() {
-    docker network ls --format '{{.Name}}' | grep "$NETWORK_NAME_PATTERN" || true | while read -r net; do
-        if [ -n "$net" ]; then
-            echo "Removing network: $net"
-            docker network rm "$net" || true
-        fi
+    echo "Waiting for network to terminate..."
+    while docker network ls --format '{{.Name}}' | grep -Fx "$STACK_NETWORK_NAME" > /dev/null; do
+        sleep 1
     done
-}
+fi
 
-remove_networks
+# Deploy the stack using the temporary file
 
 echo "Deploying Docker stack '$STACK_NAME' with shard image '$SHARD_IMAGE_NAME'..."
 set +e  # temporarily allow failure
