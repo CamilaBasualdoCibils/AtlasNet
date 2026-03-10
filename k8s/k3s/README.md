@@ -1,4 +1,4 @@
-# k3s slim
+# k3s
 
 Minimal automation to build a small k3s cluster with `k3sup`. Supports an arbitrary number of server and worker nodes; node architecture (amd64, arm64, etc.) does not need to be specified—use multi-arch images so each node pulls the correct image.
 
@@ -46,6 +46,14 @@ kubectl get pods -A -o wide
 ```
 
 `kubectl` should work directly because `make k3s-deploy` writes `~/.kube/config`.
+
+## Optional: Apply custom manifests
+Use the project kubeconfig produced by this workflow:
+```bash
+export KUBECONFIG="$(pwd)/config/kubeconfig"
+kubectl apply -f ../manifests/
+kubectl get deploy,svc -n default
+```
 
 ## 4) Deploy AtlasNet workloads (Docker Hub images)
 
