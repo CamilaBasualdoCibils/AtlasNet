@@ -184,6 +184,73 @@ is_running() {
   pgrep -f "$FOLLOW_SCRIPT_PATH" >/dev/null 2>&1
 }
 
+have_cmd() {
+  command -v "$1" >/dev/null 2>&1
+}
+
+detect_node_profile() {
+  NODE_PROFILE="headless"
+  NODE_PRETTY_NAME=""
+
+  if [[ -r /etc/os-release ]]; then
+    # shellcheck disable=SC1091
+    source /etc/os-release
+    NODE_PRETTY_NAME="${PRETTY_NAME:-${NAME:-}}"
+  fi
+
+  local pretty_name_lc=""
+  pretty_name_lc="$(printf '%s' "$NODE_PRETTY_NAME" | tr '[:upper:]' '[:lower:]')"
+
+  if [[ "$pretty_name_lc" == *"ubuntu server"* ]]; then
+    NODE_PROFILE="ubuntu-server"
+    return 0
+  fi
+
+  if [[ "$pretty_name_lc" == *"kubuntu"* ]] || have_cmd konsole; then
+    NODE_PROFILE="kubuntu"
+    return 0
+  fi
+
+  if [[ "$pretty_name_lc" == *"ubuntu"* ]] && have_cmd x-terminal-emulator; then
+    NODE_PROFILE="ubuntu-desktop"
+    return 0
+  fi
+
+  if have_cmd x-terminal-emulator; then
+    NODE_PROFILE="ubuntu-desktop"
+  fi
+}
+
+prepare_desktop_launch_env() {
+  DESKTOP_DISPLAY="${DISPLAY:-:0}"
+  DESKTOP_WAYLAND_DISPLAY=""
+  DESKTOP_XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  DESKTOP_DBUS_SESSION_BUS_ADDRESS=""
+  DESKTOP_XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+
+  if [[ -S "$DESKTOP_XDG_RUNTIME_DIR/wayland-0" ]]; then
+    DESKTOP_WAYLAND_DISPLAY="wayland-0"
+  fi
+
+  if [[ -S "$DESKTOP_XDG_RUNTIME_DIR/bus" ]]; then
+    DESKTOP_DBUS_SESSION_BUS_ADDRESS="unix:path=$DESKTOP_XDG_RUNTIME_DIR/bus"
+  fi
+}
+
+desktop_launch_available() {
+  prepare_desktop_launch_env
+
+  if [[ -S /tmp/.X11-unix/X0 ]]; then
+    return 0
+  fi
+
+  if [[ -n "$DESKTOP_WAYLAND_DISPLAY" ]]; then
+    return 0
+  fi
+
+  return 1
+}
+
 ensure_passwordless_sudo() {
   if sudo -n true >/dev/null 2>&1; then
     return 0
@@ -212,24 +279,73 @@ start_headless() {
   return 1
 }
 
-start_desktop_terminal() {
-  command -v x-terminal-emulator >/dev/null 2>&1 || return 1
+launch_desktop_terminal() {
+  local terminal_name="$1"
+  shift
+  local env_args=()
 
-  local display xdg_runtime_dir
-  display="${DISPLAY:-:0}"
-  xdg_runtime_dir="/run/user/$(id -u)"
+  env_args+=("DISPLAY=${DESKTOP_DISPLAY:-:0}")
+  env_args+=("XDG_RUNTIME_DIR=${DESKTOP_XDG_RUNTIME_DIR:-/run/user/$(id -u)}")
+  env_args+=("XAUTHORITY=${DESKTOP_XAUTHORITY:-$HOME/.Xauthority}")
 
+  if [[ -n "${DESKTOP_WAYLAND_DISPLAY:-}" ]]; then
+    env_args+=("WAYLAND_DISPLAY=$DESKTOP_WAYLAND_DISPLAY")
+  fi
+
+  if [[ -n "${DESKTOP_DBUS_SESSION_BUS_ADDRESS:-}" ]]; then
+    env_args+=("DBUS_SESSION_BUS_ADDRESS=$DESKTOP_DBUS_SESSION_BUS_ADDRESS")
+  fi
+
+  : > "$LAUNCH_LOG_PATH"
   nohup env \
-    DISPLAY="$display" \
-    XDG_RUNTIME_DIR="$xdg_runtime_dir" \
-    x-terminal-emulator -e bash -lc "$FOLLOW_SCRIPT_PATH; exec bash" \
-    >"$LAUNCH_LOG_PATH" 2>&1 < /dev/null &
+    "${env_args[@]}" \
+    "$@" >"$LAUNCH_LOG_PATH" 2>&1 < /dev/null &
 
   sleep 1
   if is_running; then
-    echo "started (desktop terminal)"
+    echo "started (desktop terminal: ${terminal_name})"
     return 0
   fi
+
+  return 1
+}
+
+start_desktop_terminal() {
+  detect_node_profile
+  echo "detected node profile: ${NODE_PROFILE}${NODE_PRETTY_NAME:+ ($NODE_PRETTY_NAME)}"
+
+  case "$NODE_PROFILE" in
+    kubuntu)
+      if ! have_cmd konsole; then
+        echo "kubuntu profile detected but 'konsole' is unavailable; falling back to headless"
+        return 1
+      fi
+      if ! desktop_launch_available; then
+        echo "kubuntu profile detected but no graphical session socket was found; falling back to headless"
+        return 1
+      fi
+      if launch_desktop_terminal "konsole" konsole --noclose -e bash -lc "$FOLLOW_SCRIPT_PATH"; then
+        return 0
+      fi
+      ;;
+    ubuntu-desktop)
+      if ! have_cmd x-terminal-emulator; then
+        echo "ubuntu desktop profile detected but 'x-terminal-emulator' is unavailable; falling back to headless"
+        return 1
+      fi
+      if ! desktop_launch_available; then
+        echo "ubuntu desktop profile detected but no graphical session socket was found; falling back to headless"
+        return 1
+      fi
+      if launch_desktop_terminal "x-terminal-emulator" x-terminal-emulator -e bash -lc "$FOLLOW_SCRIPT_PATH; exec bash"; then
+        return 0
+      fi
+      ;;
+    ubuntu-server|headless)
+      echo "headless node detected; using background follower"
+      return 1
+      ;;
+  esac
 
   echo "desktop launch attempted but follower not running; launch log:"
   tail -n 20 "$LAUNCH_LOG_PATH" 2>/dev/null || true
