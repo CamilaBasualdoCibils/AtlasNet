@@ -172,7 +172,6 @@ helm upgrade --install "$ATLASNET_HELM_RELEASE_NAME" "$CHART_DIR" \
 kubectl -n "$ATLASNET_K8S_NAMESPACE" delete daemonset atlasnet-watchdog --ignore-not-found >/dev/null || true
 kubectl -n "$ATLASNET_K8S_NAMESPACE" delete deployment atlasnet-cartograph --ignore-not-found >/dev/null || true
 kubectl -n "$ATLASNET_K8S_NAMESPACE" delete deployment atlasnet-proxy --ignore-not-found >/dev/null || true
-kubectl -n "$ATLASNET_K8S_NAMESPACE" delete svc atlasnet-internaldb --ignore-not-found >/dev/null || true
 
 echo "Waiting for core workloads ..."
 kubectl -n "$ATLASNET_K8S_NAMESPACE" rollout status deployment/atlasnet-internaldb --timeout=180s

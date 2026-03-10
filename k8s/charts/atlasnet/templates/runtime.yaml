@@ -303,6 +303,21 @@ spec:
       port: 6379
       targetPort: redis
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: atlasnet-internaldb
+  namespace: {{ .Release.Namespace }}
+spec:
+  type: ClusterIP
+  selector:
+    app: atlasnet-internaldb
+  ports:
+    - name: redis
+      protocol: TCP
+      port: 6379
+      targetPort: redis
+---
 apiVersion: apps/v1
 kind: DaemonSet
 metadata:

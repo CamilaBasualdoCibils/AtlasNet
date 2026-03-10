@@ -620,9 +620,6 @@ else
     echo "==> Restarting updated workloads..."
     restart_marked_apps
 fi
-# Remove legacy resources from earlier k3d migration iterations.
-kctl -n "$NAMESPACE" delete svc atlasnet-internaldb --ignore-not-found >/dev/null || true
-
 echo "==> Waiting for core workloads..."
 if [[ "$CORE_ROLLOUT_MODE" == "parallel" ]]; then
     wait_for_apps_rollout_parallel "180s" \
