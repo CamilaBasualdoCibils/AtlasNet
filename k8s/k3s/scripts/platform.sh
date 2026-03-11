@@ -30,6 +30,13 @@ fi
 : "${METALLB_ADDRESS_POOL:=}"
 : "${INSTALL_INGRESS_NGINX:=false}"
 : "${INSTALL_CERT_MANAGER:=false}"
+: "${INSTALL_CHAOS_MESH:=false}"
+: "${CHAOS_MESH_NAMESPACE:=chaos-mesh}"
+: "${CHAOS_MESH_HELM_RELEASE_NAME:=chaos-mesh}"
+: "${CHAOS_MESH_VERSION:=}"
+: "${CHAOS_MESH_DASHBOARD_SERVICE_TYPE:=LoadBalancer}"
+: "${CHAOS_MESH_DASHBOARD_LB_IP:=}"
+: "${CHAOS_MESH_DASHBOARD_SECURITY_MODE:=false}"
 
 need_cmd kubectl
 need_cmd helm
@@ -38,6 +45,78 @@ export KUBECONFIG="$KUBECONFIG_PATH"
 
 # Namespaces
 kubectl create namespace platform >/dev/null 2>&1 || true
+
+wait_for_service_load_balancer() {
+  local namespace="$1"
+  local service_name="$2"
+  local timeout_seconds="${3:-120}"
+  local elapsed=0
+  local endpoint=""
+
+  while ((elapsed < timeout_seconds)); do
+    endpoint="$(kubectl -n "$namespace" get service "$service_name" -o jsonpath='{.status.loadBalancer.ingress[0].ip}{.status.loadBalancer.ingress[0].hostname}' 2>/dev/null || true)"
+    if [[ -n "$endpoint" ]]; then
+      printf '%s\n' "$endpoint"
+      return 0
+    fi
+
+    sleep 1
+    elapsed=$((elapsed + 1))
+  done
+
+  return 1
+}
+
+first_node_access_ip() {
+  local node_ip=""
+
+  node_ip="$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="ExternalIP")].address}' 2>/dev/null || true)"
+  if [[ -z "$node_ip" ]]; then
+    node_ip="$(kubectl get nodes -o jsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}' 2>/dev/null || true)"
+  fi
+
+  printf '%s\n' "$node_ip"
+}
+
+report_service_access() {
+  local label="$1"
+  local namespace="$2"
+  local service_name="$3"
+  local scheme="${4:-http}"
+  local path="${5:-}"
+  local service_type service_port endpoint node_ip node_port
+
+  if ! kubectl -n "$namespace" get service "$service_name" >/dev/null 2>&1; then
+    return 0
+  fi
+
+  service_type="$(kubectl -n "$namespace" get service "$service_name" -o jsonpath='{.spec.type}' 2>/dev/null || true)"
+  service_port="$(kubectl -n "$namespace" get service "$service_name" -o jsonpath='{.spec.ports[0].port}' 2>/dev/null || true)"
+  service_port="${service_port:-80}"
+
+  case "$service_type" in
+    LoadBalancer)
+      endpoint="$(wait_for_service_load_balancer "$namespace" "$service_name" 60 || true)"
+      if [[ -n "$endpoint" ]]; then
+        echo " - ${label}: ${scheme}://${endpoint}:${service_port}${path}"
+      else
+        echo " - ${label}: service is LoadBalancer but external IP is still pending"
+      fi
+      ;;
+    NodePort)
+      node_ip="$(first_node_access_ip)"
+      node_port="$(kubectl -n "$namespace" get service "$service_name" -o jsonpath='{.spec.ports[0].nodePort}' 2>/dev/null || true)"
+      if [[ -n "$node_ip" && -n "$node_port" ]]; then
+        echo " - ${label}: ${scheme}://${node_ip}:${node_port}${path}"
+      else
+        echo " - ${label}: service is NodePort but no node endpoint was detected"
+      fi
+      ;;
+    *)
+      echo " - ${label}: service type is ${service_type:-unknown}; use kubectl port-forward if you need host access"
+      ;;
+  esac
+}
 
 install_metrics_server() {
   # Lightweight metrics server for `kubectl top`.
@@ -129,6 +208,54 @@ install_cert_manager() {
   helm upgrade --install cert-manager jetstack/cert-manager     --namespace cert-manager     --set crds.enabled=true     --wait
 }
 
+install_chaos_mesh() {
+  helm repo add chaos-mesh https://charts.chaos-mesh.org >/dev/null
+  helm repo update >/dev/null
+
+  kubectl create namespace "$CHAOS_MESH_NAMESPACE" >/dev/null 2>&1 || true
+
+  local -a helm_args=(
+    upgrade
+    --install
+    "$CHAOS_MESH_HELM_RELEASE_NAME"
+    chaos-mesh/chaos-mesh
+    --namespace
+    "$CHAOS_MESH_NAMESPACE"
+    --set
+    chaosDaemon.runtime=containerd
+    --set
+    chaosDaemon.socketPath=/run/k3s/containerd/containerd.sock
+    --set
+    dashboard.create=true
+    --set
+    "dashboard.securityMode=${CHAOS_MESH_DASHBOARD_SECURITY_MODE}"
+    --wait
+  )
+
+  if [[ -n "$CHAOS_MESH_VERSION" ]]; then
+    helm_args+=(--version "$CHAOS_MESH_VERSION")
+  fi
+
+  helm "${helm_args[@]}"
+
+  if ! kubectl -n "$CHAOS_MESH_NAMESPACE" get service chaos-dashboard >/dev/null 2>&1; then
+    die "Chaos Mesh installed, but service '$CHAOS_MESH_NAMESPACE/chaos-dashboard' was not found."
+  fi
+
+  local load_balancer_ip_json="null"
+  if [[ -n "$CHAOS_MESH_DASHBOARD_LB_IP" ]]; then
+    load_balancer_ip_json="\"$CHAOS_MESH_DASHBOARD_LB_IP\""
+  fi
+
+  kubectl -n "$CHAOS_MESH_NAMESPACE" patch service chaos-dashboard --type merge \
+    -p "{\"spec\":{\"type\":\"$CHAOS_MESH_DASHBOARD_SERVICE_TYPE\",\"loadBalancerIP\":${load_balancer_ip_json}}}" >/dev/null
+
+  if [[ "$CHAOS_MESH_DASHBOARD_SERVICE_TYPE" == "LoadBalancer" && "$INSTALL_METALLB" != "true" ]]; then
+    echo "   warning: Chaos Mesh dashboard is exposed as LoadBalancer, but INSTALL_METALLB is not true."
+    echo "            The service may remain pending until your cluster has a load balancer implementation."
+  fi
+}
+
 echo "Installing platform add-ons (safe to re-run) ..."
 if [[ "$INSTALL_METRICS_SERVER" == "true" ]]; then
   echo " - metrics-server"
@@ -150,6 +277,16 @@ if [[ "$INSTALL_CERT_MANAGER" == "true" ]]; then
   install_cert_manager
 fi
 
+if [[ "$INSTALL_CHAOS_MESH" == "true" ]]; then
+  echo " - Chaos Mesh"
+  install_chaos_mesh
+fi
+
 echo
 echo "Done. Current pods:"
 kubectl get pods -A | head -n 50
+
+echo
+echo "Host access:"
+report_service_access "Chaos Mesh dashboard" "$CHAOS_MESH_NAMESPACE" "chaos-dashboard"
+report_service_access "Cartograph" "${ATLASNET_K8S_NAMESPACE:-atlasnet}" "atlasnet-cartograph"
