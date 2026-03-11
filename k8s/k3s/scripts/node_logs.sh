@@ -188,60 +188,120 @@ have_cmd() {
   command -v "$1" >/dev/null 2>&1
 }
 
-detect_node_profile() {
-  NODE_PROFILE="headless"
-  NODE_PRETTY_NAME=""
+NODE_PRETTY_NAME=""
+LOCAL_SESSION_ID=""
+LOCAL_SESSION_UID=""
+LOCAL_SESSION_USER=""
+LOCAL_SESSION_TYPE=""
+LOCAL_SESSION_TTY=""
+LOCAL_SESSION_DISPLAY=""
+LOCAL_SESSION_HOME=""
+DESKTOP_DISPLAY=""
+DESKTOP_XAUTHORITY=""
+DESKTOP_XDG_RUNTIME_DIR=""
+DESKTOP_WAYLAND_DISPLAY=""
+DESKTOP_DBUS_SESSION_BUS_ADDRESS=""
 
-  if [[ -r /etc/os-release ]]; then
-    # shellcheck disable=SC1091
-    source /etc/os-release
-    NODE_PRETTY_NAME="${PRETTY_NAME:-${NAME:-}}"
+if [[ -r /etc/os-release ]]; then
+  # shellcheck disable=SC1091
+  source /etc/os-release
+  NODE_PRETTY_NAME="${PRETTY_NAME:-${NAME:-}}"
+fi
+
+discover_local_session() {
+  [[ -n "$LOCAL_SESSION_ID" ]] && return 0
+  have_cmd loginctl || return 1
+
+  local session_id best_rank
+  best_rank=999
+
+  while read -r session_id _; do
+    [[ -n "$session_id" ]] || continue
+
+    local active remote state session_type session_uid session_tty session_display session_name rank
+    active="$(loginctl show-session "$session_id" -p Active --value 2>/dev/null || true)"
+    remote="$(loginctl show-session "$session_id" -p Remote --value 2>/dev/null || true)"
+    state="$(loginctl show-session "$session_id" -p State --value 2>/dev/null || true)"
+    session_type="$(loginctl show-session "$session_id" -p Type --value 2>/dev/null || true)"
+    session_uid="$(loginctl show-session "$session_id" -p User --value 2>/dev/null || true)"
+    session_tty="$(loginctl show-session "$session_id" -p TTY --value 2>/dev/null || true)"
+    session_display="$(loginctl show-session "$session_id" -p Display --value 2>/dev/null || true)"
+    session_name="$(loginctl show-session "$session_id" -p Name --value 2>/dev/null || true)"
+
+    [[ "$remote" == "no" ]] || continue
+    [[ "$active" == "yes" || "$state" == "active" ]] || continue
+    [[ -n "$session_uid" ]] || continue
+
+    case "$session_type" in
+      wayland|x11)
+        rank=0
+        ;;
+      tty)
+        rank=1
+        ;;
+      *)
+        continue
+        ;;
+    esac
+
+    if ((rank < best_rank)); then
+      best_rank="$rank"
+      LOCAL_SESSION_ID="$session_id"
+      LOCAL_SESSION_UID="$session_uid"
+      LOCAL_SESSION_USER="$session_name"
+      LOCAL_SESSION_TYPE="$session_type"
+      LOCAL_SESSION_TTY="$session_tty"
+      LOCAL_SESSION_DISPLAY="$session_display"
+    fi
+  done < <(loginctl list-sessions --no-legend 2>/dev/null || true)
+
+  [[ -n "$LOCAL_SESSION_ID" ]] || return 1
+
+  if [[ -z "$LOCAL_SESSION_USER" && -n "$LOCAL_SESSION_UID" ]]; then
+    LOCAL_SESSION_USER="$(id -nu "$LOCAL_SESSION_UID" 2>/dev/null || true)"
   fi
+  [[ -n "$LOCAL_SESSION_USER" ]] || return 1
 
-  local pretty_name_lc=""
-  pretty_name_lc="$(printf '%s' "$NODE_PRETTY_NAME" | tr '[:upper:]' '[:lower:]')"
-
-  if [[ "$pretty_name_lc" == *"ubuntu server"* ]]; then
-    NODE_PROFILE="ubuntu-server"
-    return 0
-  fi
-
-  if [[ "$pretty_name_lc" == *"kubuntu"* ]] || have_cmd konsole; then
-    NODE_PROFILE="kubuntu"
-    return 0
-  fi
-
-  if [[ "$pretty_name_lc" == *"ubuntu"* ]] && have_cmd x-terminal-emulator; then
-    NODE_PROFILE="ubuntu-desktop"
-    return 0
-  fi
-
-  if have_cmd x-terminal-emulator; then
-    NODE_PROFILE="ubuntu-desktop"
-  fi
+  LOCAL_SESSION_HOME="$(getent passwd "$LOCAL_SESSION_USER" 2>/dev/null | cut -d: -f6)"
+  [[ -n "$LOCAL_SESSION_HOME" ]] || LOCAL_SESSION_HOME="$HOME"
+  return 0
 }
 
 prepare_desktop_launch_env() {
-  DESKTOP_DISPLAY="${DISPLAY:-:0}"
+  if ! discover_local_session; then
+    return 1
+  fi
+
+  [[ "$LOCAL_SESSION_TYPE" == "x11" || "$LOCAL_SESSION_TYPE" == "wayland" ]] || return 1
+
+  DESKTOP_DISPLAY="${LOCAL_SESSION_DISPLAY:-:0}"
   DESKTOP_WAYLAND_DISPLAY=""
-  DESKTOP_XDG_RUNTIME_DIR="/run/user/$(id -u)"
+  DESKTOP_XDG_RUNTIME_DIR="/run/user/${LOCAL_SESSION_UID}"
   DESKTOP_DBUS_SESSION_BUS_ADDRESS=""
-  DESKTOP_XAUTHORITY="${XAUTHORITY:-$HOME/.Xauthority}"
+  DESKTOP_XAUTHORITY="${LOCAL_SESSION_HOME}/.Xauthority"
 
   if [[ -S "$DESKTOP_XDG_RUNTIME_DIR/wayland-0" ]]; then
     DESKTOP_WAYLAND_DISPLAY="wayland-0"
+  elif [[ -S "$DESKTOP_XDG_RUNTIME_DIR/wayland-1" ]]; then
+    DESKTOP_WAYLAND_DISPLAY="wayland-1"
   fi
 
   if [[ -S "$DESKTOP_XDG_RUNTIME_DIR/bus" ]]; then
     DESKTOP_DBUS_SESSION_BUS_ADDRESS="unix:path=$DESKTOP_XDG_RUNTIME_DIR/bus"
   fi
+
+  return 0
 }
 
 desktop_launch_available() {
-  prepare_desktop_launch_env
+  prepare_desktop_launch_env || return 1
 
-  if [[ -S /tmp/.X11-unix/X0 ]]; then
-    return 0
+  if [[ "${DESKTOP_DISPLAY:-}" =~ ^:([0-9]+)(\.[0-9]+)?$ ]]; then
+    local display_num
+    display_num="${BASH_REMATCH[1]}"
+    if [[ -S "/tmp/.X11-unix/X${display_num}" ]]; then
+      return 0
+    fi
   fi
 
   if [[ -n "$DESKTOP_WAYLAND_DISPLAY" ]]; then
@@ -285,8 +345,8 @@ launch_desktop_terminal() {
   local env_args=()
 
   env_args+=("DISPLAY=${DESKTOP_DISPLAY:-:0}")
-  env_args+=("XDG_RUNTIME_DIR=${DESKTOP_XDG_RUNTIME_DIR:-/run/user/$(id -u)}")
-  env_args+=("XAUTHORITY=${DESKTOP_XAUTHORITY:-$HOME/.Xauthority}")
+  env_args+=("XDG_RUNTIME_DIR=${DESKTOP_XDG_RUNTIME_DIR}")
+  env_args+=("XAUTHORITY=${DESKTOP_XAUTHORITY}")
 
   if [[ -n "${DESKTOP_WAYLAND_DISPLAY:-}" ]]; then
     env_args+=("WAYLAND_DISPLAY=$DESKTOP_WAYLAND_DISPLAY")
@@ -297,7 +357,7 @@ launch_desktop_terminal() {
   fi
 
   : > "$LAUNCH_LOG_PATH"
-  nohup env \
+  nohup sudo -n -u "$LOCAL_SESSION_USER" env \
     "${env_args[@]}" \
     "$@" >"$LAUNCH_LOG_PATH" 2>&1 < /dev/null &
 
@@ -310,44 +370,66 @@ launch_desktop_terminal() {
   return 1
 }
 
-start_desktop_terminal() {
-  detect_node_profile
-  echo "detected node profile: ${NODE_PROFILE}${NODE_PRETTY_NAME:+ ($NODE_PRETTY_NAME)}"
+start_terminal_on_local_display() {
+  if ! discover_local_session; then
+    echo "no active local login session found${NODE_PRETTY_NAME:+ on $NODE_PRETTY_NAME}; falling back to background follower"
+    return 1
+  fi
 
-  case "$NODE_PROFILE" in
-    kubuntu)
-      if ! have_cmd konsole; then
-        echo "kubuntu profile detected but 'konsole' is unavailable; falling back to headless"
+  echo "detected local session: id=${LOCAL_SESSION_ID} user=${LOCAL_SESSION_USER} type=${LOCAL_SESSION_TYPE}${LOCAL_SESSION_TTY:+ tty=${LOCAL_SESSION_TTY}}${NODE_PRETTY_NAME:+ os=\"$NODE_PRETTY_NAME\"}"
+
+  case "$LOCAL_SESSION_TYPE" in
+    tty)
+      local tty_path
+      tty_path="/dev/${LOCAL_SESSION_TTY}"
+      if [[ ! -c "$tty_path" ]]; then
+        echo "active local tty '$tty_path' is unavailable; falling back to background follower"
         return 1
       fi
-      if ! desktop_launch_available; then
-        echo "kubuntu profile detected but no graphical session socket was found; falling back to headless"
-        return 1
-      fi
-      if launch_desktop_terminal "konsole" konsole --noclose -e bash -lc "$FOLLOW_SCRIPT_PATH"; then
+
+      : > "$LAUNCH_LOG_PATH"
+      nohup sudo -n bash -lc "exec bash '$FOLLOW_SCRIPT_PATH' <'$tty_path' >'$tty_path' 2>&1" \
+        >"$LAUNCH_LOG_PATH" 2>&1 < /dev/null &
+
+      sleep 1
+      if is_running; then
+        echo "started (local tty: ${LOCAL_SESSION_TTY})"
         return 0
       fi
       ;;
-    ubuntu-desktop)
-      if ! have_cmd x-terminal-emulator; then
-        echo "ubuntu desktop profile detected but 'x-terminal-emulator' is unavailable; falling back to headless"
-        return 1
-      fi
+    x11|wayland)
       if ! desktop_launch_available; then
-        echo "ubuntu desktop profile detected but no graphical session socket was found; falling back to headless"
+        echo "local graphical session detected but its display socket is unavailable; falling back to background follower"
         return 1
       fi
-      if launch_desktop_terminal "x-terminal-emulator" x-terminal-emulator -e bash -lc "$FOLLOW_SCRIPT_PATH; exec bash"; then
-        return 0
+
+      if have_cmd konsole; then
+        if launch_desktop_terminal \
+          "konsole" \
+          konsole --noclose -e bash -lc "$FOLLOW_SCRIPT_PATH"; then
+          return 0
+        fi
       fi
-      ;;
-    ubuntu-server|headless)
-      echo "headless node detected; using background follower"
-      return 1
+
+      if have_cmd gnome-terminal; then
+        if launch_desktop_terminal \
+          "gnome-terminal" \
+          gnome-terminal -- bash -lc "$FOLLOW_SCRIPT_PATH; exec bash"; then
+          return 0
+        fi
+      fi
+
+      if have_cmd x-terminal-emulator; then
+        if launch_desktop_terminal \
+          "x-terminal-emulator" \
+          x-terminal-emulator -e bash -lc "$FOLLOW_SCRIPT_PATH; exec bash"; then
+          return 0
+        fi
+      fi
       ;;
   esac
 
-  echo "desktop launch attempted but follower not running; launch log:"
+  echo "local terminal launch attempted but follower not running; launch log:"
   tail -n 20 "$LAUNCH_LOG_PATH" 2>/dev/null || true
   return 1
 }
@@ -367,7 +449,7 @@ write_follow_script
 case "$ACTION" in
   start)
     ensure_passwordless_sudo
-    if start_desktop_terminal; then
+    if start_terminal_on_local_display; then
       exit 0
     fi
     start_headless
