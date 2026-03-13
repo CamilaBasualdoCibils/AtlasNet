@@ -51,28 +51,6 @@ kubectl get pods -A -o wide
 ### Optional: Platform add-ons and host access
 `make platform` installs optional cluster add-ons from `.env`.
 
-For Chaos Mesh on the same LAN-style access path as Cartograph, enable these in `.env`:
-```bash
-INSTALL_METALLB=true
-METALLB_ADDRESS_POOL=192.168.88.240-192.168.88.250
-INSTALL_CHAOS_MESH=true
-CHAOS_MESH_DASHBOARD_SERVICE_TYPE=LoadBalancer
-```
-
-Then run:
-```bash
-make platform
-```
-
-The script will:
-- install or upgrade Chaos Mesh via Helm
-- enable the Chaos dashboard
-- expose `chaos-dashboard` as a `LoadBalancer` service so it is reachable from your host machine
-- print both the Chaos Mesh dashboard URL and the Cartograph URL when those services exist
-
-If you want the dashboard on a fixed MetalLB IP, set `CHAOS_MESH_DASHBOARD_LB_IP`.
-If you want dashboard auth enabled, set `CHAOS_MESH_DASHBOARD_SECURITY_MODE=true`.
-
 ## Optional: Render chart locally
 Use the project kubeconfig and render/apply the shared AtlasNet chart manually:
 ```bash
@@ -133,7 +111,7 @@ Use a single multi-arch image tag (e.g. `ATLASNET_IMAGE_TAG=latest` with a manif
 - `make dependency-setup`: install iptables and set cgroup flags on all nodes (run once; reboot nodes if cmdline changed).
 - `make port-cleanup`: free configured required ports on server(s) + worker(s).
 - `make k3s-deploy`: install k3s on first server, join additional servers (HA) and workers.
-- `make platform`: install optional platform add-ons via `scripts/platform.sh` (metrics-server, MetalLB, ingress-nginx, cert-manager, Chaos Mesh) based on `.env` flags.
+- `make platform`: install optional platform add-ons via `scripts/platform.sh` (metrics-server, MetalLB, ingress-nginx, cert-manager) based on `.env` flags.
 - `make nodes`: quick `kubectl get nodes -o wide` using project kubeconfig.
 - `make atlasnet-push`: tag and push existing local AtlasNet images to Docker Hub.
 - `make atlasnet-merge-manifests`: create multi-arch manifest tag from per-arch tags (see .env `ATLASNET_IMAGE_TAG_*`).

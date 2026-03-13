@@ -30,13 +30,6 @@ fi
 : "${METALLB_ADDRESS_POOL:=}"
 : "${INSTALL_INGRESS_NGINX:=false}"
 : "${INSTALL_CERT_MANAGER:=false}"
-: "${INSTALL_CHAOS_MESH:=false}"
-: "${CHAOS_MESH_NAMESPACE:=chaos-mesh}"
-: "${CHAOS_MESH_HELM_RELEASE_NAME:=chaos-mesh}"
-: "${CHAOS_MESH_VERSION:=}"
-: "${CHAOS_MESH_DASHBOARD_SERVICE_TYPE:=LoadBalancer}"
-: "${CHAOS_MESH_DASHBOARD_LB_IP:=}"
-: "${CHAOS_MESH_DASHBOARD_SECURITY_MODE:=false}"
 
 need_cmd kubectl
 need_cmd helm
@@ -208,54 +201,6 @@ install_cert_manager() {
   helm upgrade --install cert-manager jetstack/cert-manager     --namespace cert-manager     --set crds.enabled=true     --wait
 }
 
-install_chaos_mesh() {
-  helm repo add chaos-mesh https://charts.chaos-mesh.org >/dev/null
-  helm repo update >/dev/null
-
-  kubectl create namespace "$CHAOS_MESH_NAMESPACE" >/dev/null 2>&1 || true
-
-  local -a helm_args=(
-    upgrade
-    --install
-    "$CHAOS_MESH_HELM_RELEASE_NAME"
-    chaos-mesh/chaos-mesh
-    --namespace
-    "$CHAOS_MESH_NAMESPACE"
-    --set
-    chaosDaemon.runtime=containerd
-    --set
-    chaosDaemon.socketPath=/run/k3s/containerd/containerd.sock
-    --set
-    dashboard.create=true
-    --set
-    "dashboard.securityMode=${CHAOS_MESH_DASHBOARD_SECURITY_MODE}"
-    --wait
-  )
-
-  if [[ -n "$CHAOS_MESH_VERSION" ]]; then
-    helm_args+=(--version "$CHAOS_MESH_VERSION")
-  fi
-
-  helm "${helm_args[@]}"
-
-  if ! kubectl -n "$CHAOS_MESH_NAMESPACE" get service chaos-dashboard >/dev/null 2>&1; then
-    die "Chaos Mesh installed, but service '$CHAOS_MESH_NAMESPACE/chaos-dashboard' was not found."
-  fi
-
-  local load_balancer_ip_json="null"
-  if [[ -n "$CHAOS_MESH_DASHBOARD_LB_IP" ]]; then
-    load_balancer_ip_json="\"$CHAOS_MESH_DASHBOARD_LB_IP\""
-  fi
-
-  kubectl -n "$CHAOS_MESH_NAMESPACE" patch service chaos-dashboard --type merge \
-    -p "{\"spec\":{\"type\":\"$CHAOS_MESH_DASHBOARD_SERVICE_TYPE\",\"loadBalancerIP\":${load_balancer_ip_json}}}" >/dev/null
-
-  if [[ "$CHAOS_MESH_DASHBOARD_SERVICE_TYPE" == "LoadBalancer" && "$INSTALL_METALLB" != "true" ]]; then
-    echo "   warning: Chaos Mesh dashboard is exposed as LoadBalancer, but INSTALL_METALLB is not true."
-    echo "            The service may remain pending until your cluster has a load balancer implementation."
-  fi
-}
-
 echo "Installing platform add-ons (safe to re-run) ..."
 if [[ "$INSTALL_METRICS_SERVER" == "true" ]]; then
   echo " - metrics-server"
@@ -277,16 +222,10 @@ if [[ "$INSTALL_CERT_MANAGER" == "true" ]]; then
   install_cert_manager
 fi
 
-if [[ "$INSTALL_CHAOS_MESH" == "true" ]]; then
-  echo " - Chaos Mesh"
-  install_chaos_mesh
-fi
-
 echo
 echo "Done. Current pods:"
 kubectl get pods -A | head -n 50
 
 echo
 echo "Host access:"
-report_service_access "Chaos Mesh dashboard" "$CHAOS_MESH_NAMESPACE" "chaos-dashboard"
 report_service_access "Cartograph" "${ATLASNET_K8S_NAMESPACE:-atlasnet}" "atlasnet-cartograph"
