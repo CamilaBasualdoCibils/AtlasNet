@@ -10,17 +10,16 @@
 #include "Heuristic/Voronoi/VoronoiBounds.hpp"
 
 // Voronoi heuristic used for testing.
-// Partitions the world into N convex polygon regions using standard Voronoi
-// half-plane clipping within a fixed bounding box.
+// Partitions the plane into N cells using Voronoi half-plane constraints.
 class VoronoiHeuristic : public THeuristic<VoronoiBounds>
 {
    public:
 	struct Options
 	{
-		// Half-extent of the total region in X/Y, matching the legacy grid.
+		// Half-extent used only to seed initial sites deterministically.
 		vec2 NetHalfExtent = {100.0f, 100.0f};
 		// Number of Voronoi seeds / regions.
-		uint32_t SeedCount = 16;
+		uint32_t SeedCount = 5;
 	} options;
 
 	VoronoiHeuristic();
@@ -45,7 +44,7 @@ class VoronoiHeuristic : public THeuristic<VoronoiBounds>
 	const IBounds& GetBound(BoundsID id) const override;
 
    private:
+	uint64_t _computeRevision = 0;
 	std::vector<glm::vec2> _seeds;
 	std::vector<VoronoiBounds> _cells;
 };
-

@@ -21,20 +21,28 @@ void VoronoiHeuristic::SetSeedCount(uint32_t count)
 
 void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 {
-	// Build Voronoi cells by clipping a bounding box polygon with the
-	// perpendicular bisector half-planes of all other seeds.
+	(void)span;
 
-	const uint32_t seedCount = 5;  // std::max<uint32_t>(1, options.SeedCount);
+	// Build canonical Voronoi cells as site + half-plane constraints. Cells are
+	// intentionally left unbounded here; renderers clip them to a viewport.
+
+	const uint32_t seedCount = std::max<uint32_t>(1, options.SeedCount);
 
 	const float minX = -options.NetHalfExtent.x;
 	const float maxX = options.NetHalfExtent.x;
 	const float minY = -options.NetHalfExtent.y;
 	const float maxY = options.NetHalfExtent.y;
 
-	// Deterministic RNG so WatchDog recompute doesn't reshuffle regions.
-	static std::mt19937 rng(0x9E3779B9u ^ seedCount);
-	static std::uniform_real_distribution<float> distX(minX, maxX);
-	static std::uniform_real_distribution<float> distY(minY, maxY);
+	// For debugging we retain the old behaviour where periodic recomputes can
+	// visibly reshuffle the heuristic, so each compute revision perturbs the RNG
+	// seed. Once hotspot-driven seeding lands, this can be replaced by data-
+	// driven seeds instead of revision-driven movement.
+	const uint32_t revisionSeed =
+		static_cast<uint32_t>((_computeRevision * 0x85EBCA6Bu) & 0xFFFFFFFFu);
+	++_computeRevision;
+	std::mt19937 rng(0x9E3779B9u ^ seedCount ^ revisionSeed);
+	std::uniform_real_distribution<float> distX(minX, maxX);
+	std::uniform_real_distribution<float> distY(minY, maxY);
 
 	_seeds.clear();
 	_seeds.reserve(seedCount);
@@ -43,65 +51,18 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 		_seeds.emplace_back(distX(rng), distY(rng));
 	}
 
-	auto clipPolygon = [](const std::vector<glm::vec2>& poly, const glm::vec2& n,
-						  const float c) -> std::vector<glm::vec2>
-	{
-		if (poly.empty())
-		{
-			return {};
-		}
-
-		auto inside = [&](const glm::vec2& p) -> bool { return glm::dot(p, n) <= c + 1e-5f; };
-
-		auto intersect = [&](const glm::vec2& a, const glm::vec2& b) -> glm::vec2
-		{
-			const glm::vec2 ab = b - a;
-			const float denom = glm::dot(ab, n);
-			if (std::abs(denom) < 1e-8f)
-			{
-				return a;
-			}
-			const float t = (c - glm::dot(a, n)) / denom;
-			return a + glm::clamp(t, 0.0f, 1.0f) * ab;
-		};
-
-		std::vector<glm::vec2> out;
-		out.reserve(poly.size() + 4);
-		for (size_t i = 0; i < poly.size(); ++i)
-		{
-			const glm::vec2 curr = poly[i];
-			const glm::vec2 prev = poly[(i + poly.size() - 1) % poly.size()];
-			const bool currIn = inside(curr);
-			const bool prevIn = inside(prev);
-
-			if (currIn)
-			{
-				if (!prevIn)
-				{
-					out.push_back(intersect(prev, curr));
-				}
-				out.push_back(curr);
-			}
-			else if (prevIn)
-			{
-				out.push_back(intersect(prev, curr));
-			}
-		}
-		return out;
-	};
-
 	_cells.clear();
 	_cells.reserve(seedCount);
 
 	for (uint32_t i = 0; i < seedCount; ++i)
 	{
 		const glm::vec2 si = _seeds[i];
-		std::vector<glm::vec2> poly = {
-			{minX, minY},
-			{maxX, minY},
-			{maxX, maxY},
-			{minX, maxY},
-		};
+		VoronoiBounds bound;
+		bound.ID = static_cast<BoundsID>(i);
+		bound.site = si;
+		bound.halfPlanes.clear();
+		bound.halfPlanes.reserve(seedCount > 0 ? seedCount - 1 : 0);
+		bound.vertices.clear();
 
 		for (uint32_t j = 0; j < seedCount; ++j)
 		{
@@ -110,23 +71,18 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 				continue;
 			}
 			const glm::vec2 sj = _seeds[j];
-			const glm::vec2 n = sj - si;
-			const float c = (glm::dot(sj, sj) - glm::dot(si, si)) * 0.5f;
-			poly = clipPolygon(poly, n, c);
-			if (poly.size() < 3)
-			{
-				break;
-			}
+
+			VoronoiHalfPlane plane;
+			plane.normal = sj - si;
+			plane.c = (glm::dot(sj, sj) - glm::dot(si, si)) * 0.5f;
+			bound.halfPlanes.push_back(plane);
 		}
 
-		VoronoiBounds bound;
-		bound.ID = static_cast<BoundsID>(i);
-		bound.vertices = std::move(poly);
 		_cells.push_back(std::move(bound));
 	}
 
-	logger.DebugFormatted("VoronoiHeuristic::Compute: seed_count={} bounds={}", seedCount,
-						  _cells.size());
+	logger.DebugFormatted("VoronoiHeuristic::Compute: seed_count={} bounds={} revision={}",
+						  seedCount, _cells.size(), _computeRevision);
 }
 
 uint32_t VoronoiHeuristic::GetBoundsCount() const
@@ -174,9 +130,11 @@ void VoronoiHeuristic::Deserialize(ByteReader& br)
 	const size_t cellCount = br.u64();
 	_cells.resize(cellCount);
 	_seeds.clear();
+	_seeds.reserve(cellCount);
 	for (size_t i = 0; i < _cells.size(); ++i)
 	{
 		_cells[i].Deserialize(br);
+		_seeds.push_back(_cells[i].site);
 	}
 }
 

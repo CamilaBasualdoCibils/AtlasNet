@@ -7,14 +7,35 @@
 #include "Global/pch.hpp"
 #include "Heuristic/IBounds.hpp"
 
-// Polygonal bounds for Voronoi-style partitioning.
-// Stored as a 2D polygon in XY; Z is ignored for Contains tests.
+struct VoronoiHalfPlane
+{
+	glm::vec2 normal = glm::vec2(0.0f);
+	float c = 0.0f;
+};
+
+// Canonical Voronoi bounds are stored as a site plus the half-plane constraints
+// defining the cell. Optional vertices may be present for bounded/debug views.
 struct VoronoiBounds : public IBounds
 {
+	glm::vec2 site = glm::vec2(0.0f);
+	std::vector<VoronoiHalfPlane> halfPlanes;
 	std::vector<glm::vec2> vertices;
 
 	bool Contains(vec3 p) const override
 	{
+		if (!halfPlanes.empty())
+		{
+			const glm::vec2 point(p.x, p.y);
+			for (const auto& plane : halfPlanes)
+			{
+				if (glm::dot(point, plane.normal) > plane.c + 1e-5f)
+				{
+					return false;
+				}
+			}
+			return true;
+		}
+
 		if (vertices.size() < 3)
 		{
 			return false;
@@ -43,6 +64,10 @@ struct VoronoiBounds : public IBounds
 
 	[[nodiscard]] vec3 GetCenter() const override
 	{
+		if (!halfPlanes.empty())
+		{
+			return vec3(site.x, site.y, 0.0f);
+		}
 		if (vertices.empty())
 		{
 			return vec3(0.0f);
@@ -91,12 +116,21 @@ struct VoronoiBounds : public IBounds
 
 	std::string ToDebugString() const override
 	{
-		return std::format("VoronoiBounds(ID={}, vertices={})", ID, vertices.size());
+		return std::format("VoronoiBounds(ID={}, site=({}, {}), halfPlanes={}, vertices={})", ID,
+						   site.x, site.y, halfPlanes.size(), vertices.size());
 	}
 
    protected:
 	void Internal_SerializeData(ByteWriter& bw) const override
 	{
+		static constexpr uint32_t kFormatVersion = 1;
+		bw.u32(kFormatVersion);
+		bw.f32(site.x).f32(site.y);
+		bw.u32(static_cast<uint32_t>(halfPlanes.size()));
+		for (const auto& plane : halfPlanes)
+		{
+			bw.f32(plane.normal.x).f32(plane.normal.y).f32(plane.c);
+		}
 		bw.u32(static_cast<uint32_t>(vertices.size()));
 		for (const auto& v : vertices)
 		{
@@ -106,7 +140,42 @@ struct VoronoiBounds : public IBounds
 
 	void Internal_DeserializeData(ByteReader& br) override
 	{
-		const uint32_t count = br.u32();
+		const uint32_t versionOrVertexCount = br.u32();
+		halfPlanes.clear();
+		site = glm::vec2(0.0f);
+
+		uint32_t count = 0;
+		if (versionOrVertexCount <= 2)
+		{
+			const uint32_t version = versionOrVertexCount;
+			if (version == 1)
+			{
+				site.x = br.f32();
+				site.y = br.f32();
+
+				const uint32_t halfPlaneCount = br.u32();
+				halfPlanes.reserve(halfPlaneCount);
+				for (uint32_t i = 0; i < halfPlaneCount; ++i)
+				{
+					VoronoiHalfPlane plane;
+					plane.normal.x = br.f32();
+					plane.normal.y = br.f32();
+					plane.c = br.f32();
+					halfPlanes.push_back(plane);
+				}
+
+				count = br.u32();
+			}
+			else
+			{
+				throw std::runtime_error("Unsupported VoronoiBounds format version");
+			}
+		}
+		else
+		{
+			count = versionOrVertexCount;
+		}
+
 		vertices.clear();
 		vertices.reserve(count);
 		for (uint32_t i = 0; i < count; ++i)
@@ -115,6 +184,10 @@ struct VoronoiBounds : public IBounds
 			const float y = br.f32();
 			vertices.emplace_back(x, y);
 		}
+
+		if (halfPlanes.empty() && !vertices.empty())
+		{
+			site = glm::vec2(GetCenter().x, GetCenter().y);
+		}
 	}
 };
-

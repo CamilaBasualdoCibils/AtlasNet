@@ -280,11 +280,12 @@ void WatchDog::Init()
 		});
 	Interlink::Get().Init();
 	GlobalEvents::Get().Init();
+	// HeuristicService is the active recompute/publish path for heuristic data.
 	HeuristicService::Ensure();
 
-	// Legacy grid-cell heuristic is still available as a separate heuristic,
-	// but WatchDog now defaults to the Quadtree heuristic. For Voronoi
-	// testing, you can switch to eVoronoi below.
+	// The local WatchDog heuristic instance remains available for ad-hoc
+	// debugging, but it does not publish while WatchDog::ComputeHeuristic()
+	// stays disabled.
 	SwitchHeuristic(IHeuristic::Type::eVoronoi);
 	if (auto voronoi = std::dynamic_pointer_cast<VoronoiHeuristic>(Heuristic))
 	{

@@ -22,6 +22,10 @@ class HeuristicService : public Singleton<HeuristicService>
 	HeuristicService()
 	{
 		activeHeuristic = std::make_unique<VoronoiHeuristic>();
+		if (auto* voronoi = dynamic_cast<VoronoiHeuristic*>(activeHeuristic.get()))
+		{
+			voronoi->SetSeedCount(5);
+		}
 		heuristicComputeThread =
 			std::jthread([this](std::stop_token st) { HeuristicThreadLoop(st); });
 	}
