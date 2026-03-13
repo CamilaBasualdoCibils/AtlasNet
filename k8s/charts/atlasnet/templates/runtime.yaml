@@ -197,18 +197,6 @@ spec:
         atlasnet.role: shard
     spec:
       affinity:
-        nodeAffinity:
-          requiredDuringSchedulingIgnoredDuringExecution:
-            nodeSelectorTerms:
-              - matchExpressions:
-                  - key: node-role.kubernetes.io/control-plane
-                    operator: DoesNotExist
-                  - key: node-role.kubernetes.io/master
-                    operator: DoesNotExist
-                  - key: kubernetes.io/hostname
-                    operator: NotIn
-                    values:
-                      - {{ $serverNodeName | quote }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
             - weight: 100
