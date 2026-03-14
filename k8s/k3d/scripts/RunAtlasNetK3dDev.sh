@@ -27,6 +27,19 @@ CARTOGRAPH_LOOPBACK_PORT_FALLBACK="${ATLASNET_K3D_CARTOGRAPH_LOOPBACK_PORT_FALLB
 CARTOGRAPH_INSPECT_PORT="${ATLASNET_K3D_CARTOGRAPH_INSPECT_PORT:-9229}"
 CARTOGRAPH_INSPECT_PORT_FALLBACK="${ATLASNET_K3D_CARTOGRAPH_INSPECT_PORT_FALLBACK:-19229}"
 HELM_RELEASE_NAME="${ATLASNET_HELM_RELEASE_NAME:-atlasnet}"
+LLM_IN_CLUSTER_ENABLED="${ATLASNET_K3D_LLM_IN_CLUSTER_ENABLED:-1}"
+LLM_IMAGE="${ATLASNET_K3D_LLM_IMAGE:-${ATLASNET_LLM_IMAGE:-ghcr.io/ggml-org/llama.cpp:server}}"
+LLM_SERVICE_PORT="${ATLASNET_K3D_LLM_SERVICE_PORT:-8080}"
+LLM_MODEL_URL="${ATLASNET_K3D_LLM_MODEL_URL:-${ATLASNET_LLM_MODEL_URL:-https://huggingface.co/Dannys0n/Qwen3-1.7B-seed_gen_voronoi/resolve/main/Qwen3-1.7B-seed_gen_voronoi-Q4_K_M.gguf}}"
+LLM_MODEL_FILE_NAME="${ATLASNET_K3D_LLM_MODEL_FILE_NAME:-${ATLASNET_LLM_MODEL_FILE_NAME:-Qwen3-1.7B-seed_gen_voronoi-Q4_K_M.gguf}}"
+LLM_PROXY_ENABLED="${ATLASNET_K3D_LLM_PROXY_ENABLED:-1}"
+LLM_HOST_PORT="${ATLASNET_K3D_LLM_HOST_PORT:-12434}"
+LLM_PROXY_PORT="${ATLASNET_K3D_LLM_PROXY_PORT:-12435}"
+LLM_PROXY_IMAGE="${ATLASNET_K3D_LLM_PROXY_IMAGE:-alpine/socat}"
+LLM_PROXY_CONTAINER_NAME="atlasnet-k3d-llm-proxy-${CLUSTER_NAME}"
+LLM_ENDPOINT="${ATLASNET_K3D_LLM_ENDPOINT:-${ATLASNET_LLM_ENDPOINT:-}}"
+LLM_API_FORMAT="${ATLASNET_K3D_LLM_API_FORMAT:-${ATLASNET_LLM_API_FORMAT:-openai}}"
+LLM_MODEL_ID="${ATLASNET_K3D_LLM_MODEL_ID:-${ATLASNET_LLM_MODEL_ID:-huggingface.co/dannys0n/qwen3-1.7b-seed_gen_voronoi:Q4_K_M}}"
 HOST_KUBECONFIG_PATH=""
 ACTIVE_CARTOGRAPH_LOOPBACK_PORT=""
 ACTIVE_CARTOGRAPH_INSPECT_PORT=""
@@ -79,6 +92,22 @@ if [[ ! -d "$CHART_DIR" ]]; then
     echo "Error: Helm chart not found at '$CHART_DIR'."
     exit 1
 fi
+
+ensure_k3d_llm_proxy() {
+    if [[ "$LLM_PROXY_ENABLED" == "0" || "$LLM_IN_CLUSTER_ENABLED" != "0" ]]; then
+        return
+    fi
+
+    echo "==> Ensuring k3d LLM proxy is running on host port ${LLM_PROXY_PORT} -> 127.0.0.1:${LLM_HOST_PORT}..."
+    docker rm -f "$LLM_PROXY_CONTAINER_NAME" >/dev/null 2>&1 || true
+    docker run -d \
+        --name "$LLM_PROXY_CONTAINER_NAME" \
+        --restart unless-stopped \
+        --network host \
+        "$LLM_PROXY_IMAGE" \
+        -d -d TCP-LISTEN:"${LLM_PROXY_PORT}",fork,reuseaddr,bind=0.0.0.0 TCP:127.0.0.1:"${LLM_HOST_PORT}" \
+        >/dev/null
+}
 
 remove_swarm_leftovers() {
     local swarm_state
@@ -218,6 +247,14 @@ write_host_kubeconfig() {
 }
 
 write_host_kubeconfig
+
+if [[ "$LLM_IN_CLUSTER_ENABLED" == "0" && -z "$LLM_ENDPOINT" ]]; then
+    LLM_ENDPOINT="http://host.k3d.internal:${LLM_PROXY_PORT}/v1/chat/completions"
+fi
+
+if [[ "$LLM_IN_CLUSTER_ENABLED" == "0" && -z "${ATLASNET_K3D_LLM_ENDPOINT:-}" && -z "${ATLASNET_LLM_ENDPOINT:-}" ]]; then
+    ensure_k3d_llm_proxy
+fi
 
 is_pid_running() {
     local pid="${1:-}"
@@ -730,6 +767,14 @@ helm template "$HELM_RELEASE_NAME" "$CHART_DIR" \
     --set-string images.cartograph="$CARTOGRAPH_IMAGE_NAME" \
     --set-string cartograph.ingress.className="$CARTOGRAPH_INGRESS_CLASS_NAME" \
     --set-string cartograph.ingress.host="$CARTOGRAPH_INGRESS_HOST" \
+    --set llm.enabled="$LLM_IN_CLUSTER_ENABLED" \
+    --set-string llm.image="$LLM_IMAGE" \
+    --set-string llm.servicePort="$LLM_SERVICE_PORT" \
+    --set-string llm.endpoint="$LLM_ENDPOINT" \
+    --set-string llm.apiFormat="$LLM_API_FORMAT" \
+    --set-string llm.modelId="$LLM_MODEL_ID" \
+    --set-string llm.modelUrl="$LLM_MODEL_URL" \
+    --set-string llm.modelFileName="$LLM_MODEL_FILE_NAME" \
     >"$TEMP_MANIFEST"
 
 if [[ "$KUBECTL_MODE" == "incluster" ]]; then
