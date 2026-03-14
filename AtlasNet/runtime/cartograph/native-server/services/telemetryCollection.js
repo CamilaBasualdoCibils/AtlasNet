@@ -1,11 +1,8 @@
-const { normalizeAvgPingMs, readNetworkTelemetry } = require('./networkTelemetry');
+const { readNetworkTelemetry } = require('./networkTelemetry');
 const { readEntityLedgersTelemetry } = require('./entityLedgerTelemetry');
 const { readHeuristicShapes } = require('./heuristicShapes');
 const {
-  readAuthorityTelemetryFromDatabase,
   readHeuristicClaimedOwnersFromDatabase,
-  readNetworkTelemetryFromDatabase,
-  readHeuristicShapesFromDatabase,
   readTransferManifestFromDatabase,
 } = require('./databaseTelemetry');
 
@@ -21,9 +18,7 @@ function createTelemetryCache(initialValue) {
   };
 }
 
-const authorityTelemetryDbCache = createTelemetryCache([]);
 const authorityOwnerMapCache = createTelemetryCache({});
-const networkTelemetryDbCacheByMode = new Map();
 
 async function runTelemetryRead(readLabel, readFn, fallbackValue = []) {
   try {
@@ -41,10 +36,6 @@ async function runTelemetryRead(readLabel, readFn, fallbackValue = []) {
       error,
     };
   }
-}
-
-function getCachedTelemetrySnapshot(cache) {
-  return Array.isArray(cache.value) ? cache.value : [];
 }
 
 function getCachedTelemetryObject(cache) {
@@ -84,82 +75,6 @@ function scheduleCachedTelemetryRead(
   });
 
   return cache.inFlight;
-}
-
-function mergeNetworkTelemetryRows(primaryRows, secondaryRows) {
-  const byShardId = new Map();
-  const ingest = (rows, { prefer }) => {
-    for (const row of asArray(rows)) {
-      const shardId = String(row?.shardId ?? '').trim();
-      if (!shardId) {
-        continue;
-      }
-
-      const previous = byShardId.get(shardId);
-      const rowConnections = asArray(row?.connections);
-      const previousConnections = asArray(previous?.connections);
-      const hasRowConnections = rowConnections.length > 0;
-      const hasPreviousConnections = previousConnections.length > 0;
-      const rowAvgPingMs = normalizeAvgPingMs(row?.avgPingMs);
-      const previousAvgPingMs = normalizeAvgPingMs(previous?.avgPingMs);
-
-      const next = {
-        shardId,
-        downloadKbps: Number.isFinite(Number(row?.downloadKbps))
-          ? Number(row.downloadKbps)
-          : Number(previous?.downloadKbps) || 0,
-        uploadKbps: Number.isFinite(Number(row?.uploadKbps))
-          ? Number(row.uploadKbps)
-          : Number(previous?.uploadKbps) || 0,
-        avgPingMs: rowAvgPingMs ?? previousAvgPingMs,
-        connections:
-          hasRowConnections || !hasPreviousConnections
-            ? rowConnections
-            : previousConnections,
-      };
-
-      if (!previous || prefer) {
-        byShardId.set(shardId, next);
-      } else {
-        byShardId.set(shardId, {
-          ...previous,
-          ...next,
-          avgPingMs: previousAvgPingMs ?? next.avgPingMs,
-          connections:
-            hasPreviousConnections && !hasRowConnections
-              ? previousConnections
-              : next.connections,
-        });
-      }
-    }
-  };
-
-  ingest(secondaryRows, { prefer: false });
-  ingest(primaryRows, { prefer: true });
-  return Array.from(byShardId.values());
-}
-
-function mergeAuthorityTelemetryRows(primaryRows, secondaryRows) {
-  const byEntityId = new Map();
-  const ingest = (rows) => {
-    for (const row of asArray(rows)) {
-      if (!Array.isArray(row) || row.length === 0) {
-        continue;
-      }
-      const entityId = String(row[0] ?? '').trim();
-      if (!entityId) {
-        continue;
-      }
-      byEntityId.set(entityId, row.map((value) => String(value ?? '')));
-    }
-  };
-
-  ingest(secondaryRows);
-  ingest(primaryRows);
-
-  return Array.from(byEntityId.values()).sort((left, right) =>
-    String(left[0] ?? '').localeCompare(String(right[0] ?? ''))
-  );
 }
 
 function readTransferStateQueueTelemetry(addon, transferStateQueueView) {
@@ -220,31 +135,14 @@ async function collectNetworkTelemetry({
   networkTelemetry,
   includeLiveIds = true,
 }) {
-  const dbCacheKey = includeLiveIds ? 'with-live-ids' : 'without-live-ids';
-  const dbCache =
-    networkTelemetryDbCacheByMode.get(dbCacheKey) ?? createTelemetryCache([]);
-  networkTelemetryDbCacheByMode.set(dbCacheKey, dbCache);
   const hasAddon = Boolean(
     addon &&
       networkTelemetry &&
       addon.std_vector_std_string_ &&
       addon.std_vector_std_vector_std_string__
   );
-  const databaseReadPromise = scheduleCachedTelemetryRead(
-    dbCache,
-    'network internalDB',
-    () =>
-      readNetworkTelemetryFromDatabase({
-        includeLiveIds,
-        dbClientScope: 'network-telemetry',
-      }),
-    [],
-    500
-  );
-
   if (!hasAddon) {
-    const databaseRead = await databaseReadPromise;
-    return asArray(databaseRead.value);
+    return [];
   }
 
   const addonRead = await runTelemetryRead(
@@ -252,42 +150,15 @@ async function collectNetworkTelemetry({
     () => readNetworkTelemetry(addon, networkTelemetry, { includeLiveIds }),
     []
   );
-  const cachedDatabaseRows = getCachedTelemetrySnapshot(dbCache);
-  const mergedRows = mergeNetworkTelemetryRows(
-    addonRead.value,
-    cachedDatabaseRows
-  );
-  if (mergedRows.length > 0) {
-    return mergedRows;
-  }
   if (addonRead.ok) {
     return asArray(addonRead.value);
   }
-
-  const databaseRead = await databaseReadPromise;
-  const fallbackMergedRows = mergeNetworkTelemetryRows(
-    addonRead.value,
-    databaseRead.value
-  );
-  if (fallbackMergedRows.length > 0) {
-    return fallbackMergedRows;
-  }
-  if (databaseRead.ok) {
-    return asArray(databaseRead.value);
-  }
-  throw addonRead.error || databaseRead.error || new Error('Network telemetry failed');
+  throw addonRead.error || new Error('Network telemetry failed');
 }
 
 async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
   const hasAddon = Boolean(
     addon && entityLedgersView && addon.std_vector_StreamEntityLedgerEntry_
-  );
-  const databaseReadPromise = scheduleCachedTelemetryRead(
-    authorityTelemetryDbCache,
-    'authority internalDB',
-    () => readAuthorityTelemetryFromDatabase({ dbClientScope: 'authority-telemetry' }),
-    [],
-    1000
   );
   const ownerMapReadPromise = scheduleCachedTelemetryRead(
     authorityOwnerMapCache,
@@ -298,8 +169,7 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
   );
 
   if (!hasAddon) {
-    const databaseRead = await databaseReadPromise;
-    return asArray(databaseRead.value);
+    return [];
   }
 
   const addonRead = await runTelemetryRead(
@@ -315,11 +185,7 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
   }
 
   await ownerMapReadPromise;
-  const databaseRead = await databaseReadPromise;
-  if (databaseRead.ok) {
-    return asArray(databaseRead.value);
-  }
-  throw addonRead.error || databaseRead.error || new Error('Authority telemetry failed');
+  throw addonRead.error || new Error('Authority telemetry failed');
 }
 
 async function collectHeuristicShapes({ addon }) {
@@ -329,7 +195,7 @@ async function collectHeuristicShapes({ addon }) {
   if (hasAddon) {
     return readHeuristicShapes(addon);
   }
-  return readHeuristicShapesFromDatabase();
+  return [];
 }
 
 async function collectTransferManifest() {
