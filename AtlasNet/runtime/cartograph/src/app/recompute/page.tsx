@@ -535,9 +535,6 @@ export default function RecomputePage() {
             <div className="text-xs uppercase tracking-[0.22em] text-slate-500">
               Captures
             </div>
-            <div className="mt-1 text-sm text-slate-300">
-              Select a recompute cycle to inspect its map snapshot and overlay payloads.
-            </div>
           </div>
           {displayCycleGroups.length > 0 ? (
             <div className="divide-y divide-slate-800">

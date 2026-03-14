@@ -16,10 +16,11 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock
     environment:
       - ATLASNET_DOCKER_MODE=1
-      - ATLASNET_LLM_ENDPOINT=${ATLASNET_LLM_ENDPOINT:-http://172.17.0.1:12434/v1/chat/completions}
+      - ATLASNET_NETWORK_NAME=${ATLASNET_NETWORK_NAME}
+      - ATLASNET_LLM_ENDPOINT=${ATLASNET_LLM_ENDPOINT:-}
       - ATLASNET_LLM_MODEL_ID=${ATLASNET_LLM_MODEL_ID:-huggingface.co/dannys0n/qwen3-1.7b-seed_gen_voronoi:Q4_K_M}
       - ATLASNET_LLM_MAX_TOKENS=256
-      - ATLASNET_LLM_API_FORMAT=openai
+      - ATLASNET_LLM_API_FORMAT=${ATLASNET_LLM_API_FORMAT:-openai}
     deploy:
       placement:
           constraints:
