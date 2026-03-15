@@ -283,7 +283,9 @@ export function getFiniteWorldPolygon(shape: ShapeJS): Point2[] {
     return [];
   }
 
-  const base = getShapeSite(shape);
+  // Finite polygons in Cartograph use `points` as local offsets from `position`.
+  // Half-plane cells still use `site` separately when no finite polygon exists.
+  const base = normalizePoint(shape.position) ?? getShapeSite(shape);
   if (!base) {
     return [];
   }

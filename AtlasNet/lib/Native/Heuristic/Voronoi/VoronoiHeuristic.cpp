@@ -118,8 +118,9 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 		bound.ID = static_cast<BoundsID>(i);
 		bound.site = si;
 		bound.halfPlanes.clear();
-		bound.halfPlanes.reserve(seedCount > 0 ? seedCount - 1 : 0);
 		bound.vertices.clear();
+		std::vector<VoronoiHalfPlane> clipPlanes;
+		clipPlanes.reserve(seedCount > 0 ? seedCount - 1 : 0);
 
 		for (uint32_t j = 0; j < seedCount; ++j)
 		{
@@ -132,7 +133,7 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 			VoronoiHalfPlane plane;
 			plane.normal = sj - si;
 			plane.c = (glm::dot(sj, sj) - glm::dot(si, si)) * 0.5f;
-			bound.halfPlanes.push_back(plane);
+			clipPlanes.push_back(plane);
 		}
 
 		std::vector<glm::vec2> polygon = {
@@ -141,7 +142,7 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 			{maxX, maxY},
 			{minX, maxY},
 		};
-		for (const VoronoiHalfPlane& plane : bound.halfPlanes)
+		for (const VoronoiHalfPlane& plane : clipPlanes)
 		{
 			polygon = ClipPolygon(polygon, plane.normal, plane.c);
 			if (polygon.size() < 3)
