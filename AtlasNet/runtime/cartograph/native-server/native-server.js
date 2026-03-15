@@ -58,8 +58,8 @@ function ensureHybridCollectors() {
   if (!networkTelemetry && addon.NetworkTelemetry) {
     networkTelemetry = new addon.NetworkTelemetry();
   }
-  if (!entityLedgersView && addon.EntityLedgersView) {
-    entityLedgersView = new addon.EntityLedgersView();
+  if (!entityLedgersView && addon.StreamEntityLedgersView) {
+    entityLedgersView = new addon.StreamEntityLedgersView();
   }
   if (!transferStateQueueView && addon.TransferStateQueueView) {
     transferStateQueueView = new addon.TransferStateQueueView();

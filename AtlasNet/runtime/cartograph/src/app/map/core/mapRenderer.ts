@@ -299,6 +299,7 @@ export function createMapRenderer({
   let onPointerWorldPosition = initialOnPointerWorldPosition;
   let hoverEdgeLabels: EdgeLabelOverlay[] = [];
   let lastPointerScreen: { x: number; y: number } | null = null;
+  let drawFrameId: number | null = null;
   let entityFocusOverlay: EntityFocusOverlay = {
     enabled: false,
     selectedPoints: [],
@@ -1332,6 +1333,10 @@ export function createMapRenderer({
   }
 
   function draw(): void {
+    if (drawFrameId != null) {
+      cancelAnimationFrame(drawFrameId);
+      drawFrameId = null;
+    }
     ctx.clearRect(0, 0, canvasWidth(), canvasHeight());
 
     if (viewMode === '2d') {
@@ -1372,6 +1377,16 @@ export function createMapRenderer({
         lastPointerScreen
       );
     }
+  }
+
+  function requestDraw(): void {
+    if (drawFrameId != null) {
+      return;
+    }
+    drawFrameId = requestAnimationFrame(() => {
+      drawFrameId = null;
+      draw();
+    });
   }
 
   function computeBoundsFromShapes(): {
@@ -1448,7 +1463,7 @@ export function createMapRenderer({
       cameraYaw = Math.PI / 4;
       cameraPitch = 0.75;
       cameraRoll = 0;
-      draw();
+      requestDraw();
       return;
     }
 
@@ -1469,7 +1484,7 @@ export function createMapRenderer({
     offsetX = canvasWidth() / 2 - centerX * scale2D;
     offsetY = canvasHeight() / 2 - centerZ * scale2D;
 
-    draw();
+    requestDraw();
   }
 
   function setViewPreset(preset: MapViewPreset): void {
@@ -1488,7 +1503,7 @@ export function createMapRenderer({
       cameraYaw = Math.PI / 4;
       cameraPitch = 0.75;
     }
-    draw();
+    requestDraw();
   }
 
   function ensureAutoFrame(): void {
@@ -1502,7 +1517,7 @@ export function createMapRenderer({
   function resizeCanvas(): void {
     canvas.width = Math.max(1, container.clientWidth);
     canvas.height = Math.max(1, container.clientHeight);
-    draw();
+    requestDraw();
   }
 
   function hasFlyInput(): boolean {
@@ -1606,7 +1621,7 @@ export function createMapRenderer({
     }
 
     if (didChange) {
-      draw();
+      requestDraw();
     }
 
     flyRafId = requestAnimationFrame(tickFly);
@@ -1677,7 +1692,7 @@ export function createMapRenderer({
       const rollSin = Math.sin(cameraRoll);
       offsetX += deltaViewX * rollCos + deltaViewY * rollSin;
       offsetY += -deltaViewX * rollSin + deltaViewY * rollCos;
-      draw();
+      requestDraw();
       return;
     }
 
@@ -1692,7 +1707,7 @@ export function createMapRenderer({
         y: pivotPosition.y - offset.y,
         z: pivotPosition.z - offset.z,
       };
-      draw();
+      requestDraw();
       return;
     }
 
@@ -1707,7 +1722,7 @@ export function createMapRenderer({
       const panRight = vecScale(basis.right, -dx * panScale);
       const panUp = vecScale(basis.up, dy * panScale);
       cameraTarget = vecAdd(cameraTarget, vecAdd(panRight, panUp));
-      draw();
+      requestDraw();
     }
   }
 
@@ -1757,7 +1772,7 @@ export function createMapRenderer({
       offsetX = mouseX - ((mouseX - offsetX) * nextScale) / scale2D;
       offsetY = mouseY - ((mouseY - offsetY) * nextScale) / scale2D;
       scale2D = nextScale;
-      draw();
+      requestDraw();
       return;
     }
 
@@ -1766,7 +1781,7 @@ export function createMapRenderer({
     } else {
       orthoHeight *= sensitivityZoomFactor;
     }
-    draw();
+    requestDraw();
   }
 
   function onContextMenu(event: MouseEvent): void {
@@ -1847,16 +1862,16 @@ export function createMapRenderer({
     setShapes(newShapes: ShapeJS[]) {
       shapes = newShapes;
       ensureAutoFrame();
-      draw();
+      requestDraw();
     },
     setOffset(newOffsetX: number, newOffsetY: number) {
       offsetX = newOffsetX;
       offsetY = newOffsetY;
-      draw();
+      requestDraw();
     },
     setScale(newScale: number) {
       scale2D = clamp(newScale, MIN_SCALE_2D, MAX_SCALE_2D);
-      draw();
+      requestDraw();
     },
     getViewState2D() {
       return {
@@ -1873,16 +1888,16 @@ export function createMapRenderer({
     },
     setViewMode(nextViewMode: MapViewMode) {
       viewMode = nextViewMode;
-      draw();
+      requestDraw();
     },
     setViewPreset,
     setProjectionMode(nextProjectionMode: MapProjectionMode) {
       projectionMode = nextProjectionMode;
-      draw();
+      requestDraw();
     },
     setHoverEdgeLabels(nextLabels: EdgeLabelOverlay[]) {
       hoverEdgeLabels = nextLabels;
-      draw();
+      requestDraw();
     },
     setEntityFocusOverlay(nextOverlay: EntityFocusOverlay) {
       const selectedPoints = Array.isArray(nextOverlay.selectedPoints)
@@ -1910,7 +1925,7 @@ export function createMapRenderer({
         inspectedPoint,
         hoveredPoint,
       };
-      draw();
+      requestDraw();
     },
     projectMapPoint(point: { x: number; y: number; z?: number }) {
       const x = Number(point.x);
@@ -1934,6 +1949,9 @@ export function createMapRenderer({
       canvas.removeEventListener('wheel', onWheel);
       canvas.removeEventListener('contextmenu', onContextMenu);
       stopFlyLoop();
+      if (drawFrameId != null) {
+        cancelAnimationFrame(drawFrameId);
+      }
       if (canvas.parentElement === container) {
         container.removeChild(canvas);
       }
