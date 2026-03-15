@@ -221,12 +221,17 @@ void WriteJsonValue(const std::string_view key, const Json& value)
 	{
 		Json cellJson = Json::object();
 		cellJson["id"] = cell.ID;
-		cellJson["vertices"] = Json::array();
-		for (const glm::vec2& vertex : cell.vertices)
+		cellJson["site"] = Json{
+			{"x", cell.site.x},
+			{"y", cell.site.y},
+		};
+		cellJson["halfPlanes"] = Json::array();
+		for (const VoronoiHalfPlane& plane : cell.halfPlanes)
 		{
-			cellJson["vertices"].push_back(Json{
-				{"x", NormalizeCoordinate(vertex.x, minX, maxX)},
-				{"y", NormalizeCoordinate(vertex.y, minY, maxY)},
+			cellJson["halfPlanes"].push_back(Json{
+				{"nx", plane.normal.x},
+				{"ny", plane.normal.y},
+				{"c", plane.c},
 			});
 		}
 		outputJson["cells"].push_back(std::move(cellJson));
@@ -291,12 +296,17 @@ void WriteJsonValue(const std::string_view key, const Json& value)
 	{
 		Json cellJson = Json::object();
 		cellJson["id"] = cell.ID;
-		cellJson["vertices"] = Json::array();
-		for (const glm::vec2& vertex : cell.vertices)
+		cellJson["site"] = Json{
+			{"x", cell.site.x},
+			{"y", cell.site.y},
+		};
+		cellJson["halfPlanes"] = Json::array();
+		for (const VoronoiHalfPlane& plane : cell.halfPlanes)
 		{
-			cellJson["vertices"].push_back(Json{
-				{"x", NormalizeCoordinate(vertex.x, minX, maxX)},
-				{"y", NormalizeCoordinate(vertex.y, minY, maxY)},
+			cellJson["halfPlanes"].push_back(Json{
+				{"nx", plane.normal.x},
+				{"ny", plane.normal.y},
+				{"c", plane.c},
 			});
 		}
 		outputJson["cells"].push_back(std::move(cellJson));

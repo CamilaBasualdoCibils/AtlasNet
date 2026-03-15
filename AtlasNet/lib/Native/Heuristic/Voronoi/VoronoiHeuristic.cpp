@@ -8,6 +8,58 @@
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Heuristic/IBounds.hpp"
 
+namespace
+{
+[[nodiscard]] std::vector<glm::vec2> ClipPolygon(
+	const std::vector<glm::vec2>& polygon, const glm::vec2& normal, const float c)
+{
+	if (polygon.empty())
+	{
+		return {};
+	}
+
+	auto isInside = [&](const glm::vec2& point)
+	{
+		return glm::dot(point, normal) <= c + 1e-5f;
+	};
+
+	auto intersect = [&](const glm::vec2& start, const glm::vec2& end)
+	{
+		const glm::vec2 delta = end - start;
+		const float denom = glm::dot(normal, delta);
+		if (std::abs(denom) < 1e-8f)
+		{
+			return start;
+		}
+		const float t = (c - glm::dot(normal, start)) / denom;
+		return start + delta * std::clamp(t, 0.0f, 1.0f);
+	};
+
+	std::vector<glm::vec2> out;
+	out.reserve(polygon.size() + 1);
+	for (size_t i = 0; i < polygon.size(); ++i)
+	{
+		const glm::vec2 current = polygon[i];
+		const glm::vec2 previous = polygon[(i + polygon.size() - 1) % polygon.size()];
+		const bool currentInside = isInside(current);
+		const bool previousInside = isInside(previous);
+		if (currentInside)
+		{
+			if (!previousInside)
+			{
+				out.push_back(intersect(previous, current));
+			}
+			out.push_back(current);
+		}
+		else if (previousInside)
+		{
+			out.push_back(intersect(previous, current));
+		}
+	}
+	return out;
+}
+}  // namespace
+
 VoronoiHeuristic::VoronoiHeuristic() = default;
 
 void VoronoiHeuristic::SetSeedCount(uint32_t count)
@@ -82,6 +134,22 @@ void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
 			plane.c = (glm::dot(sj, sj) - glm::dot(si, si)) * 0.5f;
 			bound.halfPlanes.push_back(plane);
 		}
+
+		std::vector<glm::vec2> polygon = {
+			{minX, minY},
+			{maxX, minY},
+			{maxX, maxY},
+			{minX, maxY},
+		};
+		for (const VoronoiHalfPlane& plane : bound.halfPlanes)
+		{
+			polygon = ClipPolygon(polygon, plane.normal, plane.c);
+			if (polygon.size() < 3)
+			{
+				break;
+			}
+		}
+		bound.vertices = std::move(polygon);
 
 		_cells.push_back(std::move(bound));
 	}

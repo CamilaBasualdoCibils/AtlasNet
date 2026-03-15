@@ -760,24 +760,18 @@ std::vector<glm::vec2> HotspotVoronoiHeuristic::GenerateAlgorithmicSeeds(
 std::vector<VoronoiBounds> HotspotVoronoiHeuristic::BuildCellsFromSeeds(
 	const std::vector<glm::vec2>& seeds, const Options& options)
 {
-	const float minX = -options.NetHalfExtent.x;
-	const float maxX = options.NetHalfExtent.x;
-	const float minY = -options.NetHalfExtent.y;
-	const float maxY = options.NetHalfExtent.y;
-
 	std::vector<VoronoiBounds> cells;
 	cells.reserve(seeds.size());
 
 	for (uint32_t i = 0; i < seeds.size(); ++i)
 	{
 		const glm::vec2 seed = seeds[i];
-		std::vector<glm::vec2> polygon = {
-			{minX, minY},
-			{maxX, minY},
-			{maxX, maxY},
-			{minX, maxY},
-		};
-
+		VoronoiBounds bound;
+		bound.ID = static_cast<BoundsID>(i);
+		bound.site = seed;
+		bound.halfPlanes.clear();
+		bound.halfPlanes.reserve(seeds.size() > 0 ? seeds.size() - 1 : 0);
+		bound.vertices.clear();
 		for (uint32_t j = 0; j < seeds.size(); ++j)
 		{
 			if (j == i)
@@ -788,16 +782,11 @@ std::vector<VoronoiBounds> HotspotVoronoiHeuristic::BuildCellsFromSeeds(
 			const glm::vec2 otherSeed = seeds[j];
 			const glm::vec2 normal = otherSeed - seed;
 			const float c = (glm::dot(otherSeed, otherSeed) - glm::dot(seed, seed)) * 0.5f;
-			polygon = ClipPolygon(polygon, normal, c);
-			if (polygon.size() < 3)
-			{
-				break;
-			}
+			VoronoiHalfPlane plane;
+			plane.normal = normal;
+			plane.c = c;
+			bound.halfPlanes.push_back(plane);
 		}
-
-		VoronoiBounds bound;
-		bound.ID = static_cast<BoundsID>(i);
-		bound.vertices = std::move(polygon);
 		cells.push_back(std::move(bound));
 	}
 

@@ -128,6 +128,52 @@ function polygonToShape(
   };
 }
 
+function halfPlaneCellToShape(
+  raw: Record<string, unknown>,
+  id: string,
+  color: string
+): ShapeJS | null {
+  const siteRaw = raw.site;
+  if (!siteRaw || typeof siteRaw !== 'object' || Array.isArray(siteRaw)) {
+    return null;
+  }
+
+  const siteX = Number((siteRaw as { x?: unknown }).x);
+  const siteY = Number((siteRaw as { y?: unknown }).y);
+  if (!Number.isFinite(siteX) || !Number.isFinite(siteY)) {
+    return null;
+  }
+
+  const halfPlanesRaw = Array.isArray(raw.halfPlanes) ? raw.halfPlanes : [];
+  const halfPlanes = halfPlanesRaw
+    .filter((plane): plane is Record<string, unknown> => !!plane && typeof plane === 'object')
+    .map((plane) => ({
+      nx: Number(plane.nx),
+      ny: Number(plane.ny),
+      c: Number(plane.c),
+    }))
+    .filter(
+      (plane) =>
+        Number.isFinite(plane.nx) &&
+        Number.isFinite(plane.ny) &&
+        Number.isFinite(plane.c)
+    );
+
+  if (halfPlanes.length === 0) {
+    return null;
+  }
+
+  return {
+    id,
+    type: 'polygon',
+    position: { x: siteX, y: siteY },
+    points: [],
+    site: { x: siteX, y: siteY },
+    halfPlanes,
+    color,
+  };
+}
+
 function rectangleToShape(
   raw: Record<string, unknown>,
   id: string,
@@ -244,6 +290,16 @@ function extractCellLayer(
     );
     if (polygon) {
       shapes.push(polygon);
+      continue;
+    }
+
+    const halfPlaneCell = halfPlaneCellToShape(
+      cell as Record<string, unknown>,
+      `${snapshot.snapshotId}:cell-halfplane:${index}`,
+      'rgba(248, 113, 113, 0.92)'
+    );
+    if (halfPlaneCell) {
+      shapes.push(halfPlaneCell);
       continue;
     }
 

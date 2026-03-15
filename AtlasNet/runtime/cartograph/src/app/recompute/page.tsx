@@ -100,6 +100,10 @@ function cloneShape(shape: ShapeJS): ShapeJS {
     position: { ...shape.position },
     size: shape.size ? { ...shape.size } : undefined,
     points: shape.points ? shape.points.map((point) => ({ ...point })) : undefined,
+    site: shape.site ? { ...shape.site } : undefined,
+    halfPlanes: shape.halfPlanes
+      ? shape.halfPlanes.map((plane) => ({ ...plane }))
+      : undefined,
   };
 }
 
@@ -121,6 +125,8 @@ function createShapeFingerprint(
       radius: shape.radius ?? null,
       size: shape.size ?? null,
       points: shape.points ?? null,
+      site: shape.site ?? null,
+      halfPlanes: shape.halfPlanes ?? null,
       color: shape.color ?? null,
       label: shape.label ?? null,
     })),
