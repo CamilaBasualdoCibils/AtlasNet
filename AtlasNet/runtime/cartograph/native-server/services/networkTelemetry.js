@@ -67,7 +67,8 @@ function toStringRows(telemetryVec) {
   return rows;
 }
 
-function buildNetworkTelemetry(ids, rows) {
+function buildNetworkTelemetry(ids, rows, options = {}) {
+  const includeLiveIds = options.includeLiveIds !== false;
   const normalizedIds = [];
   if (Array.isArray(ids)) {
     for (const id of ids) {
@@ -77,6 +78,7 @@ function buildNetworkTelemetry(ids, rows) {
       }
     }
   }
+  const liveIdSet = new Set(normalizedIds);
 
   const rowsByShard = new Map();
   if (Array.isArray(rows)) {
@@ -88,6 +90,9 @@ function buildNetworkTelemetry(ids, rows) {
       const decoded = decodeConnectionRow(row);
       const shardId = String(decoded.shardId ?? decoded.IdentityId ?? '').trim();
       if (shardId.length === 0) {
+        continue;
+      }
+      if (includeLiveIds && liveIdSet.size > 0 && !liveIdSet.has(shardId)) {
         continue;
       }
       if (!rowsByShard.has(shardId)) {
@@ -106,16 +111,24 @@ function buildNetworkTelemetry(ids, rows) {
     seen.add(id);
     orderedShardIds.push(id);
   }
-  for (const shardId of Array.from(rowsByShard.keys()).sort()) {
-    if (seen.has(shardId)) {
-      continue;
+  if (!includeLiveIds || liveIdSet.size === 0) {
+    for (const shardId of Array.from(rowsByShard.keys()).sort()) {
+      if (seen.has(shardId)) {
+        continue;
+      }
+      seen.add(shardId);
+      orderedShardIds.push(shardId);
     }
-    seen.add(shardId);
-    orderedShardIds.push(shardId);
   }
 
   return orderedShardIds.map((id) => {
-    const connections = rowsByShard.get(id) ?? [];
+    const connections = (rowsByShard.get(id) ?? []).filter((connection) => {
+      if (!includeLiveIds || liveIdSet.size === 0) {
+        return true;
+      }
+      const targetId = String(connection.targetId ?? '').trim();
+      return liveIdSet.has(targetId);
+    });
     const { inAvg, outAvg, pingAvg } = computeShardAverages(connections);
     return {
       shardId: id,
@@ -158,7 +171,7 @@ function readNetworkTelemetry(addon, networkTelemetry, options = {}) {
     ids.push(String(idsVec.get(i)));
   }
 
-  return buildNetworkTelemetry(ids, toStringRows(telemetryVec));
+  return buildNetworkTelemetry(ids, toStringRows(telemetryVec), { includeLiveIds });
 }
 
 module.exports = {
