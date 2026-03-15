@@ -39,6 +39,7 @@ add_swig_library_for_target(${TARGET_NAME}
         "std_string.i"
     STL_TEMPLATES
         "std::vector<IBoundsDrawShape>"
+        "std::vector<float>"
         "std::vector<std::pair<float,float>>"
         "std::pair<float,float>"
         "std::vector<std::string>"

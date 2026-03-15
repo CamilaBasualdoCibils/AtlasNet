@@ -3,6 +3,7 @@ const { readEntityLedgersTelemetry } = require('./entityLedgerTelemetry');
 const { readHeuristicShapes } = require('./heuristicShapes');
 const {
   readHeuristicClaimedOwnersFromDatabase,
+  readHeuristicShapesFromDatabase,
   readTransferManifestFromDatabase,
 } = require('./databaseTelemetry');
 
@@ -189,9 +190,13 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
 }
 
 async function collectHeuristicShapes({ addon }) {
-  const databaseShapes = await readHeuristicShapesFromDatabase();
-  if (databaseShapes.length > 0) {
-    return databaseShapes;
+  const databaseRead = await runTelemetryRead(
+    'heuristic shapes internalDB',
+    () => readHeuristicShapesFromDatabase(),
+    []
+  );
+  if (databaseRead.ok && asArray(databaseRead.value).length > 0) {
+    return asArray(databaseRead.value);
   }
 
   const hasAddon = Boolean(

@@ -73,6 +73,14 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 								// position.
 								poly.verticies.emplace_back(v.x - c.x, v.y - c.y);
 							}
+							poly.half_planes.clear();
+							poly.half_planes.reserve(polyBound.halfPlanes.size() * 3);
+							for (const auto& plane : polyBound.halfPlanes)
+							{
+								poly.half_planes.push_back(plane.normal.x);
+								poly.half_planes.push_back(plane.normal.y);
+								poly.half_planes.push_back(plane.c);
+							}
 
 							shapes.emplace_back(std::move(poly));
 						});

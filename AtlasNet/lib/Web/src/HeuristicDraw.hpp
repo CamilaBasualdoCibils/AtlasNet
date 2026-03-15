@@ -31,6 +31,7 @@ struct IBoundsDrawShape
 
 	float size_x,size_y;					  // rectangle,RectImage
 	std::vector<std::pair<float,float>> verticies;  // Polygon
+	std::vector<float> half_planes;  // Polygon half-planes flattened as nx, ny, c triplets
 };
 
 class HeuristicDraw
