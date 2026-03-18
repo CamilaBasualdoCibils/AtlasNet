@@ -23,7 +23,7 @@ void HeuristicService::HeuristicThreadLoop(std::stop_token st)
 }
 void HeuristicService::ComputeHeuristic()
 {
-	std::vector<Transform> transforms;
+	std::vector<AtlasTransform> transforms;
 	SnapshotService::Get().FetchAllTransforms(transforms);
 
 	logger.DebugFormatted("Fetched {} entities", transforms.size());

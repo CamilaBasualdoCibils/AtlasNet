@@ -19,12 +19,12 @@ void VoronoiHeuristic::SetSeedCount(uint32_t count)
 	options.SeedCount = count;
 }
 
-void VoronoiHeuristic::Compute(const std::span<const Transform>& span)
+void VoronoiHeuristic::Compute(const std::span<const AtlasTransform>& span)
 {
 	// Build Voronoi cells by clipping a bounding box polygon with the
 	// perpendicular bisector half-planes of all other seeds.
 
-	const uint32_t seedCount = 5;  // std::max<uint32_t>(1, options.SeedCount);
+	const uint32_t seedCount = 10;  // std::max<uint32_t>(1, options.SeedCount);
 
 	const float minX = -options.NetHalfExtent.x;
 	const float maxX = options.NetHalfExtent.x;

@@ -58,8 +58,6 @@ void HeuristicDraw::DrawCurrentHeuristic(std::vector<IBoundsDrawShape>& shapes)
 							const VoronoiBounds& polyBound = *vsp;
 							IBoundsDrawShape poly;
 							poly.id = polyBound.ID;
-							ASSERT(poly.id >= 0 && poly.id <= 4,
-								   "FUCK");	 // Trying to find a Bug
 
 							poly.type = IBoundsDrawShape::Type::ePolygon;
 							const vec3 c = polyBound.GetCenter();
