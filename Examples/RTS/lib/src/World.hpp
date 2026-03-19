@@ -52,7 +52,9 @@ class World : public Singleton<World>
 	void DebugDrawAABBTree();
 	void UpdateAll(float deltaTime);
 
-	void RenderAll();
+	#ifdef RTS_CLIENT
+	void RenderAll();		
+	#endif
 	template <typename FN>
 		requires std::is_invocable_v<FN, Entity&>
 	void ForEachEntity(FN&& f)
@@ -68,6 +70,7 @@ class World : public Singleton<World>
 
    private:
 	void UpdateEntityRecursive(Entity& entity, float deltaTime);
-
-	void RenderEntityRecursive(Entity& entity);
+		#ifdef RTS_CLIENT
+		void RenderEntityRecursive(Entity& entity);
+		#endif
 };

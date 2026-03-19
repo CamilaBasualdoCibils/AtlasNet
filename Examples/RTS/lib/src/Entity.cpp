@@ -35,6 +35,8 @@ void Entity::RemoveChild(EntityID childID)
 	if (it != Children.end())
 		Children.erase(it);
 }
+	#ifdef RTS_CLIENT
+
 void Entity::DebugTree()
 {
 	// Make the label show ID (and optionally parent)
@@ -59,6 +61,7 @@ void Entity::DebugTree()
 		ImGui::TreePop();
 	}
 }
+#endif
 void Entity::Disown(EntityID childID)
 {
 	Entity& child = World::Get().GetEntity<Entity>(childID);

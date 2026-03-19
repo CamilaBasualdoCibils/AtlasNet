@@ -8,7 +8,7 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
 )
 
 add_executable(RTSClient ${_sources})
-target_link_libraries(RTSClient PUBLIC AtlasNetClient_Static RTSLib )
+target_link_libraries(RTSClient PUBLIC AtlasNetClient_Static RTSLib_Client )
 # Optional, but common: local includes
 target_include_directories(RTSClient
   PRIVATE

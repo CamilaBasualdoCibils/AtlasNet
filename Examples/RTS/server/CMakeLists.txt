@@ -10,7 +10,7 @@ file(GLOB_RECURSE _sources CONFIGURE_DEPENDS
 )
 
 add_executable(RTSServer ${_sources})
-target_link_libraries(RTSServer PUBLIC RTSLib AtlasNetServer_Static)
+target_link_libraries(RTSServer PUBLIC RTSLib_Server AtlasNetServer_Static)
 # Optional, but common: local includes
 target_include_directories(RTSServer
   PRIVATE

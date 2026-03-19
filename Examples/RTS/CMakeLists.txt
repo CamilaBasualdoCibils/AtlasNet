@@ -29,12 +29,12 @@ add_custom_target(RTS_atlasnet_run_k3d
      DEPENDS RTSServerDockerBuild AtlasnetDockerBuild_Fast 
      )
 
-DEFINE_CUSTOM_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
-DEFINE_CUSTOM_VALGRIND_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
+#DEFINE_CUSTOM_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
+#DEFINE_CUSTOM_VALGRIND_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
 
 add_custom_target(RTS_atlasnet_run_Docker
-     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh atlasnet_dev ${RTS_SERVER_IMAGE_NAME}
-     COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/PruneUnusedDockerResources.sh
+COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh atlasnet_dev ${RTS_SERVER_IMAGE_NAME}
+#COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/PruneUnusedDockerResources.sh
      USES_TERMINAL
      DEPENDS RTSServerDockerBuild AtlasnetDockerBuild_Fast 
      )

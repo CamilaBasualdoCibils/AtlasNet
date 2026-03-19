@@ -1,9 +1,10 @@
 #include "World.hpp"
-
+#ifdef RTS_CLIENT
 #include "Debug/DebugDraw.hpp"
+#include "imgui.h"
+#endif
 #include "Global/Types/AABB.hpp"
 #include "Ray.hpp"
-#include "imgui.h"
 void World::UpdateAllTransforms()
 {
 	// Start from all root entities (no parent)
@@ -15,6 +16,7 @@ void World::UpdateAllTransforms()
 		}
 	}
 }
+#ifdef RTS_CLIENT
 void World::DebugMenu()
 {
 	ImGui::Begin("World Entities");
@@ -36,6 +38,7 @@ void World::DebugMenu()
 
 	ImGui::End();
 }
+#endif
 void World::UpdateEntityRecursive(Entity& entity, float deltaTime)
 {
 	entity.Update(deltaTime);  // Call the entity's own update
@@ -49,6 +52,7 @@ void World::UpdateEntityRecursive(Entity& entity, float deltaTime)
 		UpdateEntityRecursive(World::Get().GetEntity<Entity>(childID), deltaTime);
 	}
 }
+#ifdef RTS_CLIENT
 void World::RenderEntityRecursive(Entity& entity)
 {
 	entity.Render();
@@ -57,6 +61,7 @@ void World::RenderEntityRecursive(Entity& entity)
 		RenderEntityRecursive(World::Get().GetEntity<Entity>(childID));
 	}
 }
+
 void World::RenderAll()
 {
 	for (auto& [ID, en] : entities)
@@ -66,6 +71,7 @@ void World::RenderAll()
 			RenderEntityRecursive(*en);
 	}
 }
+#endif
 void World::UpdateAll(float deltaTime)
 {
 	// 1. Update all entities recursively
@@ -111,7 +117,7 @@ void World::UpdateAll(float deltaTime)
 
 	aabbTree = RTree3f(boxes.begin(), boxes.end());	 // Rebuild tree
 }
-
+#ifdef RTS_CLIENT
 void World::DebugDrawAABBTree()
 {
 	if (aabbTree.size() == 0)
@@ -136,6 +142,7 @@ void World::DebugDrawAABBTree()
 		DebugDraw::Get().DrawBox(min, max, color, true);
 	}
 }
+#endif
 std::optional<EntityID> World::Raycast(const glm::vec2& ndc, const glm::mat4& viewProj)
 {
 	Ray ray = BuildRayFromNDC(ndc, viewProj);

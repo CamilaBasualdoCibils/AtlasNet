@@ -1,15 +1,20 @@
 #include "FloorEntity.hpp"
-
+#ifdef RTS_CLIENT
 #include "Entities/Camera.hpp"
+#endif
 #include "Global/pch.hpp"
 #include "World.hpp"
 
 FloorEntity::FloorEntity(EntityID _ID)
-	: Entity(_ID),
+	: Entity(_ID)
+#ifdef RTS_CLIENT
+	  ,
 	  vao(),
-	  vbo(quadVertices.size() * sizeof(vec3), GL_STATIC_DRAW,quadVertices.data()),
+	  vbo(quadVertices.size() * sizeof(vec3), GL_STATIC_DRAW, quadVertices.data()),
 	  ebo(quadIndices)
+#endif
 {
+#ifdef RTS_CLIENT
 	shader.AddShader(vertexShaderSrc, GL_VERTEX_SHADER);
 	shader.AddShader(fragmentShaderSrc, GL_FRAGMENT_SHADER);
 	shader.LinkProgram();
@@ -19,11 +24,12 @@ FloorEntity::FloorEntity(EntityID _ID)
 	vao.EnableAttribute(0);
 	vao.SetAttribute(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void*)0);
 	vao.Unbind();
+#endif
 }
-
+#ifdef RTS_CLIENT
 void FloorEntity::Render()
 {
-    glEnable(GL_DEPTH_TEST);
+	glEnable(GL_DEPTH_TEST);
 
 	ASSERT(Camera::GetMainCameraID().has_value(), "NO CAMERA ASSIGNED");
 	shader.UseShader();
@@ -38,3 +44,5 @@ void FloorEntity::Render()
 	shader.UnuseShader();
 	vao.Unbind();
 }
+
+#endif

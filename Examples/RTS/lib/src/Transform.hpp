@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Global/pch.hpp"
+#ifdef RTS_CLIENT
 #include "imgui.h"
+#endif
 class Transform
 {
    public:
@@ -57,30 +59,31 @@ class Transform
 
 		return V;
 	}
+#ifdef RTS_CLIENT
+	void DebugMenu()
+	{
+		if (ImGui::TreeNode("Transform"))
+		{
+			// Position
+			ImGui::DragFloat3("Position", &Pos.x, 0.1f);
 
-    void DebugMenu()
-    {
-        if (ImGui::TreeNode("Transform"))
-    {
-        // Position
-        ImGui::DragFloat3("Position", &Pos.x, 0.1f);
+			// Scale
+			ImGui::DragFloat3("Scale", &Scale.x, 0.01f, 0.0f, 0.0f, "%.3f");
 
-        // Scale
-        ImGui::DragFloat3("Scale", &Scale.x, 0.01f, 0.0f, 0.0f, "%.3f");
+			// Convert quaternion to Euler angles (degrees)
+			vec3 euler = glm::degrees(glm::eulerAngles(Rot));
+			vec3 newEuler = euler;
 
-        // Convert quaternion to Euler angles (degrees)
-        vec3 euler = glm::degrees(glm::eulerAngles(Rot));
-        vec3 newEuler = euler;
+			if (ImGui::DragFloat3("Rotation (Euler)", &newEuler.x, 0.5f, -360.0f, 360.0f))
+			{
+				// Convert back to quaternion
+				Rot = glm::quat(glm::radians(newEuler));
+			}
 
-        if (ImGui::DragFloat3("Rotation (Euler)", &newEuler.x, 0.5f, -360.0f, 360.0f))
-        {
-            // Convert back to quaternion
-            Rot = glm::quat(glm::radians(newEuler));
-        }
-
-        // Optional: Display the quaternion itself
-        ImGui::Text("Quaternion: (%.3f, %.3f, %.3f, %.3f)", Rot.x, Rot.y, Rot.z, Rot.w);
-        ImGui::TreePop();
-    }
-    }
+			// Optional: Display the quaternion itself
+			ImGui::Text("Quaternion: (%.3f, %.3f, %.3f, %.3f)", Rot.x, Rot.y, Rot.z, Rot.w);
+			ImGui::TreePop();
+		}
+	}
+#endif
 };

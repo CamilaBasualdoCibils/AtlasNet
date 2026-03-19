@@ -5,16 +5,22 @@
 
 #include <glm/ext/quaternion_geometric.hpp>
 
+#include "Client/Client.hpp"
 #include "Entity.hpp"
 #include "EntityID.hpp"
+	#ifdef RTS_CLIENT
+
 #include "GL/ElementBuffer.hpp"
 #include "GL/VertexArray.hpp"
 #include "GL/VertexBuffer.hpp"
 #include "GL/shader.hpp"
+#endif
 #include "Global/pch.hpp"
 #include "tweeny/tweeny.h"
 class Worker : public Entity
 {
+	#ifdef RTS_CLIENT
+
 	constexpr static const char* vertexShaderSrc = R"(
 #version 330 core
 layout (location = 0) in vec3 aPos;
@@ -24,7 +30,7 @@ uniform mat4 MVP;
 void main()
 {
     gl_Position = MVP * vec4(aPos, 1.0);
-    yPos = aPos.y;
+    yPos = aPos.y-1;
 }
 )";
 
@@ -64,6 +70,8 @@ void main()
 	VertexBuffer vbo;
 	ElementBuffer ebo;
 	ShaderProgram shader;
+	#endif
+	ClientID OwnerID;
 	glm::vec3 color = glm::vec3(1.0f, 0.7f, 0.2f);	// default color
 	std::optional<vec3> ColorOverride;
 	float MoveSpeed = 0.05;
@@ -81,10 +89,12 @@ void main()
 							   TweenStepPerSecond);	 // advance proportional to deltaTime
 		}
 	}
+	#ifdef RTS_CLIENT
 	void Render() override;
-	void End() override {}
 	void SetColorOverride(const glm::vec3& newColor) { ColorOverride = newColor; }
 	void ClearColorOVerride() { ColorOverride.reset(); }
+	#endif
+	void End() override {}
 	void MoveTo(vec3 endWorldPos)
 	{
 		float len = glm::length(transform.Pos - endWorldPos);
