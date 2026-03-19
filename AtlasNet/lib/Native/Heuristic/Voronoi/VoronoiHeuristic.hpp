@@ -19,7 +19,7 @@ class VoronoiHeuristic : public THeuristic<VoronoiBounds>
 		// Half-extent used only to seed initial sites deterministically.
 		vec2 NetHalfExtent = {100.0f, 100.0f};
 		// Number of Voronoi seeds / regions.
-		uint32_t SeedCount = 5;
+		uint32_t SeedCount = 3;
 	} options;
 
 	VoronoiHeuristic();

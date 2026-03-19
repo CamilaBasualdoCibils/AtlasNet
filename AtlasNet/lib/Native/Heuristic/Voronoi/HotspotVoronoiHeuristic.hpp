@@ -22,7 +22,7 @@ class HotspotVoronoiHeuristic : public THeuristic<VoronoiBounds>
 	struct Options
 	{
 		vec2 NetHalfExtent = {100.0f, 100.0f};
-		uint32_t DefaultServerCount = 5;
+		uint32_t DefaultServerCount = 3;
 		uint32_t HotspotCount = 8;
 		uint32_t DensityGridResolution = 24;
 	} options;

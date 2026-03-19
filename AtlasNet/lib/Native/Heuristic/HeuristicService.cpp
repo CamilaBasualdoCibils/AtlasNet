@@ -69,7 +69,7 @@ void HeuristicService::SyncDesiredHeuristic()
 {
 	if (!activeHeuristic)
 	{
-		activeHeuristic = CreateHeuristic(IHeuristic::Type::eVoronoi);
+		activeHeuristic = CreateHeuristic(IHeuristic::Type::eHotspotVoronoi);
 	}
 
 	const std::optional<std::string> desiredTypeRaw =

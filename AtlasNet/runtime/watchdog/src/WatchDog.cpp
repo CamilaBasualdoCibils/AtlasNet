@@ -287,16 +287,7 @@ void WatchDog::Init()
 	// The local WatchDog heuristic instance remains available for ad-hoc
 	// debugging and testing, but it is not the live runtime publisher while
 	// WatchDog::ComputeHeuristic() stays disabled.
-	SwitchHeuristic(IHeuristic::Type::eVoronoi);
-	if (auto voronoi = std::dynamic_pointer_cast<VoronoiHeuristic>(Heuristic))
-	{
-		// Seed count == number of Voronoi regions / bounds.
-		voronoi->SetSeedCount(5);
-	}
-	else
-	{
-		logger->Error("Expected VoronoiHeuristic after SwitchHeuristic(eVoronoi).");
-	}
+	SwitchHeuristic(IHeuristic::Type::eHotspotVoronoi);
 	ComputeHeuristic();	 // compute once
 						 // HeuristicThread = std::jthread([this](std::stop_token st)
 						 //							   { this->HeurristicThreadEntry(st); });
