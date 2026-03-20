@@ -165,6 +165,13 @@ configure: deps vcpkg
 	      echo "==> Tail of $$LOG_FILE"; \
 	      tail -n 240 "$$LOG_FILE"; \
 	      echo "==> End tail of $$LOG_FILE"; \
+	      while IFS= read -r PORT_LOG; do \
+	        if [ -f "$$PORT_LOG" ]; then \
+	          echo "==> Tail of $$PORT_LOG"; \
+	          tail -n 120 "$$PORT_LOG"; \
+	          echo "==> End tail of $$PORT_LOG"; \
+	        fi; \
+	      done < <(grep -Eo '/[^[:space:]]+\\.log' "$$LOG_FILE" | awk '!seen[$$0]++'); \
 	    else \
 	      echo "==> vcpkg manifest log not found at $$LOG_FILE"; \
 	    fi; \
