@@ -148,7 +148,18 @@ configure: deps vcpkg
 	  -DSANDBOX_ADD_CLIENT=ON \
 	  -DCMAKE_C_COMPILER=clang \
 	  -DCMAKE_CXX_COMPILER=clang++ \
-	  "$(ATLASNET_ROOT)"
+	  "$(ATLASNET_ROOT)" || { \
+	    LOG_FILE="$(BUILD_DIR)/vcpkg-manifest-install.log"; \
+	    echo "==> CMake configure failed."; \
+	    if [ -f "$$LOG_FILE" ]; then \
+	      echo "==> Begin $$LOG_FILE"; \
+	      sed -n '1,240p' "$$LOG_FILE"; \
+	      echo "==> End $$LOG_FILE"; \
+	    else \
+	      echo "==> vcpkg manifest log not found at $$LOG_FILE"; \
+	    fi; \
+	    exit 1; \
+	  }
 	@echo "==> CMake configure completed for ARM64."
 
 build-core: configure
