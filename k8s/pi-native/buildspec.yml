@@ -3,6 +3,8 @@ version: 0.2
 phases:
   build:
     commands:
+      - 'echo "Logging into Docker Hub on the CodeBuild host to avoid pull rate limits"'
+      - 'printf "%s" "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin'
       - 'echo "Building .devcontainer/Dockerfile as the CI build environment"'
       - 'docker build -t atlasnet-devcontainer-ci -f .devcontainer/Dockerfile .devcontainer'
       - 'echo "Running smoke test inside atlasnet-devcontainer-ci"'
@@ -62,6 +64,7 @@ phases:
               --x-install-root=/tmp/vcpkg-atlas-installed
             docker version
             docker buildx version
+            printf "%s" "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
             cmake -S /workspace -B /tmp/atlasnet-configure \
               -G Ninja \
               -DCMAKE_MAKE_PROGRAM=/usr/bin/ninja \
@@ -84,7 +87,6 @@ phases:
             docker image inspect proxy:latest >/dev/null
             docker image inspect cartograph:latest >/dev/null
             docker image inspect sandbox-server:latest >/dev/null
-            printf "%s" "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
             docker tag watchdog:latest "$ATLASNET_WATCHDOG_IMAGE"
             docker tag proxy:latest "$ATLASNET_PROXY_IMAGE"
             docker tag cartograph:latest "$ATLASNET_CARTOGRAPH_IMAGE"
