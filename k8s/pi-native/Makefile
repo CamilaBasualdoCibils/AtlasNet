@@ -8,6 +8,8 @@ VCPKG_VERSION ?= 2026.01.16
 VCPKG_ROOT ?= /opt/vcpkg/$(VCPKG_VERSION)
 BUILDKITD_CONFIG ?= $(ATLASNET_ROOT)/AtlasNet/docker/buildkitd.pi.toml
 CMAKE_BUILD_TYPE ?= Release
+HOST_CC ?= gcc
+HOST_CXX ?= g++
 JOBS ?= 4
 
 DOCKERHUB_NAMESPACE ?=
@@ -22,7 +24,7 @@ ATLASNET_CARTOGRAPH_IMAGE ?= $(DOCKERHUB_NAMESPACE)/cartograph:$(ATLASNET_IMAGE_
 ATLASNET_SANDBOX_SERVER_IMAGE ?= $(DOCKERHUB_NAMESPACE)/sandbox-server:$(ATLASNET_IMAGE_TAG_ARM64)
 
 APT_PACKAGES := \
-	build-essential binutils clang \
+	build-essential binutils \
 	cmake ninja-build pkg-config \
 	git curl unzip zip tar \
 	python3 perl \
@@ -32,7 +34,7 @@ APT_PACKAGES := \
 	docker.io
 
 DNF_PACKAGES := \
-	gcc gcc-c++ make binutils clang \
+	gcc gcc-c++ make binutils \
 	cmake ninja-build pkgconf-pkg-config \
 	git curl unzip zip tar \
 	python3 perl \
@@ -41,7 +43,7 @@ DNF_PACKAGES := \
 	swig nodejs docker
 
 YUM_PACKAGES := \
-	gcc gcc-c++ make binutils clang \
+	gcc gcc-c++ make binutils \
 	cmake3 ninja-build pkgconfig \
 	git curl unzip zip tar \
 	python3 perl \
@@ -119,7 +121,7 @@ deps:
 	  echo "ERROR: Unsupported package manager. Expected apt-get, dnf, or yum."; \
 	  exit 1; \
 	fi
-	@for REQUIRED_TOOL in docker git curl python3 perl cmake clang swig node; do \
+	@for REQUIRED_TOOL in docker git curl python3 perl cmake swig node "$(HOST_CC)" "$(HOST_CXX)"; do \
 	  command -v "$$REQUIRED_TOOL" >/dev/null 2>&1 || { echo "ERROR: required tool '$$REQUIRED_TOOL' was not found after dependency installation."; exit 1; }; \
 	done
 	@NODE_EXEC="$$(command -v node)"; \
@@ -166,8 +168,8 @@ configure: deps vcpkg
 	  -DVCPKG_MANIFEST_DIR="$(ATLASNET_ROOT)/AtlasNet" \
 	  -DVCPKG_TARGET_TRIPLET=arm64-linux \
 	  -DSANDBOX_ADD_CLIENT=ON \
-	  -DCMAKE_C_COMPILER=clang \
-	  -DCMAKE_CXX_COMPILER=clang++ \
+	  -DCMAKE_C_COMPILER="$(HOST_CC)" \
+	  -DCMAKE_CXX_COMPILER="$(HOST_CXX)" \
 	  "$(ATLASNET_ROOT)" || { \
 	    LOG_FILE="$(BUILD_DIR)/vcpkg-manifest-install.log"; \
 	    echo "==> CMake configure failed."; \
