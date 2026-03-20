@@ -83,6 +83,8 @@ deps:
 	  echo "==> Detected apt-based environment."; \
 	  $(SUDO) apt-get update; \
 	  $(SUDO) apt-get install -y --no-install-recommends $(APT_PACKAGES); \
+	  dpkg -s linux-libc-dev >/dev/null 2>&1 || { echo "ERROR: linux-libc-dev was not installed."; exit 1; }; \
+	  dpkg-query -W -f='==> linux-libc-dev version ${Version}\n' linux-libc-dev; \
 	  if ! docker buildx version >/dev/null 2>&1; then \
 	    echo "==> Installing Docker buildx plugin..."; \
 	    $(SUDO) apt-get install -y docker-buildx || $(SUDO) apt-get install -y docker-buildx-plugin; \
@@ -92,6 +94,8 @@ deps:
 	  echo "==> Detected dnf-based environment."; \
 	  $(SUDO) dnf install -y $(DNF_PACKAGES); \
 	  $(SUDO) dnf install -y glm-devel nlohmann-json-devel || true; \
+	  rpm -q kernel-headers >/dev/null 2>&1 || { echo "ERROR: kernel-headers was not installed."; exit 1; }; \
+	  rpm -q kernel-headers; \
 	  $(SUDO) systemctl enable docker >/dev/null 2>&1 || true; \
 	  $(SUDO) systemctl start docker >/dev/null 2>&1 || true; \
 	  if ! docker buildx version >/dev/null 2>&1; then \
@@ -102,6 +106,8 @@ deps:
 	  echo "==> Detected yum-based environment (Amazon Linux 2 style)."; \
 	  $(SUDO) yum install -y $(YUM_PACKAGES); \
 	  $(SUDO) yum install -y nodejs npm || true; \
+	  rpm -q kernel-headers >/dev/null 2>&1 || { echo "ERROR: kernel-headers was not installed."; exit 1; }; \
+	  rpm -q kernel-headers; \
 	  if command -v amazon-linux-extras >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then \
 	    $(SUDO) amazon-linux-extras install -y nodejs || true; \
 	  fi; \
