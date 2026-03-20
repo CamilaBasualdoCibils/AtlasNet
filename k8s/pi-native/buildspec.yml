@@ -20,16 +20,36 @@ phases:
           node --version
           swig -version | head -n 2
         '
-      - 'echo "Running AtlasNet dependency install, CMake configure, and core native build inside atlasnet-devcontainer-ci"'
+      - 'echo "Running AtlasNet dependency install, native build, Docker image build, and Docker Hub push inside atlasnet-devcontainer-ci"'
       - |
         docker run --rm \
+          -v /var/run/docker.sock:/var/run/docker.sock \
           -v "$CODEBUILD_SRC_DIR:/workspace" \
           -w /workspace \
+          -e DOCKERHUB_NAMESPACE \
+          -e DOCKERHUB_USERNAME \
+          -e DOCKERHUB_TOKEN \
+          -e ATLASNET_IMAGE_TAG \
+          -e ATLASNET_IMAGE_TAG_AMD64 \
+          -e ATLASNET_IMAGE_TAG_ARM64 \
+          -e ATLASNET_WATCHDOG_IMAGE \
+          -e ATLASNET_PROXY_IMAGE \
+          -e ATLASNET_CARTOGRAPH_IMAGE \
+          -e ATLASNET_SANDBOX_SERVER_IMAGE \
           atlasnet-devcontainer-ci bash -lc '
             set -euo pipefail
             export HOME=/tmp/codebuild-home
             export XDG_CACHE_HOME="$HOME/.cache"
             export VCPKG_DISABLE_METRICS=1
+            : "${DOCKERHUB_NAMESPACE:?Set DOCKERHUB_NAMESPACE in CodeBuild}"
+            : "${DOCKERHUB_USERNAME:?Set DOCKERHUB_USERNAME in CodeBuild}"
+            : "${DOCKERHUB_TOKEN:?Set DOCKERHUB_TOKEN in CodeBuild}"
+            : "${ATLASNET_IMAGE_TAG:=latest}"
+            : "${ATLASNET_IMAGE_TAG_ARM64:=latest-arm64}"
+            : "${ATLASNET_WATCHDOG_IMAGE:=${DOCKERHUB_NAMESPACE}/watchdog:${ATLASNET_IMAGE_TAG_ARM64}}"
+            : "${ATLASNET_PROXY_IMAGE:=${DOCKERHUB_NAMESPACE}/proxy:${ATLASNET_IMAGE_TAG_ARM64}}"
+            : "${ATLASNET_CARTOGRAPH_IMAGE:=${DOCKERHUB_NAMESPACE}/cartograph:${ATLASNET_IMAGE_TAG_ARM64}}"
+            : "${ATLASNET_SANDBOX_SERVER_IMAGE:=${DOCKERHUB_NAMESPACE}/sandbox-server:${ATLASNET_IMAGE_TAG_ARM64}}"
             mkdir -p "$HOME" "$XDG_CACHE_HOME" /tmp/vcpkg-test /tmp/vcpkg-atlas-installed /tmp/atlasnet-configure
             curl -fsSL https://github.com/microsoft/vcpkg/archive/refs/tags/2026.01.16.tar.gz \
               | tar -xz --strip-components=1 -C /tmp/vcpkg-test
@@ -40,6 +60,8 @@ phases:
               --triplet=arm64-linux \
               --x-manifest-root=/workspace/AtlasNet \
               --x-install-root=/tmp/vcpkg-atlas-installed
+            docker version
+            docker buildx version
             cmake -S /workspace -B /tmp/atlasnet-configure \
               -G Ninja \
               -DCMAKE_MAKE_PROGRAM=/usr/bin/ninja \
@@ -54,4 +76,26 @@ phases:
             cmake --build /tmp/atlasnet-configure \
               --target watchdog proxy Web_swig SandboxServer \
               -- -j4
+            BUILDKITD_CONFIG=/workspace/AtlasNet/docker/buildkitd.pi.toml \
+              cmake --build /tmp/atlasnet-configure \
+              --target AtlasnetDockerBuild_Fast SandboxServerDockerBuild \
+              -- -j4
+            docker image inspect watchdog:latest >/dev/null
+            docker image inspect proxy:latest >/dev/null
+            docker image inspect cartograph:latest >/dev/null
+            docker image inspect sandbox-server:latest >/dev/null
+            printf "%s" "$DOCKERHUB_TOKEN" | docker login --username "$DOCKERHUB_USERNAME" --password-stdin
+            docker tag watchdog:latest "$ATLASNET_WATCHDOG_IMAGE"
+            docker tag proxy:latest "$ATLASNET_PROXY_IMAGE"
+            docker tag cartograph:latest "$ATLASNET_CARTOGRAPH_IMAGE"
+            docker tag sandbox-server:latest "$ATLASNET_SANDBOX_SERVER_IMAGE"
+            docker push "$ATLASNET_WATCHDOG_IMAGE"
+            docker push "$ATLASNET_PROXY_IMAGE"
+            docker push "$ATLASNET_CARTOGRAPH_IMAGE"
+            docker push "$ATLASNET_SANDBOX_SERVER_IMAGE"
+            printf "Published images:\n - %s\n - %s\n - %s\n - %s\n" \
+              "$ATLASNET_WATCHDOG_IMAGE" \
+              "$ATLASNET_PROXY_IMAGE" \
+              "$ATLASNET_CARTOGRAPH_IMAGE" \
+              "$ATLASNET_SANDBOX_SERVER_IMAGE"
           '
