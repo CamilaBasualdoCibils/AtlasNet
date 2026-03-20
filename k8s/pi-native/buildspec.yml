@@ -6,10 +6,10 @@ phases:
       - 'echo "Starting minimal dependency sanity check"'
       - 'echo "Architecture: $(uname -m)"'
       - 'if [ -f /etc/os-release ]; then cat /etc/os-release; fi'
-      - 'if command -v dnf >/dev/null 2>&1; then echo "Using dnf to install perl + compiler toolchain + CMake/Ninja + fetch tools"; dnf install -y perl gcc gcc-c++ make cmake ninja-build git curl tar zip unzip; elif command -v yum >/dev/null 2>&1; then echo "Using yum to install perl + compiler toolchain + CMake/Ninja + fetch tools"; yum install -y perl gcc gcc-c++ make cmake3 ninja-build git curl tar zip unzip; elif command -v apt-get >/dev/null 2>&1; then echo "Using apt-get to install perl + compiler toolchain + CMake/Ninja + fetch tools"; apt-get update; apt-get install -y perl build-essential cmake ninja-build git curl tar zip unzip; else echo "No supported package manager found"; exit 1; fi'
+      - 'if command -v dnf >/dev/null 2>&1; then echo "Using dnf to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3"; dnf install -y perl gcc gcc-c++ make cmake ninja-build git curl tar zip unzip python3; elif command -v yum >/dev/null 2>&1; then echo "Using yum to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3"; yum install -y perl gcc gcc-c++ make cmake3 ninja-build git curl tar zip unzip python3; elif command -v apt-get >/dev/null 2>&1; then echo "Using apt-get to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3"; apt-get update; apt-get install -y perl build-essential cmake ninja-build git curl tar zip unzip python3; else echo "No supported package manager found"; exit 1; fi'
   build:
     commands:
-      - 'echo "Verifying perl + compiler toolchain + CMake/Ninja + fetch tools installation"'
+      - 'echo "Verifying perl + compiler toolchain + CMake/Ninja + fetch tools + python3 installation"'
       - 'command -v perl'
       - 'perl -v'
       - 'command -v gcc'
@@ -30,3 +30,5 @@ phases:
       - 'zip -v | head -n 2'
       - 'command -v unzip'
       - 'unzip -v | head -n 2'
+      - 'command -v python3'
+      - 'python3 --version'
