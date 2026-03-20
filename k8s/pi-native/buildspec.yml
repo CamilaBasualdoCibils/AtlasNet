@@ -7,11 +7,13 @@ phases:
       - 'echo "Architecture: $(uname -m)"'
       - 'if [ -f /etc/os-release ]; then cat /etc/os-release; fi'
       - 'if command -v dnf >/dev/null 2>&1; then echo "Using dnf to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3 + linux headers"; dnf install -y perl gcc gcc-c++ make cmake ninja-build git curl tar zip unzip python3 kernel-headers glibc-headers; elif command -v yum >/dev/null 2>&1; then echo "Using yum to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3 + linux headers"; yum install -y perl gcc gcc-c++ make cmake3 ninja-build git curl tar zip unzip python3 kernel-headers glibc-headers; elif command -v apt-get >/dev/null 2>&1; then echo "Using apt-get to install perl + compiler toolchain + CMake/Ninja + fetch tools + python3 + linux headers"; apt-get update; apt-get install -y perl build-essential cmake ninja-build git curl tar zip unzip python3 linux-libc-dev; else echo "No supported package manager found"; exit 1; fi'
+      - 'if command -v dnf >/dev/null 2>&1; then echo "Installing Perl Time::Piece support"; dnf install -y "perl(Time::Piece)" || dnf install -y perl-Time-Piece || dnf install -y perl-core; elif command -v yum >/dev/null 2>&1; then echo "Installing Perl Time::Piece support"; yum install -y "perl(Time::Piece)" || yum install -y perl-Time-Piece || yum install -y perl-core; elif command -v apt-get >/dev/null 2>&1; then echo "Installing Perl Time::Piece support"; apt-get install -y perl-modules; fi'
   build:
     commands:
       - 'echo "Verifying perl + compiler toolchain + CMake/Ninja + fetch tools + python3 + linux headers installation"'
       - 'command -v perl'
       - 'perl -v'
+      - 'perl -MTime::Piece -e "print qq(Time::Piece $Time::Piece::VERSION\n)"'
       - 'command -v gcc'
       - 'gcc --version'
       - 'command -v g++'
