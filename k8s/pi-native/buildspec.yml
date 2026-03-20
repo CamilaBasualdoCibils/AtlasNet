@@ -32,3 +32,8 @@ phases:
       - 'unzip -v | head -n 2'
       - 'command -v python3'
       - 'python3 --version'
+      - 'echo "Bootstrapping pinned vcpkg release"'
+      - 'rm -rf /tmp/vcpkg-test && mkdir -p /tmp/vcpkg-test'
+      - 'curl -fsSL https://github.com/microsoft/vcpkg/archive/refs/tags/2026.01.16.tar.gz | tar -xz --strip-components=1 -C /tmp/vcpkg-test'
+      - 'cd /tmp/vcpkg-test && ./bootstrap-vcpkg.sh'
+      - '/tmp/vcpkg-test/vcpkg version'
