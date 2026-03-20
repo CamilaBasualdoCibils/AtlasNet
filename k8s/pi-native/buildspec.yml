@@ -6,9 +6,15 @@ phases:
       - 'echo "Starting minimal dependency sanity check"'
       - 'echo "Architecture: $(uname -m)"'
       - 'if [ -f /etc/os-release ]; then cat /etc/os-release; fi'
-      - 'if command -v dnf >/dev/null 2>&1; then echo "Using dnf to install perl"; dnf install -y perl; elif command -v yum >/dev/null 2>&1; then echo "Using yum to install perl"; yum install -y perl; elif command -v apt-get >/dev/null 2>&1; then echo "Using apt-get to install perl"; apt-get update; apt-get install -y perl; else echo "No supported package manager found"; exit 1; fi'
+      - 'if command -v dnf >/dev/null 2>&1; then echo "Using dnf to install perl + compiler toolchain"; dnf install -y perl gcc gcc-c++ make; elif command -v yum >/dev/null 2>&1; then echo "Using yum to install perl + compiler toolchain"; yum install -y perl gcc gcc-c++ make; elif command -v apt-get >/dev/null 2>&1; then echo "Using apt-get to install perl + compiler toolchain"; apt-get update; apt-get install -y perl build-essential; else echo "No supported package manager found"; exit 1; fi'
   build:
     commands:
-      - 'echo "Verifying perl installation"'
+      - 'echo "Verifying perl + compiler toolchain installation"'
       - 'command -v perl'
       - 'perl -v'
+      - 'command -v gcc'
+      - 'gcc --version'
+      - 'command -v g++'
+      - 'g++ --version'
+      - 'command -v make'
+      - 'make --version'
