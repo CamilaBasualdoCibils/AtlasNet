@@ -141,7 +141,8 @@ In CodeBuild:
 
 The buildspec will:
 
-1. Install the Ubuntu packages needed for your CMake and Docker image targets.
+1. Install the minimal host toolchain needed by this native ARM build lane.
+   The host only gets compilers, build tools, SWIG, Node headers, Docker, and kernel headers.
 2. Bootstrap the pinned `vcpkg` release used by the Dockerfiles (`2026.01.16` by default).
 3. Configure an ARM64 build tree.
 4. Run:
@@ -204,6 +205,8 @@ make -C k8s/pi-native push-images
   The project is probably using Amazon Linux instance mode. That is supported now; make sure the latest `k8s/pi-native/Makefile` is committed on the branch CodeBuild is using.
 - The log stops around an early Boost package and never shows the actual failure
   The Makefile now prints the tail of `build-arm64-codebuild/vcpkg-manifest-install.log` plus nearby CMake logs so CodeBuild exposes the real error instead of the first 240 lines.
+- Unsure whether a dependency belongs in the OS packages or in `vcpkg`
+  In this path, the host package manager only installs build tools and headers. AtlasNet C/C++ libraries are expected to come from `vcpkg` during CMake configure.
 - Build runs out of memory or times out
   Increase the ARM64 compute size.
 - Docker Hub push fails with auth errors

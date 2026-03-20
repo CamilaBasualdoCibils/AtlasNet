@@ -22,41 +22,32 @@ ATLASNET_CARTOGRAPH_IMAGE ?= $(DOCKERHUB_NAMESPACE)/cartograph:$(ATLASNET_IMAGE_
 ATLASNET_SANDBOX_SERVER_IMAGE ?= $(DOCKERHUB_NAMESPACE)/sandbox-server:$(ATLASNET_IMAGE_TAG_ARM64)
 
 APT_PACKAGES := \
-	build-essential clang clangd \
-	cmake ninja-build pkg-config ccache \
-	git curl wget unzip zip tar \
-	python3 python3-pip \
-	uuid-dev libuv1-dev libssl-dev zlib1g-dev linux-libc-dev \
-	protobuf-compiler libprotobuf-dev \
+	build-essential binutils clang \
+	cmake ninja-build pkg-config \
+	git curl unzip zip tar \
+	python3 perl \
+	linux-libc-dev \
 	autoconf automake libtool m4 \
-	libxrandr-dev libxinerama-dev libxcursor-dev libxi-dev libxmu-dev \
-	libgl-dev libglu1-mesa-dev libglm-dev \
-	nlohmann-json3-dev libcurl4-openssl-dev \
-	swig nodejs npm docker.io
+	swig nodejs libnode-dev \
+	docker.io
 
 DNF_PACKAGES := \
-	gcc gcc-c++ clang \
-	cmake ninja-build pkgconf-pkg-config ccache \
-	git curl wget unzip zip tar \
-	python3 python3-pip \
-	libuuid-devel libuv-devel openssl-devel zlib-devel kernel-headers kernel-devel glibc-headers \
-	protobuf-compiler protobuf-devel \
+	gcc gcc-c++ make binutils clang \
+	cmake ninja-build pkgconf-pkg-config \
+	git curl unzip zip tar \
+	python3 perl \
+	kernel-headers glibc-headers \
 	autoconf automake libtool m4 \
-	libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel libXmu-devel \
-	mesa-libGL-devel mesa-libGLU-devel \
-	libcurl-devel swig nodejs npm docker
+	swig nodejs docker
 
 YUM_PACKAGES := \
-	gcc gcc-c++ clang \
-	cmake3 ninja-build pkgconfig ccache \
-	git curl wget unzip zip tar \
-	python3 python3-pip \
-	libuuid-devel libuv-devel openssl-devel zlib-devel kernel-headers kernel-devel glibc-headers \
-	protobuf-compiler protobuf-devel \
+	gcc gcc-c++ make binutils clang \
+	cmake3 ninja-build pkgconfig \
+	git curl unzip zip tar \
+	python3 perl \
+	kernel-headers glibc-headers \
 	autoconf automake libtool m4 \
-	libXrandr-devel libXinerama-devel libXcursor-devel libXi-devel libXmu-devel \
-	mesa-libGL-devel mesa-libGLU-devel \
-	libcurl-devel swig
+	swig docker
 
 ifeq ($(shell id -u),0)
 SUDO :=
@@ -84,7 +75,8 @@ deps:
 	  $(SUDO) apt-get update; \
 	  $(SUDO) apt-get install -y --no-install-recommends $(APT_PACKAGES); \
 	  dpkg -s linux-libc-dev >/dev/null 2>&1 || { echo "ERROR: linux-libc-dev was not installed."; exit 1; }; \
-	  dpkg-query -W -f='==> linux-libc-dev version ${Version}\n' linux-libc-dev; \
+	  dpkg-query -W -f='==> linux-libc-dev version $${Version}\n' linux-libc-dev; \
+	  dpkg -s libnode-dev >/dev/null 2>&1 || { echo "ERROR: libnode-dev was not installed."; exit 1; }; \
 	  if ! docker buildx version >/dev/null 2>&1; then \
 	    echo "==> Installing Docker buildx plugin..."; \
 	    $(SUDO) apt-get install -y docker-buildx || $(SUDO) apt-get install -y docker-buildx-plugin; \
@@ -93,9 +85,9 @@ deps:
 	elif command -v dnf >/dev/null 2>&1; then \
 	  echo "==> Detected dnf-based environment."; \
 	  $(SUDO) dnf install -y $(DNF_PACKAGES); \
-	  $(SUDO) dnf install -y glm-devel nlohmann-json-devel || true; \
-	  rpm -q kernel-headers kernel-devel glibc-headers >/dev/null 2>&1 || { echo "ERROR: kernel/glibc headers were not installed."; exit 1; }; \
-	  rpm -q kernel-headers kernel-devel glibc-headers; \
+	  $(SUDO) dnf install -y nodejs-devel || true; \
+	  rpm -q kernel-headers glibc-headers >/dev/null 2>&1 || { echo "ERROR: kernel/glibc headers were not installed."; exit 1; }; \
+	  rpm -q kernel-headers glibc-headers; \
 	  $(SUDO) systemctl enable docker >/dev/null 2>&1 || true; \
 	  $(SUDO) systemctl start docker >/dev/null 2>&1 || true; \
 	  if ! docker buildx version >/dev/null 2>&1; then \
@@ -105,10 +97,11 @@ deps:
 	elif command -v yum >/dev/null 2>&1; then \
 	  echo "==> Detected yum-based environment (Amazon Linux 2 style)."; \
 	  $(SUDO) yum install -y $(YUM_PACKAGES); \
-	  $(SUDO) yum install -y nodejs npm || true; \
-	  rpm -q kernel-headers kernel-devel glibc-headers >/dev/null 2>&1 || { echo "ERROR: kernel/glibc headers were not installed."; exit 1; }; \
-	  rpm -q kernel-headers kernel-devel glibc-headers; \
-	  if command -v amazon-linux-extras >/dev/null 2>&1 && ! command -v npm >/dev/null 2>&1; then \
+	  $(SUDO) yum install -y nodejs || true; \
+	  $(SUDO) yum install -y nodejs-devel || true; \
+	  rpm -q kernel-headers glibc-headers >/dev/null 2>&1 || { echo "ERROR: kernel/glibc headers were not installed."; exit 1; }; \
+	  rpm -q kernel-headers glibc-headers; \
+	  if command -v amazon-linux-extras >/dev/null 2>&1 && ! command -v node >/dev/null 2>&1; then \
 	    $(SUDO) amazon-linux-extras install -y nodejs || true; \
 	  fi; \
 	  if ! command -v cmake >/dev/null 2>&1 && command -v cmake3 >/dev/null 2>&1; then \
@@ -126,6 +119,17 @@ deps:
 	  echo "ERROR: Unsupported package manager. Expected apt-get, dnf, or yum."; \
 	  exit 1; \
 	fi
+	@for REQUIRED_TOOL in docker git curl python3 perl cmake clang swig node; do \
+	  command -v "$$REQUIRED_TOOL" >/dev/null 2>&1 || { echo "ERROR: required tool '$$REQUIRED_TOOL' was not found after dependency installation."; exit 1; }; \
+	done
+	@NODE_EXEC="$$(command -v node)"; \
+	NODE_ROOT_DIR="$$(dirname "$$(dirname "$$NODE_EXEC")")"; \
+	NODE_INCLUDE_DIR="$$NODE_ROOT_DIR/include/node"; \
+	if [ ! -f "$$NODE_INCLUDE_DIR/node_api.h" ]; then \
+	  echo "ERROR: Node headers not found at $$NODE_INCLUDE_DIR/node_api.h"; \
+	  exit 1; \
+	fi; \
+	echo "==> Node headers found at $$NODE_INCLUDE_DIR/node_api.h"
 	@echo "==> System dependencies installed."
 
 vcpkg:
