@@ -9,7 +9,7 @@ phases:
       - |
         docker run --rm atlasnet-devcontainer-ci bash -lc '
           set -euo pipefail
-          perl -MTime::Piece -e "print qq(Time::Piece $Time::Piece::VERSION\n)"
+          perl -MTime::Piece -e '"'"'print "Time::Piece loaded\n"'"'"'
           gcc --version
           g++ --version
           cmake --version
