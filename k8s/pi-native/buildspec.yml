@@ -20,3 +20,17 @@ phases:
           node --version
           swig -version | head -n 2
         '
+      - 'echo "Bootstrapping vcpkg and installing standalone openssl inside atlasnet-devcontainer-ci"'
+      - |
+        docker run --rm atlasnet-devcontainer-ci bash -lc '
+          set -euo pipefail
+          export HOME=/tmp/codebuild-home
+          export XDG_CACHE_HOME="$HOME/.cache"
+          mkdir -p "$HOME" "$XDG_CACHE_HOME" /tmp/vcpkg-test
+          curl -fsSL https://github.com/microsoft/vcpkg/archive/refs/tags/2026.01.16.tar.gz \
+            | tar -xz --strip-components=1 -C /tmp/vcpkg-test
+          cd /tmp/vcpkg-test
+          ./bootstrap-vcpkg.sh -disableMetrics
+          ./vcpkg version
+          ./vcpkg install openssl --triplet=arm64-linux
+        '
