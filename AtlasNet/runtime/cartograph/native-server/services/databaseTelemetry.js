@@ -1,5 +1,6 @@
 const Redis = require('ioredis');
 const { formatUuid } = require('./serializedDecoders/format');
+const { readHashPairsRaw } = require('./serializedDecoders/rawRedisReads');
 const { buildNetworkTelemetry } = require('./networkTelemetry');
 const { getDatabaseTargets, SNAPSHOT_CONNECT_TIMEOUT_MS } = require('../config');
 
@@ -13,8 +14,7 @@ const HEURISTIC_DATA_KEY = 'Heuristic:Data';
 const HEURISTIC_OWNERSHIP_VERSION_KEY = 'Heuristic::Ownership:Version';
 const HEURISTIC_OWNERSHIP_NID_TO_BOUND_MAP_KEY =
   'Heuristic::Ownership:NetID -> BoundID Map';
-const SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY = 'Snapshot:BoundIDs -> EntityList';
-const SNAPSHOT_BOUNDIDS_TO_TRANSFORMS_KEY = 'Snapshot:BoundIDs -> Transforms';
+const ENTITY_SNAPSHOT_BOUNDS_INDEX_KEY = 'Entity:Snapshot:Bounds';
 const NODE_MANIFEST_SHARD_NODE_KEY = 'Node Manifest Shard_Node';
 const TRANSFER_MANIFEST_KEY = 'Transfer::TransferManifest';
 
@@ -542,6 +542,48 @@ function parseSnapshotEntityRows(rawPayload, ownerId, boundId) {
   return rows;
 }
 
+function getEntitySnapshotEntitiesKey(boundId) {
+  return `Entity:Snapshot:Bound:${boundId}:Entities`;
+}
+
+async function readAuthoritySnapshotRowsFromDatabase(client, ownerByBoundId) {
+  const boundFieldKeys =
+    typeof client.hkeysBuffer === 'function'
+      ? await client.hkeysBuffer(ENTITY_SNAPSHOT_BOUNDS_INDEX_KEY)
+      : await client.hkeys(ENTITY_SNAPSHOT_BOUNDS_INDEX_KEY);
+
+  const snapshotRows = [];
+  if (!Array.isArray(boundFieldKeys)) {
+    return snapshotRows;
+  }
+
+  for (const rawField of boundFieldKeys) {
+    const boundId = parseBoundIdText(rawField);
+    if (!boundId) {
+      continue;
+    }
+
+    const entitySnapshotPairs = await readHashPairsRaw(
+      client,
+      getEntitySnapshotEntitiesKey(boundId)
+    );
+    if (!Array.isArray(entitySnapshotPairs) || entitySnapshotPairs.length === 0) {
+      continue;
+    }
+
+    const ownerId = ownerByBoundId[boundId] || `bound:${boundId}`;
+    for (const [, payload] of entitySnapshotPairs) {
+      if (!payload) {
+        continue;
+      }
+      snapshotRows.push(...parseSnapshotEntityRows(payload, ownerId, boundId));
+    }
+  }
+
+  snapshotRows.sort((left, right) => left[0].localeCompare(right[0]));
+  return snapshotRows;
+}
+
 function normalizeRedisJsonPayload(payload) {
   if (payload == null) {
     return null;
@@ -1006,37 +1048,7 @@ async function readAuthorityTelemetryFromDatabase(options = {}) {
       if (Object.keys(ownerByBoundId).length === 0) {
         ownerByBoundId = await readHeuristicClaimedOwnersFromDatabase();
       }
-      const boundFieldKeys =
-        typeof client.hkeysBuffer === 'function'
-          ? await client.hkeysBuffer(SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY)
-          : await client.hkeys(SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY);
-
-      const snapshotRows = [];
-      if (Array.isArray(boundFieldKeys)) {
-        for (const rawField of boundFieldKeys) {
-          const boundId = parseBoundIdText(rawField);
-          if (!boundId) {
-            continue;
-          }
-
-          const payload =
-            typeof client.hgetBuffer === 'function'
-              ? await client.hgetBuffer(SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY, rawField)
-              : await client.hget(
-                  SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY,
-                  Buffer.isBuffer(rawField) ? rawField : String(rawField)
-                );
-          if (!payload) {
-            continue;
-          }
-
-          const ownerId = ownerByBoundId[boundId] || `bound:${boundId}`;
-          snapshotRows.push(...parseSnapshotEntityRows(payload, ownerId, boundId));
-        }
-      }
-
-      snapshotRows.sort((left, right) => left[0].localeCompare(right[0]));
-      return snapshotRows;
+      return readAuthoritySnapshotRowsFromDatabase(client, ownerByBoundId);
     }, { clientScope })) || []
   );
 }

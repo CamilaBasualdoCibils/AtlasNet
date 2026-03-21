@@ -13,6 +13,7 @@ const NETWORK_TELEMETRY_KEY = 'Network_Telemetry';
 const SERVER_REGISTRY_KEY = 'Server Registry ID_IP';
 const SERVER_REGISTRY_PUBLIC_KEY = 'Server Registry ID_IP_public';
 const NODE_MANIFEST_SHARD_NODE_KEY = 'Node Manifest Shard_Node';
+const ENTITY_SNAPSHOT_BOUNDS_INDEX_KEY = 'Entity:Snapshot:Bounds';
 const SNAPSHOT_BOUNDIDS_TO_ENTITY_LIST_KEY = 'Snapshot:BoundIDs -> EntityList';
 const SNAPSHOT_BOUNDIDS_TO_TRANSFORMS_KEY = 'Snapshot:BoundIDs -> Transforms';
 const HEALTH_PING_KEY = 'Health_Ping';
@@ -357,6 +358,14 @@ function shouldDecodeSetKey(key) {
   );
 }
 
+function isEntitySnapshotEntitiesKey(key) {
+  return (
+    typeof key === 'string' &&
+    key.startsWith('Entity:Snapshot:Bound:') &&
+    key.endsWith(':Entities')
+  );
+}
+
 function decodeSetMemberForKey(key, member, decodeEnabled) {
   if (!decodeEnabled) {
     return decodeRedisRawValue(member);
@@ -388,6 +397,10 @@ const HARDCODED_HASH_DECODERS = {
     decodeField: (field) => decodeNetworkIdentityValue(field),
     decodeValue: (value) => decodeRedisDisplayValue(value),
   },
+  [ENTITY_SNAPSHOT_BOUNDS_INDEX_KEY]: {
+    decodeField: (field) => parseBoundIdText(field),
+    decodeValue: (value) => decodeRedisDisplayValue(value),
+  },
   [HEURISTIC_OWNERSHIP_NID_TO_BOUND_MAP_KEY]: {
     decodeField: (field) => decodeOwnershipNetIdField(field),
     decodeValue: (value) => parseBoundIdText(value),
@@ -415,10 +428,17 @@ const HARDCODED_HASH_DECODERS = {
 };
 
 function hasHardcodedHashDecoder(key) {
-  return Object.prototype.hasOwnProperty.call(HARDCODED_HASH_DECODERS, key);
+  return (
+    Object.prototype.hasOwnProperty.call(HARDCODED_HASH_DECODERS, key) ||
+    isEntitySnapshotEntitiesKey(key)
+  );
 }
 
 function decodeHardcodedHashEntry(key, field, value, decodeEnabled) {
+  if (isEntitySnapshotEntitiesKey(key) && decodeEnabled) {
+    return [decodeUuidValue(field), decodeSnapshotEntityListValue(value)];
+  }
+
   const decoder = HARDCODED_HASH_DECODERS[key];
   if (!decoder || !decodeEnabled) {
     return [decodeRedisRawValue(field), decodeRedisRawValue(value)];

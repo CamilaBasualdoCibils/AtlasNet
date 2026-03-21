@@ -2,8 +2,10 @@ const { readNetworkTelemetry } = require('./networkTelemetry');
 const { readEntityLedgersTelemetry } = require('./entityLedgerTelemetry');
 const { readHeuristicShapes } = require('./heuristicShapes');
 const {
+  readAuthorityTelemetryFromDatabase,
   readHeuristicClaimedOwnersFromDatabase,
   readHeuristicShapesFromDatabase,
+  readNetworkTelemetryFromDatabase,
   readTransferManifestFromDatabase,
 } = require('./databaseTelemetry');
 
@@ -143,7 +145,10 @@ async function collectNetworkTelemetry({
       addon.std_vector_std_vector_std_string__
   );
   if (!hasAddon) {
-    return [];
+    return readNetworkTelemetryFromDatabase({
+      includeLiveIds,
+      dbClientScope: 'network-telemetry',
+    });
   }
 
   const addonRead = await runTelemetryRead(
@@ -154,7 +159,21 @@ async function collectNetworkTelemetry({
   if (addonRead.ok) {
     return asArray(addonRead.value);
   }
-  throw addonRead.error || new Error('Network telemetry failed');
+
+  const databaseRead = await runTelemetryRead(
+    'network internalDB fallback',
+    () =>
+      readNetworkTelemetryFromDatabase({
+        includeLiveIds,
+        dbClientScope: 'network-telemetry',
+      }),
+    []
+  );
+  if (databaseRead.ok) {
+    return asArray(databaseRead.value);
+  }
+
+  throw databaseRead.error || addonRead.error || new Error('Network telemetry failed');
 }
 
 async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
@@ -170,7 +189,9 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
   );
 
   if (!hasAddon) {
-    return [];
+    return readAuthorityTelemetryFromDatabase({
+      dbClientScope: 'authority-telemetry',
+    });
   }
 
   const addonRead = await runTelemetryRead(
@@ -186,7 +207,19 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
   }
 
   await ownerMapReadPromise;
-  throw addonRead.error || new Error('Authority telemetry failed');
+  const databaseRead = await runTelemetryRead(
+    'authority internalDB fallback',
+    () =>
+      readAuthorityTelemetryFromDatabase({
+        dbClientScope: 'authority-telemetry',
+      }),
+    []
+  );
+  if (databaseRead.ok) {
+    return asArray(databaseRead.value);
+  }
+
+  throw databaseRead.error || addonRead.error || new Error('Authority telemetry failed');
 }
 
 async function collectHeuristicShapes({ addon }) {
