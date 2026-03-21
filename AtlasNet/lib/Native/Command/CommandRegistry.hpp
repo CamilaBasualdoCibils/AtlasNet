@@ -33,6 +33,7 @@ class CommandRegistry : public Singleton<CommandRegistry>
 		}
 		factories.insert(std::make_pair(
 			ID, []() -> std::unique_ptr<INetCommand> { return std::make_unique<C>(); }));
+		logger.DebugFormatted("Registered Command ID {} : {}", ID, C().GetCommandName());
 	}
 
 	std::unique_ptr<INetCommand> MakeFromID(CommandID ID)

@@ -1,0 +1,136 @@
+version: "3.8"
+networks:
+  RTS_AtlasNet:
+    driver: overlay
+    attachable: true   # allows standalone containers to attach if needed
+    ipam:
+      driver: default
+      config:
+        - subnet: 10.10.0.0/24   # choose a subnet you control
+volumes:
+  pgdata:
+services:
+  WatchDog:
+    image: watchdog
+    networks: [RTS_AtlasNet]
+    environment:
+      ATLASNET_DOCKER_MODE: "1"
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # REQUIRED
+    deploy:
+      labels:
+        atlasnet.role: watchdog # REQUIRED
+      placement:
+          constraints:
+            - 'node.role == manager'
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+  Shard:
+    image: rts-server
+    networks: [RTS_AtlasNet]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    cap_add:
+      - SYS_ADMIN
+      - PERFMON
+    security_opt:
+      - seccomp:unconfined
+    deploy:
+     labels:
+        atlasnet.role: shard # REQUIRED
+     mode: replicated
+     replicas: 0   # 0 replicas as requested (exists, but wont run)
+     restart_policy:
+       condition: on-failure
+
+  InternalDB:
+    image: valkey/valkey-bundle:latest
+    command: ["valkey-server", "--appendonly", "yes", "--port", "6379"]
+    networks: [RTS_AtlasNet]
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  Cartograph:
+    image: cartograph
+    networks: [RTS_AtlasNet]
+    ports:
+      - "3000:3000"   # Next.js default
+      - "9229:9229"   # Node inspector
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock # REQUIRED
+
+    deploy:
+      placement:
+          constraints:
+            - 'node.role == manager'
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  Proxy:
+    image: proxy:latest
+    networks: [RTS_AtlasNet]
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp=unconfined
+    ports:
+      - target: 25555
+        published: 2555
+        protocol: tcp
+        mode: ingress
+      - target: 25555
+        published: 2555
+        protocol: udp
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+    
+  BuiltInDB_Redis:
+    image: valkey/valkey:latest
+    command: ["valkey-server", "--appendonly", "yes", "--port", "2380"]
+    networks: [RTS_AtlasNet]
+    ports:
+      - target: 2380
+        published: 2380
+        protocol: tcp
+        mode: ingress
+      - target: 2380
+        published: 2380
+        protocol: udp
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  BuiltInDB_PostGres:
+    image: postgres:16-alpine
+    command: ["postgres", "-c", "port=5432"]
+    ports:
+      - target: 5432
+        published: 5432
+        protocol: tcp
+        mode: ingress
+    environment:
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks: [RTS_AtlasNet]

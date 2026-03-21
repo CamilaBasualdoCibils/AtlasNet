@@ -33,9 +33,6 @@ std::future<std::optional<std::string>> RedisConnection::HGetAsync(
 					 { return r.hget(key, field); });
 }
 
-
-
-
 bool RedisConnection::HExists(const std::string_view& key, const std::string_view& field) const
 {
 	return WithSync([&](auto& r) -> bool { return r.hexists(key, field); });
@@ -334,11 +331,12 @@ std::future<std::vector<std::string>> RedisConnection::SMembersAsync(
 	return WithAsync([&](auto& r) -> std::future<std::vector<std::string>>
 					 { return r.template smembers<std::vector<std::string>>(key); });
 }
- std::optional<std::string>RedisConnection::SPop(const std::string_view& key) const {
-	return WithSync([&](auto& r) -> std::optional<std::string>
-					 { return r.spop(key); });
+std::optional<std::string> RedisConnection::SPop(const std::string_view& key) const
+{
+	return WithSync([&](auto& r) -> std::optional<std::string> { return r.spop(key); });
 }
-std::future<std::optional<std::string>> RedisConnection::SPopAsync(const std::string_view& key) const
+std::future<std::optional<std::string>> RedisConnection::SPopAsync(
+	const std::string_view& key) const
 {
 	return WithAsync([&](auto& r) -> std::future<std::optional<std::string>>
 					 { return r.spop(key); });
@@ -421,10 +419,11 @@ RedisConnection::RedisTime RedisConnection::GetTimeNow() const
 	try
 	{
 		auto res = WithSync([&](auto& r) -> auto { return r.command(args.begin(), args.end()); });
-		if (!res) {
-    std::cerr << "GetTimeNow: Redis command returned nullptr" << std::endl;
-    return RedisTime{};
-}
+		if (!res)
+		{
+			std::cerr << "GetTimeNow: Redis command returned nullptr" << std::endl;
+			return RedisTime{};
+		}
 		if (res->type != REDIS_REPLY_ARRAY)
 		{
 			std::cerr << "GetTimeNow Unknown reply of type " << res->type << std::endl;
@@ -450,4 +449,14 @@ double RedisConnection::GetTimeNowSeconds() const
 {
 	const auto t = GetTimeNow();
 	return static_cast<double>(t.seconds) + static_cast<double>(t.microseconds) * 1e-6;
+}
+std::vector<std::string> RedisConnection::HKeys(const std::string_view& key) const
+{
+	return WithSync(
+		[&](auto& r) -> std::vector<std::string>
+		{
+			std::vector<std::string> out;
+			r.hkeys(key, std::back_inserter(out));
+			return out;
+		});
 }

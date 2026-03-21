@@ -71,8 +71,7 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 
 	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateEntity(const AtlasTransform& t,
 														  std::span<const uint8_t> metadata = {});
-	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateClientEntity(
-		ClientID c_id, const AtlasTransform& t, std::span<const uint8_t> metadata = {});
+	
 	struct ClientSpawnInfo
 	{
 		Client client;
@@ -89,6 +88,8 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 	}
 
    private:
+   [[nodiscard]] AtlasEntityHandle Internal_CreateClientEntity(
+		ClientID c_id, const AtlasTransform& t, std::span<const uint8_t> metadata = {});
 	std::optional<ServerCommandBus> commandbus;
 	AtlasEntity Internal_CreateEntity(const AtlasTransform& t, std::span<const uint8_t> metadata = {});
 	void ShardLogicEntry(std::stop_token st);

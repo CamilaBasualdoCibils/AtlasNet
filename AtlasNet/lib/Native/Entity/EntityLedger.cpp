@@ -1,11 +1,13 @@
 #include "EntityLedger.hpp"
 
 #include <algorithm>
+#include <boost/describe/enum_to_string.hpp>
 #include <chrono>
 #include <stop_token>
 #include <thread>
 
 #include "Entity/Entity.hpp"
+#include "Entity/GlobalEntityLedger.hpp"
 #include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Heuristic/BoundLeaser.hpp"
@@ -30,6 +32,10 @@ void EntityLedger::Init()
 				{
 				}
 			});
+	sub_EntityHandleFetchRequestPacket =
+		Interlink::Get().GetPacketManager().Subscribe<EntityHandleFetchRequestPacket>(
+			[this](const EntityHandleFetchRequestPacket& p, const PacketManager::PacketInfo& info)
+			{ OnEntityHandleFetchRequest(p, info); });
 	TransferCoordinator::Get();
 	LoopThread = std::jthread([this](std::stop_token st) { LoopThreadEntry(st); });
 };
@@ -114,5 +120,66 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 		}
 
 		std::this_thread::sleep_for(std::chrono::milliseconds(50));
+	}
+}
+void EntityLedger::AddEntity(const AtlasEntity& e)
+{
+	_WriteLock(
+		[&]()
+		{
+			entities.insert(std::make_pair(e.Entity_ID, e));
+			if (e.IsClient)
+			{
+				clients.insert(std::make_pair(e.Client_ID, e.Entity_ID));
+			}
+		});
+	GlobalEntityLedger::Get().DeclareEntityRecord(NetworkCredentials::Get().GetID().ID,
+												  e.Entity_ID);
+}
+void EntityLedger::_EraseEntity(AtlasEntityID ID)
+{
+	const auto f = entities.find(ID);
+	if (f->second.IsClient)
+	{
+		clients.erase(f->second.Client_ID);
+	}
+	entities.erase(f);
+	GlobalEntityLedger::Get().DeclareEntityRecord(NetworkCredentials::Get().GetID().ID, ID);
+}
+void EntityLedger::OnEntityHandleFetchRequest(const EntityHandleFetchRequestPacket& packet,
+											  const PacketManager::PacketInfo& info)
+{
+	logger.DebugFormatted(
+		"Received EntityHandleFetchRequestPacket from {} in state {}", info.sender.ToString(),
+		packet.currentState == EntityHandleFetchRequestPacket::State::eRequest ? "Request"
+																			   : "Response");
+	if (packet.currentState == EntityHandleFetchRequestPacket::State::eRequest)
+	{
+		// logger.DebugFormatted("Received EntityHandleFetchRequestPacket from {}",
+		//					  info.sender.ToString());
+		const auto& requestData = packet.GetRequestData();
+		AtlasEntityID requestedID = requestData.entityID;
+		logger.DebugFormatted("Getting Data for Entity {} ", UUIDGen::ToString(requestedID));
+		_ReadLock(
+			[&]()
+			{
+				if (ExistsEntity(requestedID))
+				{
+					logger.DebugFormatted("Entity {} exists", UUIDGen::ToString(requestedID));
+					EntityHandleFetchRequestPacket responsePacket;
+					responsePacket.currentState = EntityHandleFetchRequestPacket::State::eResponse;
+					EntityHandleFetchRequestPacket::ResponseData responseData;
+					responseData.entityData = GetEntity(requestedID);
+					responsePacket.data = responseData;
+					logger.DebugFormatted("Responding with data for entity {}",
+										  UUIDGen::ToString(requestedID));
+					Interlink::Get().SendMessage(info.sender, responsePacket,
+												 NetworkMessageSendFlag::eReliableBatched);
+				}
+				else {
+					logger.DebugFormatted("Entity {} Does not exist", UUIDGen::ToString(requestedID));
+				
+				}
+			});
 	}
 }

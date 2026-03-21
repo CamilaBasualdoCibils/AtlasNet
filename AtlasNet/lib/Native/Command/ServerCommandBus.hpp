@@ -6,7 +6,9 @@
 #include "Command/NetCommand.hpp"
 #include "Command/Packet/CommandPayloadPacket.hpp"
 #include "Debug/Log.hpp"
+#include "Entity/Entity.hpp"
 #include "Entity/EntityLedger.hpp"
+#include "Global/Misc/UUID.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Network/Packet/Packet.hpp"
 #include "Network/Packet/PacketManager.hpp"
@@ -39,7 +41,17 @@ class ServerCommandBus : public ICommandBus<ClientID, NetClientIntentHeader, Net
 		command->Deserialize(br);
 		NetClientIntentHeader header;
 		header.clientID = packet.Sender;
-		header.entityID = EntityLedger::Get().GetClientEntityID(header.clientID);
+		std::optional<AtlasEntityID> entityID =
+			EntityLedger::Get().GetClientEntityID(header.clientID);
+		if (!entityID)
+		{
+			logger.ErrorFormatted(
+				"Received command from client {} which has no associated entity.It may have been "
+				"transfered, Fix this!!! Ignoring.",
+				UUIDGen::ToString(header.clientID));
+			return;
+		}
+		header.entityID = *entityID;
 		ExecCallback(header, *command);
 	}
 };

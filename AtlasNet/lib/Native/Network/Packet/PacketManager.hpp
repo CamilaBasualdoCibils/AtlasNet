@@ -1,163 +1,126 @@
-
 #pragma once
-#include <atomic>
-#include <boost/container/flat_map.hpp>
+#include <functional>
+#include <memory>
+#include <mutex>
 #include <unordered_map>
+#include <vector>
 
 #include "Debug/Log.hpp"
 #include "Network/NetworkIdentity.hpp"
 #include "Packet.hpp"
+
 class PacketManager
 {
-	Log logger = Log("PacketManager");
+    Log logger = Log("PacketManager");
 
-   public:
-	struct PacketInfo
-	{
-		NetworkIdentity sender;
-	};
-	using Packet_Callback = std::function<void(const IPacket&, const PacketInfo&)>;
+public:
+    struct PacketInfo
+    {
+        NetworkIdentity sender;
+    };
 
-   private:
-	struct CallbackEntry
-	{
-		std::atomic_bool alive{true};
-		uint64_t id;
-		Packet_Callback cb;
-	};
+    using Packet_Callback = std::function<void(const IPacket&, const PacketInfo&)>;
 
-   public:
-	PacketManager() = default;
-	PacketManager(PacketManager&&) = delete;
-	PacketManager& operator=(const PacketManager&) = delete;
-	PacketManager& operator=(PacketManager&&) = delete;
-	PacketManager(const PacketManager& o) = delete;
+private:
+    struct CallbackEntry
+    {
+        Packet_Callback cb;
+    };
 
-	struct Subscription
-	{
-	   private:
-		Log logger = Log("Subscription");
+    using CallbackPtr = std::shared_ptr<CallbackEntry>;
+    using WeakCallbackPtr = std::weak_ptr<CallbackEntry>;
 
-	   public:
-		PacketManager* owner = nullptr;
-		PacketTypeID type{};
-		uint64_t id = 0;
+public:
+    struct Subscription
+    {
+    private:
+        CallbackPtr handle;
 
-		Subscription() = default;
-		Subscription(PacketManager* o, PacketTypeID t, uint64_t i) : owner(o), type(t), id(i) {}
+    public:
+        Subscription() = default;
+        explicit Subscription(CallbackPtr h) : handle(std::move(h)) {}
 
-		Subscription(const Subscription&) = delete;
-		Subscription& operator=(const Subscription&) = delete;
+        Subscription(const Subscription&) = delete;
+        Subscription& operator=(const Subscription&) = delete;
 
-		Subscription(Subscription&& other) noexcept { *this = std::move(other); }
+        Subscription(Subscription&&) noexcept = default;
+        Subscription& operator=(Subscription&&) noexcept = default;
 
-		Subscription& operator=(Subscription&& other) noexcept
-		{
-			if (this != &other)
-			{
-				Reset();
-				owner = other.owner;
-				type = other.type;
-				id = other.id;
-				other.owner = nullptr;
-			}
-			return *this;
-		}
+        ~Subscription() { Reset(); }
 
-		~Subscription() { Reset(); }
+        void Reset()
+        {
+            handle.reset(); 
+        }
 
-		void Reset()
-		{
-			if (owner)
-			{
-				logger.DebugFormatted("Deactivated subscription ID {}", id);
-				owner->Deactivate(type, id);
-				owner = nullptr;
-			}
-		}
-	};
+        bool IsValid() const { return handle != nullptr; }
+    };
 
-	template <typename TPacket>
-	[[nodiscard]] Subscription Subscribe(std::function<void(const TPacket&, const PacketInfo&)> cb)
-	{
-		static_assert(std::is_base_of_v<IPacket, TPacket>);
+public:
+    template <typename TPacket>
+    requires std::derived_from<TPacket, IPacket>
+    [[nodiscard]] Subscription Subscribe(
+        std::function<void(const TPacket&, const PacketInfo&)> cb)
+    {
+        std::lock_guard lock(m_mutex);
 
-		const uint64_t id = m_nextId.fetch_add(1, std::memory_order_relaxed);
+        auto wrapper = std::make_shared<CallbackEntry>();
+        wrapper->cb = [cb = std::move(cb)](const IPacket& pkt, const PacketInfo& info)
+        {
+            cb(static_cast<const TPacket&>(pkt), info);
+        };
 
-		auto entry = std::make_unique<CallbackEntry>();
-		entry->id = id;
-		entry->cb = [cb = std::move(cb)](const IPacket& pkt, const PacketManager::PacketInfo& info)
-		{ cb(static_cast<const TPacket&>(pkt), info); };
+        m_callbacks[TPacket::TypeID].push_back(wrapper);
 
-		{
-			std::lock_guard lock(m_mutex);
-			m_callbacks[TPacket::TypeID].push_back(std::move(entry));
-		}
-		logger.DebugFormatted("New subscription to {}, ID {}", TPacket::GetPacketNameStatic(), id);
+        logger.DebugFormatted("New subscription to {}", TPacket::GetPacketNameStatic());
 
-		return Subscription{this, TPacket::TypeID, id};
-	}
+        return Subscription{wrapper};
+    }
 
-	void Dispatch(const IPacket& pkt, PacketTypeID type, const PacketInfo& info)
-	{
-		std::vector<CallbackEntry*> snapshot;
+    void Dispatch(const IPacket& pkt, PacketTypeID type, const PacketInfo& info)
+    {
+        std::vector<CallbackPtr> alive;
 
-		{
-			std::lock_guard lock(m_mutex);
-			auto it = m_callbacks.find(type);
-			if (it == m_callbacks.end())
-			{
-				// logger.DebugFormatted("Dispatching 0 callbacks to {}",
-				//			  pkt.GetPacketName());
-				return;
-			}
+        {
+            std::lock_guard lock(m_mutex);
 
-			snapshot.reserve(it->second.size());
-			for (auto& e : it->second) snapshot.push_back(e.get());
-		}
-		// logger.DebugFormatted("Dispatching {} callbacks to {}", snapshot.size(),
-		//					  pkt.GetPacketName());
-		//  Hot path: no locks held
-		for (auto* e : snapshot)
-		{
-			if (e->alive.load(std::memory_order_acquire))
-				e->cb(pkt, info);
-		}
-	}
+            auto it = m_callbacks.find(type);
+            if (it == m_callbacks.end())
+                return;
 
-	void Cleanup()
-	{
-		std::lock_guard lock(m_mutex);
+            auto& vec = it->second;
 
-		for (auto& [_, vec] : m_callbacks)
-		{
-			std::erase_if(vec, [](auto& e) { return !e->alive.load(std::memory_order_acquire); });
-		}
-	}
+            // Clean + collect alive callbacks
+            size_t write = 0;
+            for (size_t read = 0; read < vec.size(); ++read)
+            {
+                if (auto cb = vec[read].lock())
+                {
+                    alive.push_back(cb);
+                    vec[write++] = vec[read];
+                }
+            }
 
-   private:
-	void Deactivate(PacketTypeID type, uint64_t id)
-	{
-		std::lock_guard lock(m_mutex);
+            vec.resize(write); // remove dead ones
+        }
 
-		auto it = m_callbacks.find(type);
-		if (it == m_callbacks.end())
-			return;
+        logger.DebugFormatted("Dispatching {} callbacks to {}", alive.size(),
+                              pkt.GetPacketName());
 
-		for (auto& e : it->second)
-		{
-			if (e->id == id)
-			{
-				e->alive.store(false, std::memory_order_release);
-				break;
-			}
-		}
-	}
+        // No locks here
+        for (const auto& cb : alive)
+        {
+            cb->cb(pkt, info);
+        }
+    }
 
-   private:
-	boost::container::flat_map<PacketTypeID, std::vector<std::unique_ptr<CallbackEntry>>>
-		m_callbacks;
+    void Cleanup()
+    {
+        std::lock_guard lock(m_mutex);
+        m_callbacks.clear();
+    }
 
-	std::mutex m_mutex;
-	std::atomic<uint64_t> m_nextId{1};
+private:
+    std::unordered_map<PacketTypeID, std::vector<WeakCallbackPtr>> m_callbacks;
+    std::mutex m_mutex;
 };

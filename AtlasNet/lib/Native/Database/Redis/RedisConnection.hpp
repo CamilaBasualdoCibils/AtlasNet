@@ -289,6 +289,7 @@ class RedisConnection
 	[[nodiscard]] std::future<bool> HExistsAsync(const std::string_view& key,
 												 const std::string_view& field) const;
 
+	[[nodiscard]] std::vector<std::string> HKeys(const std::string_view& key) const;
 	/**
 	 * @brief Delete one or more fields from a hash (HDEL).
 	 *

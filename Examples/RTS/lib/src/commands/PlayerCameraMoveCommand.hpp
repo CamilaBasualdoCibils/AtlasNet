@@ -1,8 +1,8 @@
-
+#pragma once
 
 #include "Command/NetCommand.hpp"
 #include "Command/CommandRegistry.hpp"
-CLIENT_INTENT_COMMAND_BEGIN(ClientCameraMoveCommand)
+CLIENT_INTENT_COMMAND_BEGIN(PlayerCameraMoveCommand)
 {
 	vec3 NewCameraLocation;
 	void Serialize(ByteWriter & bw) const override
@@ -14,4 +14,4 @@ CLIENT_INTENT_COMMAND_BEGIN(ClientCameraMoveCommand)
 		NewCameraLocation = br.vec3();
 	}
 };
-CLIENT_INTENT_COMMAND_END(ClientCameraMoveCommand)
+CLIENT_INTENT_COMMAND_END(PlayerCameraMoveCommand)

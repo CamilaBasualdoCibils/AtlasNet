@@ -14,9 +14,9 @@
 #include "Entity/EntityLedger.hpp"
 #include "Entity/Transform.hpp"
 #include "Events/EventEnums.hpp"
-#include "Events/GlobalEvents.hpp"
 #include "Events/Events/Client/ClientEvents.hpp"
 #include "Events/Events/Debug/LogEvent.hpp"
+#include "Events/GlobalEvents.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
@@ -61,7 +61,7 @@ void IAtlasNetServer::AtlasNet_Initialize()
 				ClientSpawnInfo i;
 				i.client = e.client;
 				i.spawnLocation = e.SpawnLocation;
-				AtlasNet_CreateClientEntity(e.client.ID, i.spawnLocation);
+				Internal_CreateClientEntity(e.client.ID, i.spawnLocation);
 				AtlasEntityPayload test_payload;
 				OnClientSpawn(i, AtlasEntityMinimal{}, test_payload);
 			}
@@ -75,17 +75,18 @@ AtlasEntityHandle IAtlasNetServer::AtlasNet_CreateEntity(const AtlasTransform &t
 {
 	AtlasEntity e = Internal_CreateEntity(t, metadata);
 	EntityLedger::Get().AddEntity(e);
-	AtlasEntityHandle H;
+	AtlasEntityHandle H(e.Entity_ID);
 	return H;
 }
-AtlasEntityHandle IAtlasNetServer::AtlasNet_CreateClientEntity(ClientID c_id, const AtlasTransform &t,
+AtlasEntityHandle IAtlasNetServer::Internal_CreateClientEntity(ClientID c_id,
+															   const AtlasTransform &t,
 															   std::span<const uint8_t> metadata)
 {
 	AtlasEntity e = Internal_CreateEntity(t, metadata);
 	e.Client_ID = c_id;
 	e.IsClient = true;
 	EntityLedger::Get().AddEntity(e);
-	AtlasEntityHandle H;
+	AtlasEntityHandle H(e.Entity_ID);
 	return H;
 }
 AtlasEntity IAtlasNetServer::Internal_CreateEntity(const AtlasTransform &t,
