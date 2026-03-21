@@ -165,6 +165,8 @@ class HeuristicManifest : public Singleton<HeuristicManifest>
 	// void StorePendingBound(const IBounds& bound);
 
    private:
+	bool Internal_IsValidBoundID(BoundsID boundID);
+	void Internal_ReconcileOwnershipState(uint32_t boundsCount);
 	void Internal_SetActiveHeuristicType(IHeuristic::Type type);
 	void Internal_ParseHeuristic(IHeuristic::Type type, std::string_view data);
 	void Internal_OwnershipTableIncreaseVersion()

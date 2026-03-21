@@ -5,6 +5,39 @@
 
 #include "Docker/DockerIO.hpp"
 
+std::optional<uint32_t> ShardService::Internal_ResolveDesiredShardReplicaCountDockerSwarm()
+{
+	const std::string filter = "%7B%22label%22%3A%5B%22atlasnet.role%3Dshard%22%5D%7D";
+
+	std::string listResp = DockerIO::Get().request("GET", "/services?filters=" + filter);
+	auto services = Json::parse(listResp, nullptr, false);
+
+	if (services.is_discarded() || !services.is_array() || services.empty())
+	{
+		logger.Warning("Failed to enumerate swarm shard service while resolving replica count.");
+		return std::nullopt;
+	}
+
+	const std::string serviceId = services[0]["ID"];
+	std::string inspectResp = DockerIO::Get().request("GET", "/services/" + serviceId);
+	auto inspectJson = Json::parse(inspectResp, nullptr, false);
+	if (inspectJson.is_discarded())
+	{
+		logger.Warning("Swarm service inspect response was invalid JSON.");
+		return std::nullopt;
+	}
+
+	if (!inspectJson.contains("Spec") || !inspectJson["Spec"].contains("Mode") ||
+		!inspectJson["Spec"]["Mode"].contains("Replicated") ||
+		!inspectJson["Spec"]["Mode"]["Replicated"].contains("Replicas"))
+	{
+		logger.Warning("Swarm shard service spec did not include a replicated replica count.");
+		return std::nullopt;
+	}
+
+	return inspectJson["Spec"]["Mode"]["Replicated"]["Replicas"].get<uint32_t>();
+}
+
 void ShardService::Internal_ScaleShardServiceDockerSwarm(uint32_t newShardCount)
 {
 	const std::string filter = "%7B%22label%22%3A%5B%22atlasnet.role%3Dshard%22%5D%7D";
@@ -108,6 +141,145 @@ static std::string ResolvePodNamespace()
 	TrimTrailingWhitespace(namespaceFromFile);
 	return namespaceFromFile;
 }
+
+std::optional<uint32_t> ShardService::Internal_ResolveDesiredShardReplicaCountKubernetes()
+{
+	const char* host = std::getenv("KUBERNETES_SERVICE_HOST");
+	if (!host || !*host)
+	{
+		return std::nullopt;
+	}
+
+	const std::string port = [&]() -> std::string
+	{
+		const char* envPort = std::getenv("KUBERNETES_SERVICE_PORT_HTTPS");
+		if (envPort && *envPort)
+		{
+			return std::string(envPort);
+		}
+		return "443";
+	}();
+
+	const std::string tokenPath = "/var/run/secrets/kubernetes.io/serviceaccount/token";
+	std::string token = ReadTextFile(tokenPath.c_str());
+	TrimTrailingWhitespace(token);
+	if (token.empty())
+	{
+		logger.Warning("Kubernetes service account token is missing while resolving replica count.");
+		return std::nullopt;
+	}
+
+	const std::string podNamespace = ResolvePodNamespace();
+	if (podNamespace.empty())
+	{
+		logger.Warning("Unable to resolve pod namespace while resolving replica count.");
+		return std::nullopt;
+	}
+
+	const std::string deploymentName = [&]() -> std::string
+	{
+		const char* envDeployment = std::getenv("ATLASNET_SHARD_DEPLOYMENT");
+		if (envDeployment && *envDeployment)
+		{
+			return std::string(envDeployment);
+		}
+		return "atlasnet-shard";
+	}();
+
+	const std::string requestUrl =
+		std::format("https://{}:{}/apis/apps/v1/namespaces/{}/deployments/{}/scale", host, port,
+					podNamespace, deploymentName);
+
+	static const bool curlInitialized = (curl_global_init(CURL_GLOBAL_DEFAULT) == CURLE_OK);
+	if (!curlInitialized)
+	{
+		logger.Warning("libcurl initialization failed while resolving Kubernetes replica count.");
+		return std::nullopt;
+	}
+
+	CURL* curl = curl_easy_init();
+	if (!curl)
+	{
+		logger.Warning("Failed to initialize CURL handle while resolving Kubernetes replica count.");
+		return std::nullopt;
+	}
+
+	std::string responseBody;
+	struct curl_slist* headers = nullptr;
+	const std::string authHeader = "Authorization: Bearer " + token;
+	headers = curl_slist_append(headers, authHeader.c_str());
+
+	const std::string caPath = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt";
+	curl_easy_setopt(curl, CURLOPT_URL, requestUrl.c_str());
+	curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+	curl_easy_setopt(curl, CURLOPT_HTTPGET, 1L);
+	curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, CurlWriteCallback);
+	curl_easy_setopt(curl, CURLOPT_WRITEDATA, &responseBody);
+	curl_easy_setopt(curl, CURLOPT_TIMEOUT, 8L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 1L);
+	curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 2L);
+	curl_easy_setopt(curl, CURLOPT_CAINFO, caPath.c_str());
+
+	const CURLcode curlCode = curl_easy_perform(curl);
+	long responseCode = 0;
+	curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &responseCode);
+
+	curl_slist_free_all(headers);
+	curl_easy_cleanup(curl);
+
+	if (curlCode != CURLE_OK)
+	{
+		logger.WarningFormatted("Kubernetes replica-count request failed: {}",
+								curl_easy_strerror(curlCode));
+		return std::nullopt;
+	}
+
+	if (responseCode < 200 || responseCode >= 300)
+	{
+		logger.WarningFormatted(
+			"Kubernetes replica-count request returned HTTP {}. Body: {}",
+			responseCode, responseBody);
+		return std::nullopt;
+	}
+
+	const Json responseJson = Json::parse(responseBody, nullptr, false);
+	if (responseJson.is_discarded() || !responseJson.contains("spec") ||
+		!responseJson["spec"].contains("replicas"))
+	{
+		logger.Warning("Kubernetes scale response did not contain spec.replicas.");
+		return std::nullopt;
+	}
+
+	return responseJson["spec"]["replicas"].get<uint32_t>();
+}
+
+uint32_t ShardService::ResolveDesiredShardReplicaCount()
+{
+	auto IsEnvSet = [](const char* name)
+	{
+		const char* v = std::getenv(name);
+		return v && v[0] != '\0';
+	};
+
+	std::optional<uint32_t> desiredReplicaCount;
+	if (IsEnvSet("KUBERNETES_SERVICE_HOST"))
+	{
+		desiredReplicaCount = Internal_ResolveDesiredShardReplicaCountKubernetes();
+	}
+	else if (IsEnvSet("ATLASNET_DOCKER_MODE"))
+	{
+		desiredReplicaCount = Internal_ResolveDesiredShardReplicaCountDockerSwarm();
+	}
+
+	if (desiredReplicaCount.has_value())
+	{
+		activeShardCount = *desiredReplicaCount;
+		return *desiredReplicaCount;
+	}
+
+	return activeShardCount;
+}
+
 void ShardService::Internal_ScaleShardServiceKubernetes(uint32_t newShardCount)
 {
 	const char* host = std::getenv("KUBERNETES_SERVICE_HOST");

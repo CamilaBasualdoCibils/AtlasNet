@@ -19,7 +19,21 @@ void ClientManifest::__ClientSetIP(const ClientID& c, const IPAddress& address)
 	IDWrite.uuid(c);
 	address.Serialize(IPWrite);
 	const auto result = InternalDB::Get()->HSet(ClientID_2_IP_Hashtable, IDWrite.as_string_view(),
-												IPWrite.as_string_view());
+													IPWrite.as_string_view());
+}
+
+void ClientManifest::RemoveClientFromProxySet(const ClientID& cid, const NetworkIdentity& ID)
+{
+	ByteWriter valueWrite;
+	valueWrite.uuid(cid);
+	(void)InternalDB::Get()->SRem(GetProxyClientListKey(ID), {valueWrite.as_string_view()});
+}
+
+void ClientManifest::RemoveClientFromShardSet(const ClientID& cid, const NetworkIdentity& ID)
+{
+	ByteWriter valueWrite;
+	valueWrite.uuid(cid);
+	(void)InternalDB::Get()->SRem(GetShardClientListKey(ID), {valueWrite.as_string_view()});
 }
 
 void ClientManifest::InsertClient(const Client& client)
@@ -30,9 +44,21 @@ void ClientManifest::RemoveClient(const ClientID& clientID)
 {
 	ByteWriter bw;
 	bw.uuid(clientID);
+	if (const std::optional<NetworkIdentity> existingProxy = GetClientProxy(clientID);
+		existingProxy.has_value())
+	{
+		RemoveClientFromProxySet(clientID, *existingProxy);
+	}
+	if (const std::optional<NetworkIdentity> existingShard = GetClientShard(clientID);
+		existingShard.has_value())
+	{
+		RemoveClientFromShardSet(clientID, *existingShard);
+	}
 	const auto result1 = InternalDB::Get()->HDel(ClientID_2_IP_Hashtable, {bw.as_string_view()});
 	const auto result2 =
-		InternalDB::Get()->HDel(ClientID_2_EntityID_Hashtable, {bw.as_string_view()});
+			InternalDB::Get()->HDel(ClientID_2_EntityID_Hashtable, {bw.as_string_view()});
+	const auto result3 = InternalDB::Get()->HDel(ClientID_2_Proxy_Hashtable, {bw.as_string_view()});
+	const auto result4 = InternalDB::Get()->HDel(ClientID_2_Shard_Hashtable, {bw.as_string_view()});
 }
 void ClientManifest::AssignClientEntity(const ClientID& clientid, const AtlasEntityID& entityid)
 {
@@ -85,6 +111,11 @@ std::optional<NetworkIdentity> ClientManifest::GetClientProxy(const ClientID& cl
 }
 void ClientManifest::AssignProxyClient(const ClientID& cid, const NetworkIdentity& ID)
 {
+	if (const std::optional<NetworkIdentity> existingProxy = GetClientProxy(cid);
+		existingProxy.has_value() && existingProxy->ID != ID.ID)
+	{
+		RemoveClientFromProxySet(cid, *existingProxy);
+	}
 	{
 		const std::string ClientListKey = GetProxyClientListKey(ID);
 		ByteWriter valueWrite;
@@ -101,6 +132,11 @@ void ClientManifest::AssignProxyClient(const ClientID& cid, const NetworkIdentit
 }
 void ClientManifest::AssignShardClient(const ClientID& cid, const NetworkIdentity& ID)
 {
+	if (const std::optional<NetworkIdentity> existingShard = GetClientShard(cid);
+		existingShard.has_value() && existingShard->ID != ID.ID)
+	{
+		RemoveClientFromShardSet(cid, *existingShard);
+	}
 	{
 		const std::string ClientListKey = GetShardClientListKey(ID);
 		ByteWriter valueWrite;

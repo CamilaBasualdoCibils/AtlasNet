@@ -52,33 +52,36 @@ public:
         auto it = factories.find(type);
         if (it == factories.end())
 		{
-			ASSERT(false, "Packet Type not registered?");
             return nullptr;
-
 		}
         return it->second();
     }
 
     std::unique_ptr<IPacket> CreateFromBytes(std::span<const uint8_t> bytes) const
     {
-        ByteReader br(bytes);
+        try
+        {
+            ByteReader br(bytes);
 
-        PacketTypeID type = br.read_scalar<PacketTypeID>();
-        ByteReader br2(bytes);
-        auto pkt = Create(type);
-        if (!pkt)
+            PacketTypeID type = br.read_scalar<PacketTypeID>();
+            ByteReader br2(bytes);
+            auto pkt = Create(type);
+            if (!pkt)
+                return nullptr;
+
+            pkt->Deserialize(br2);
+
+            if (!pkt->Validate())
+			{
+                return nullptr;
+			}
+
+            return pkt;
+        }
+        catch (...)
+        {
             return nullptr;
-
-        pkt->Deserialize(br2);
-
-        if (!pkt->Validate())
-		{
-			ASSERT(false,"Message From bytes failed to validate");
-            return nullptr;
-
-		}
-
-        return pkt;
+        }
     }
 
 private:

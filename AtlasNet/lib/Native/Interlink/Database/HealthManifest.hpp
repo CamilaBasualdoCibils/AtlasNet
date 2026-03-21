@@ -101,7 +101,7 @@ class HealthManifest : public Singleton<HealthManifest>
 template <typename KeyType>
 inline void HealthManifest::RemovePing(const KeyType& key)
 {
-	InternalDB::Get()->HDel(HealthPingTable, {key});
+	(void)InternalDB::Get()->HDel(HealthPingTable, {key});
 }
 template <typename KeyType>
 inline void HealthManifest::GetAllPings(std::unordered_map<KeyType, double>& out_pings)
@@ -164,7 +164,7 @@ inline void HealthManifest::GetLivePings(std::vector<KeyType>& out_live)
 
 	for (const auto& [member, scoreOpt] : all_pings)
 	{
-		if (scoreOpt > now)
+		if (scoreOpt <= now)
 		{
 			continue;
 		}

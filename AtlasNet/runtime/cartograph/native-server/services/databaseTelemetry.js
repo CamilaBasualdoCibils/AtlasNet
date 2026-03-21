@@ -257,6 +257,50 @@ function parseOwnerIdFromOwnershipField(rawField) {
   return text;
 }
 
+function parseHealthExpirySeconds(raw) {
+  const text = normalizeText(raw);
+  if (!text) {
+    return null;
+  }
+  const value = Number(text);
+  return Number.isFinite(value) ? value : null;
+}
+
+async function readLiveShardHealthSnapshot(client) {
+  const fieldKeys =
+    typeof client.hkeysBuffer === 'function'
+      ? await client.hkeysBuffer(HEALTH_PING_KEY)
+      : await client.hkeys(HEALTH_PING_KEY);
+
+  const liveShardIds = [];
+  const liveShardFieldKeys = [];
+  if (!Array.isArray(fieldKeys) || fieldKeys.length === 0) {
+    return { liveShardIds, liveShardFieldKeys };
+  }
+
+  const nowSeconds = Date.now() / 1000;
+  for (const rawField of fieldKeys) {
+    const shardId = decodeNetworkIdentity(rawField).trim();
+    if (!shardId.startsWith('eShard ')) {
+      continue;
+    }
+
+    const rawExpiry =
+      typeof client.hgetBuffer === 'function'
+        ? await client.hgetBuffer(HEALTH_PING_KEY, rawField)
+        : await client.hget(HEALTH_PING_KEY, rawField);
+    const expiresAtSeconds = parseHealthExpirySeconds(rawExpiry);
+    if (expiresAtSeconds == null || expiresAtSeconds <= nowSeconds) {
+      continue;
+    }
+
+    liveShardIds.push(shardId);
+    liveShardFieldKeys.push(rawField);
+  }
+
+  return { liveShardIds, liveShardFieldKeys };
+}
+
 function parseGridShapeBoundsRaw(raw, offset) {
   if (!Buffer.isBuffer(raw) || offset + GRID_SHAPE_SERIALIZED_SIZE_BYTES > raw.length) {
     return null;
@@ -1048,18 +1092,8 @@ async function readNetworkTelemetryFromDatabase(options = {}) {
     (await withInternalDatabase(async (client) => {
       const liveShardIds = [];
       if (includeLiveIds) {
-        const idsRaw =
-          typeof client.hkeysBuffer === 'function'
-            ? await client.hkeysBuffer(HEALTH_PING_KEY)
-            : await client.hkeys(HEALTH_PING_KEY);
-        if (Array.isArray(idsRaw)) {
-          for (const rawId of idsRaw) {
-            const decoded = decodeNetworkIdentity(rawId).trim();
-            if (decoded.length > 0) {
-              liveShardIds.push(decoded);
-            }
-          }
-        }
+        const healthSnapshot = await readLiveShardHealthSnapshot(client);
+        liveShardIds.push(...healthSnapshot.liveShardIds);
       }
 
       const allTelemetry = await client.hgetall(NETWORK_TELEMETRY_KEY);
@@ -1089,19 +1123,8 @@ async function readNetworkTelemetryFromDatabase(options = {}) {
 async function readShardPlacementFromDatabase() {
   return (
     (await withInternalDatabase(async (client) => {
-      const liveIdsRaw =
-        typeof client.hkeysBuffer === 'function'
-          ? await client.hkeysBuffer(HEALTH_PING_KEY)
-          : await client.hkeys(HEALTH_PING_KEY);
-      const liveShardSet = new Set();
-      if (Array.isArray(liveIdsRaw)) {
-        for (const rawId of liveIdsRaw) {
-          const shardId = decodeNetworkIdentity(rawId).trim();
-          if (shardId.startsWith('eShard ')) {
-            liveShardSet.add(shardId);
-          }
-        }
-      }
+      const healthSnapshot = await readLiveShardHealthSnapshot(client);
+      const liveShardSet = new Set(healthSnapshot.liveShardIds);
 
       const fieldKeys =
         typeof client.hkeysBuffer === 'function'
@@ -1111,10 +1134,15 @@ async function readShardPlacementFromDatabase() {
         return [];
       }
 
+      const staleFieldKeys = [];
       const rows = [];
       for (const rawField of fieldKeys) {
         const shardId = decodeNetworkIdentity(rawField).trim();
-        if (!shardId.startsWith('eShard ') || !liveShardSet.has(shardId)) {
+        if (!shardId.startsWith('eShard ')) {
+          continue;
+        }
+        if (!liveShardSet.has(shardId)) {
+          staleFieldKeys.push(rawField);
           continue;
         }
 
@@ -1133,6 +1161,10 @@ async function readShardPlacementFromDatabase() {
           podName: placement.podName,
           podIp: placement.podIp,
         });
+      }
+
+      if (staleFieldKeys.length > 0) {
+        await client.hdel(NODE_MANIFEST_SHARD_NODE_KEY, ...staleFieldKeys);
       }
 
       rows.sort((left, right) => left.shardId.localeCompare(right.shardId));

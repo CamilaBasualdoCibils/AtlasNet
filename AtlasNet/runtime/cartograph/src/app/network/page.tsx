@@ -9,8 +9,10 @@ import {
   useAuthorityEntities,
   useHeuristicShapes,
   useNetworkTelemetry,
+  useShardPlacement,
 } from '../shared/useTelemetryPolling';
 import { useServerBoundsMinimapData } from './server-bounds/useServerBoundsMinimapData';
+import type { ShardTelemetry } from '../shared/cartographTypes';
 
 const ENABLE_NETWORK_TELEMETRY = true;
 const DEFAULT_POLL_INTERVAL_MS = 200;
@@ -30,6 +32,34 @@ type ShardState = {
 };
 
 const HISTORY_LEN = 60;
+
+function mergeLiveShardTelemetry(
+  networkTelemetry: ShardTelemetry[],
+  liveShardIds: string[]
+): ShardTelemetry[] {
+  const mergedById = new Map<string, ShardTelemetry>();
+  for (const shard of networkTelemetry) {
+    mergedById.set(shard.shardId, shard);
+  }
+
+  for (const shardId of liveShardIds) {
+    if (!shardId || mergedById.has(shardId)) {
+      continue;
+    }
+
+    mergedById.set(shardId, {
+      shardId,
+      downloadKbps: 0,
+      uploadKbps: 0,
+      avgPingMs: null,
+      connections: [],
+    });
+  }
+
+  return Array.from(mergedById.values()).sort((left, right) =>
+    left.shardId.localeCompare(right.shardId)
+  );
+}
 
 /** Push a value into a rolling buffer */
 function pushRolling(prev: number[], value: number): number[] {
@@ -79,6 +109,16 @@ export default function NetworkTelemetryPage() {
     resetOnException: true,
     resetOnHttpError: false,
   });
+  const shardPlacement = useShardPlacement({
+    intervalMs: SERVER_BOUNDS_POLL_INTERVAL_MS,
+    enabled: true,
+    resetOnException: false,
+    resetOnHttpError: false,
+  });
+  const latestTelemetryWithPlacement = useMemo(() => {
+    const liveShardIds = shardPlacement.map((entry) => entry.shardId);
+    return mergeLiveShardTelemetry(latestTelemetry, liveShardIds);
+  }, [latestTelemetry, shardPlacement]);
   const {
     shardSummaries,
     shardBoundsByIdWithNetworkFallback,
@@ -87,12 +127,12 @@ export default function NetworkTelemetryPage() {
   } = useServerBoundsMinimapData({
     heuristicShapes,
     authorityEntities,
-    networkTelemetry: latestTelemetry,
+    networkTelemetry: latestTelemetryWithPlacement,
   });
 
   const latestById = useMemo(() => {
-    return new Map(latestTelemetry.map(t => [t.shardId, t]));
-  }, [latestTelemetry]);
+    return new Map(latestTelemetryWithPlacement.map(t => [t.shardId, t]));
+  }, [latestTelemetryWithPlacement]);
 
   const selectedShard = selectedShardId ? latestById.get(selectedShardId) : null;
 
@@ -107,7 +147,7 @@ export default function NetworkTelemetryPage() {
       }
     >();
 
-    const rows = latestTelemetry.map((telemetry) => {
+    const rows = latestTelemetryWithPlacement.map((telemetry) => {
       const previous = previousById.get(telemetry.shardId);
       const nextHistory = {
         downloadHistory: pushRolling(
@@ -138,7 +178,7 @@ export default function NetworkTelemetryPage() {
 
     shardHistoryByIdRef.current = nextById;
     return rows;
-  }, [latestTelemetry]);
+  }, [latestTelemetryWithPlacement]);
 
   return (
     <div style={{ padding: 16 }}>
@@ -193,7 +233,7 @@ export default function NetworkTelemetryPage() {
         </label>
       </div>
       <div style={{ margin: '12px 0 16px' }}>
-        <CircularNodeGraphPanel telemetry={latestTelemetry} />
+        <CircularNodeGraphPanel telemetry={latestTelemetryWithPlacement} />
       </div>
 
       <table

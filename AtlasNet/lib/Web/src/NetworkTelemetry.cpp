@@ -8,16 +8,25 @@
 #include "Network/NetworkIdentity.hpp"
 
 void NetworkTelemetry::GetLivePingIDs(std::vector<std::string>& out_live_ids, std::vector<std::string>& out_health) {
-    std::unordered_map<std::string, double> all_pings;
+    out_live_ids.clear();
+    out_health.clear();
 
+    std::unordered_map<std::string, double> all_pings;
     HealthManifest::Get().GetAllPings(all_pings);
+    const double now = InternalDB::Get()->GetTimeNowSeconds();
 
     for (const auto& pair : all_pings) {
+        if (pair.second <= now) {
+            continue;
+        }
 
         ByteReader br(pair.first);
-        //ByteReader br_val(pair.second);
         NetworkIdentity id;
         id.Deserialize(br);
+
+        if (id.Type != NetworkIdentityType::eShard) {
+            continue;
+        }
 
         out_live_ids.push_back(id.ToString());
         out_health.push_back(std::to_string(pair.second));

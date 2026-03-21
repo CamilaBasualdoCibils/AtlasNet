@@ -418,8 +418,20 @@ void Interlink::CallbackOnConnecting(SteamCBInfo info)
 	if (identityByteStream &&
 		info->m_info.m_identityRemote.m_eType == k_ESteamNetworkingIdentityType_GenericBytes)
 	{
-		ByteReader br(std::span(identityByteStream, identityByteStreamSize));
-		ID.Deserialize(br);
+		try
+		{
+			ByteReader br(std::span(identityByteStream, identityByteStreamSize));
+			ID.Deserialize(br);
+		}
+		catch (const std::exception& ex)
+		{
+			logger.WarningFormatted("Failed to decode remote identity while connecting: {}",
+									ex.what());
+		}
+		catch (...)
+		{
+			logger.Warning("Failed to decode remote identity while connecting.");
+		}
 	}
 
 	// Accept the connection before inserting
@@ -508,24 +520,35 @@ void Interlink::CallbackOnConnected(SteamCBInfo info)
 
 	if (!found)
 	{
-		// no internal record; log and assert like before (unchanged)
 		IPAddress address(info->m_info.m_addrRemote);
-		logger.ErrorFormatted("FUcking idiot. connection not stored internally. {}",
-							  address.ToString(true));
+		logger.WarningFormatted(
+			"Connected callback received for stale/unknown connection {} at {}. Closing handle.",
+			static_cast<uint64>(info->m_hConn), address.ToString(true));
 		int identityByteStreamSize = 0;
 		const uint8_t *identityByteStream =
 			(const uint8_t *)info->m_info.m_identityRemote.GetGenericBytes(identityByteStreamSize);
 		if (identityByteStream)
 		{
-			auto sp = std::span(identityByteStream, identityByteStreamSize);
-			ByteReader br(sp);
-			NetworkIdentity id;
-			id.Deserialize(br);
-			logger.ErrorFormatted("fucking idoit #2. Identity of remote {}", id.ToString());
+			try
+			{
+				auto sp = std::span(identityByteStream, identityByteStreamSize);
+				ByteReader br(sp);
+				NetworkIdentity id;
+				id.Deserialize(br);
+				logger.WarningFormatted("Stale connected callback remote identity {}",
+										id.ToString());
+			}
+			catch (const std::exception& ex)
+			{
+				logger.WarningFormatted(
+					"Failed to decode remote identity from stale connected callback: {}", ex.what());
+			}
+			catch (...)
+			{
+				logger.Warning("Failed to decode remote identity from stale connected callback.");
+			}
 		}
-		ASSERT(false,
-			   "Connected? to non existent connection?, HSteamNetConnection "
-			   "was not found");
+		networkInterface->CloseConnection(info->m_hConn, 0, "Stale connected callback", false);
 		return;
 	}
 
@@ -616,25 +639,56 @@ void Interlink::ReceiveMessages()
 
 		// find sender under read-lock and copy its identity
 		NetworkIdentity senderIdentity;
+		bool senderKnown = false;
 		{
 			_ReadLock(
 				[&]()
 				{
 					auto it = Connections.get<IndexByHSteamNetConnection>().find(msg->m_conn);
 					if (it != Connections.get<IndexByHSteamNetConnection>().end())
+					{
 						senderIdentity = it->target;
+						senderKnown = true;
+					}
 				});
+		}
+
+		if (!senderKnown)
+		{
+			logger.WarningFormatted(
+				"Dropping message from unknown/stale steam connection {}", static_cast<uint64>(msg->m_conn));
+			msg->Release();
+			continue;
 		}
 
 		const void *data = msg->m_pData;
 		size_t size = msg->m_cbSize;
 
 		std::span<const uint8_t> span = std::span<const uint8_t>((uint8_t *)data, size);
-		const auto packet = PacketRegistry::Get().CreateFromBytes(span); 
+		const auto packet = PacketRegistry::Get().CreateFromBytes(span);
+		if (!packet)
+		{
+			logger.WarningFormatted("Dropping invalid packet from {}", senderIdentity.ToString());
+			msg->Release();
+			continue;
+		}
 
-		// Dispatch: we pass the sender we captured
-		packet_manager.Dispatch(*packet, packet->GetPacketType(),
-								PacketManager::PacketInfo{.sender = senderIdentity});
+		try
+		{
+			// Dispatch: we pass the sender we captured
+			packet_manager.Dispatch(*packet, packet->GetPacketType(),
+									PacketManager::PacketInfo{.sender = senderIdentity});
+		}
+		catch (const std::exception& ex)
+		{
+			logger.ErrorFormatted("Packet dispatch from {} threw: {}", senderIdentity.ToString(),
+								  ex.what());
+		}
+		catch (...)
+		{
+			logger.ErrorFormatted("Packet dispatch from {} threw unknown exception",
+								  senderIdentity.ToString());
+		}
 
 		msg->Release();
 	}
@@ -799,7 +853,18 @@ void Interlink::Init()
 		{
 			while (!st.stop_requested())
 			{
-				Tick();
+				try
+				{
+					Tick();
+				}
+				catch (const std::exception& ex)
+				{
+					logger.ErrorFormatted("Interlink tick threw: {}", ex.what());
+				}
+				catch (...)
+				{
+					logger.Error("Interlink tick threw unknown exception.");
+				}
 
 				std::this_thread::sleep_for(std::chrono::milliseconds(5));
 			}

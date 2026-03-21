@@ -13,6 +13,7 @@
 #include "Entity/Entity.hpp"
 #include "Entity/EntityHandle.hpp"
 #include "Entity/EntityLedger.hpp"
+#include "Entity/GlobalEntityLedger.hpp"
 #include "Entity/Transform.hpp"
 #include "Events/Events/Client/ClientEvents.hpp"
 #include "Events/GlobalEvents.hpp"
@@ -21,6 +22,9 @@
 #include "Global/Serialize/ByteWriter.hpp"
 #include "Global/pch.hpp"
 #include "Heuristic/BoundLeaser.hpp"
+#include "Interlink/Database/ServerRegistry.hpp"
+#include "Network/NetworkCredentials.hpp"
+#include "Network/NetworkEnums.hpp"
 
 void SandboxServer::Run()
 {
@@ -42,7 +46,18 @@ void SandboxServer::Run()
 	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(20));
 	}
-	if (BoundLeaser::Get().GetBoundID() == 0)
+	const NetworkIdentity selfID = NetworkCredentials::Get().GetID();
+	const auto& servers = ServerRegistry::Get().GetServers();
+	const bool hasOtherShards = std::ranges::any_of(
+		servers,
+		[&](const auto& entry)
+		{
+			const NetworkIdentity& identifier = entry.first;
+			return identifier.Type == NetworkIdentityType::eShard && identifier != selfID;
+		});
+	std::vector<AtlasEntityHandle> existingEntities;
+	GlobalEntityLedger::Get().GetAllEntities(std::back_inserter(existingEntities));
+	if (!hasOtherShards && existingEntities.empty())
 	{
 		std::mt19937 rng(std::random_device{}());
 		std::uniform_real_distribution<float> dist(0.0f, 1.0f);

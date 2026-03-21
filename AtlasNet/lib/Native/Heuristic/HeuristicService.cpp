@@ -17,7 +17,6 @@
 #include "Heuristic/Voronoi/LlmVoronoiHeuristic.hpp"
 #include "Heuristic/Voronoi/VoronoiHeuristic.hpp"
 #include "InternalDB/InternalDB.hpp"
-#include "Interlink/Database/ServerRegistry.hpp"
 #include "Network/NetworkEnums.hpp"
 #include "Shard/ShardService.hpp"
 #include "Snapshot/SnapshotService.hpp"
@@ -26,20 +25,6 @@ namespace
 {
 constexpr int64_t kDefaultRecomputeIntervalMs = _ATLASNET_HEURISTIC_RECOMPUTE_INTERNAL_MS;
 constexpr auto kControlLoopSleep = std::chrono::milliseconds(100);
-
-uint32_t ResolveAvailableServerCount()
-{
-	uint32_t shardCount = 0;
-	for (const auto& [id, _entry] : ServerRegistry::Get().GetServers())
-	{
-		if (id.Type == NetworkIdentityType::eShard)
-		{
-			++shardCount;
-		}
-	}
-
-	return shardCount;
-}
 
 uint32_t ResolveHotspotCountFromServerCount(const uint32_t serverCount)
 {
@@ -250,14 +235,14 @@ void HeuristicService::ComputeHeuristic()
 	SyncDesiredHeuristic();
 	std::vector<AtlasTransform> transforms;
 	SnapshotService::Get().FetchAllTransforms(transforms);
-	const uint32_t resolvedServerCount = ResolveAvailableServerCount();
+	const uint32_t resolvedReplicaCount = ShardService::Get().ResolveDesiredShardReplicaCount();
 
 	logger.DebugFormatted("Fetched {} entities", transforms.size());
 	if (auto* hotspotVoronoi =
-			dynamic_cast<HotspotVoronoiHeuristic*>(activeHeuristic.get()))
+				dynamic_cast<HotspotVoronoiHeuristic*>(activeHeuristic.get()))
 	{
 		const uint32_t effectiveServerCount =
-			resolvedServerCount > 0 ? resolvedServerCount
+			resolvedReplicaCount > 0 ? resolvedReplicaCount
 									: hotspotVoronoi->options.DefaultServerCount;
 		hotspotVoronoi->SetAvailableServerCount(effectiveServerCount);
 		hotspotVoronoi->SetHotspotCount(
@@ -267,7 +252,7 @@ void HeuristicService::ComputeHeuristic()
 				 dynamic_cast<LlmVoronoiHeuristic*>(activeHeuristic.get()))
 	{
 		const uint32_t effectiveServerCount =
-			resolvedServerCount > 0 ? resolvedServerCount
+			resolvedReplicaCount > 0 ? resolvedReplicaCount
 									: llmVoronoi->options.DefaultServerCount;
 		llmVoronoi->SetAvailableServerCount(effectiveServerCount);
 		llmVoronoi->SetHotspotCount(
@@ -290,7 +275,7 @@ void HeuristicService::ComputeHeuristic()
 				 dynamic_cast<const VoronoiHeuristic*>(activeHeuristic.get()))
 	{
 		const uint32_t effectiveServerCount =
-			resolvedServerCount > 0 ? resolvedServerCount
+			resolvedReplicaCount > 0 ? resolvedReplicaCount
 									: std::max<uint32_t>(1, legacyVoronoi->GetBoundsCount());
 		HotspotSnapshotService::StoreSnapshot(
 			*legacyVoronoi, transforms.size(), effectiveServerCount);

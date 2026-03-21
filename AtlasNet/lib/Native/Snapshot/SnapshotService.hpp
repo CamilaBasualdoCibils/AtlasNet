@@ -1,23 +1,32 @@
 #pragma once
 
+#include <mutex>
+#include <optional>
 #include <stop_token>
+#include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 
+#include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
 #include "Entity/Transform.hpp"
 #include "Global/Misc/Singleton.hpp"
 #include "Heuristic/IBounds.hpp"
 class SnapshotService : public Singleton<SnapshotService>
 {
-	const char* const SnapshotBoundsID_2_EntityList_Entry_HashTable =
-		"Snapshot:BoundIDs -> EntityList";
-	const char* const SnapshotBoundsID_2_Transform_Entry_HashTable =
-		"Snapshot:BoundIDs -> Transforms";
+	static constexpr const char* EntitySnapshotBoundsIndex_HashTable =
+		"Entity:Snapshot:Bounds";
+	Log logger = Log("SnapshotService");
 	std::jthread snapshotThread;
+	std::mutex recoveryMutex;
+	std::optional<BoundsID> recoveredBoundID;
 
    public:
 	SnapshotService();
+	void RecoverClaimedBoundSnapshotIfNeeded();
+	void UpsertClaimedBoundEntitySnapshot(const AtlasEntity& entity);
+	void DeleteClaimedBoundEntitySnapshot(const AtlasEntityID& entityID);
 
 	void FetchEntityListSnapshot(
 		std::unordered_map<BoundsID, std::vector<AtlasEntity>>& data);
@@ -27,8 +36,11 @@ class SnapshotService : public Singleton<SnapshotService>
 
 	void FetchAllTransforms(std::vector<AtlasTransform>& transforms);
 
-   private:
-	void SnapshotThreadLoop(std::stop_token st);
-
-	void UploadSnapshot();
+	private:
+		void SnapshotThreadLoop(std::stop_token st);
+		bool RecoverBoundSnapshot(BoundsID boundID);
+		void ReconcileClaimedBoundEntityRecords();
+		void UploadSnapshot();
+		void TouchBoundSnapshotIndex(BoundsID boundID);
+		void RemoveBoundSnapshotIndex(BoundsID boundID);
 };

@@ -17,6 +17,7 @@
 #include "Network/NetworkCredentials.hpp"
 #include "Network/NetworkEnums.hpp"
 #include "Network/Packet/PacketManager.hpp"
+#include "Snapshot/SnapshotService.hpp"
 #include "Transfer/TransferCoordinator.hpp"
 void EntityLedger::Init()
 {
@@ -135,16 +136,18 @@ void EntityLedger::AddEntity(const AtlasEntity& e)
 		});
 	GlobalEntityLedger::Get().DeclareEntityRecord(NetworkCredentials::Get().GetID().ID,
 												  e.Entity_ID);
+	SnapshotService::Get().UpsertClaimedBoundEntitySnapshot(e);
 }
 void EntityLedger::_EraseEntity(AtlasEntityID ID)
 {
+	SnapshotService::Get().DeleteClaimedBoundEntitySnapshot(ID);
 	const auto f = entities.find(ID);
 	if (f->second.IsClient)
 	{
 		clients.erase(f->second.Client_ID);
 	}
 	entities.erase(f);
-	GlobalEntityLedger::Get().DeclareEntityRecord(NetworkCredentials::Get().GetID().ID, ID);
+	GlobalEntityLedger::Get().DeleteEntityRecord(NetworkCredentials::Get().GetID().ID, ID);
 }
 void EntityLedger::OnEntityHandleFetchRequest(const EntityHandleFetchRequestPacket& packet,
 											  const PacketManager::PacketInfo& info)

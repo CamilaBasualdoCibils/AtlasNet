@@ -1,6 +1,7 @@
 #pragma once
 
 #include <chrono>
+#include <mutex>
 #include <stop_token>
 #include <thread>
 #include <type_traits>
@@ -15,6 +16,7 @@ class BoundLeaser : public Singleton<BoundLeaser>
 {
 	Log logger = Log("BoundLeaser");
 	std::optional<BoundsID> ClaimedBoundID;
+	mutable std::mutex ClaimedBoundMutex;
 
 	std::jthread LoopThread;
 
@@ -23,7 +25,7 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	{
 		while (!st.stop_requested())
 		{
-			if (!ClaimedBoundID.has_value())
+			if (!HasBound())
 			{
 				ClaimBound();
 			}
@@ -32,6 +34,7 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	}
 
 	void ClaimBound();
+	void ClearInvalidClaimedBound(BoundsID claimedBoundID);
 
    public:
 	void Init()
@@ -39,19 +42,55 @@ class BoundLeaser : public Singleton<BoundLeaser>
 		logger.Debug("Init");
 		LoopThread = std::jthread([this](std::stop_token st) { LoopEntry(st); });
 	}
-	[[nodiscard]] constexpr bool HasBound() const { return ClaimedBoundID.has_value(); }
+	[[nodiscard]] bool HasBound() const
+	{
+		std::lock_guard lock(ClaimedBoundMutex);
+		return ClaimedBoundID.has_value();
+	}
+	void ClearClaimedBound()
+	{
+		std::lock_guard lock(ClaimedBoundMutex);
+		ClaimedBoundID.reset();
+	}
 	template <typename FN>
 		requires std::is_invocable_v<FN, const IBounds&>
-	auto GetBound(FN&& f)
+	void GetBound(FN&& f)
 	{
-		HeuristicManifest::Get().PullHeuristic(
-			[&](const IHeuristic& h)
-			{
-				if (ClaimedBoundID.has_value())
+		std::optional<BoundsID> claimedBoundID;
+		{
+			std::lock_guard lock(ClaimedBoundMutex);
+			claimedBoundID = ClaimedBoundID;
+		}
+		if (!claimedBoundID.has_value())
+		{
+			return;
+		}
+		try
+		{
+			HeuristicManifest::Get().PullHeuristic(
+				[&](const IHeuristic& h)
 				{
-					return f(h.GetBound(ClaimedBoundID.value()));
-				}
-			});
+					f(h.GetBound(claimedBoundID.value()));
+				});
+		}
+		catch (const std::exception& ex)
+		{
+			logger.WarningFormatted(
+				"Claimed bound {} is no longer valid in the active heuristic. Clearing local claim. {}",
+				claimedBoundID.value(), ex.what());
+			ClearInvalidClaimedBound(claimedBoundID.value());
+		}
+		catch (...)
+		{
+			logger.WarningFormatted(
+				"Claimed bound {} is no longer valid in the active heuristic. Clearing local claim.",
+				claimedBoundID.value());
+			ClearInvalidClaimedBound(claimedBoundID.value());
+		}
 	}
-	[[nodiscard]] constexpr BoundsID GetBoundID() const { return ClaimedBoundID.value(); }
+	[[nodiscard]] BoundsID GetBoundID() const
+	{
+		std::lock_guard lock(ClaimedBoundMutex);
+		return ClaimedBoundID.value();
+	}
 };

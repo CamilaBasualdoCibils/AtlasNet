@@ -32,6 +32,8 @@ class ClientManifest : public Singleton<ClientManifest>
 
    private:
 	void __ClientSetIP(const ClientID& c, const IPAddress& address);
+	void RemoveClientFromProxySet(const ClientID& cid, const NetworkIdentity& ID);
+	void RemoveClientFromShardSet(const ClientID& cid, const NetworkIdentity& ID);
 
    public:
 	std::optional<AtlasEntityID> GetClientEntityID(const ClientID& clientid);
