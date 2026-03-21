@@ -534,6 +534,7 @@ export default function MapPage() {
   });
 
   const {
+    authorityEntityCountsByShard,
     combinedShapes,
     hoveredShardEdgeLabels,
     networkEdgeCount,
@@ -591,6 +592,11 @@ export default function MapPage() {
       showShardHoverDetails && showGnsConnections ? hoveredShardEdgeLabels : []
     );
   }, [hoveredShardEdgeLabels, showGnsConnections, showShardHoverDetails]);
+
+  const hoveredAuthorityEntityCount =
+    hoveredShardId == null
+      ? 0
+      : authorityEntityCountsByShard.get(normalizeShardId(hoveredShardId)) ?? 0;
 
   useEffect(() => {
     const container = containerRef.current;
@@ -730,6 +736,7 @@ export default function MapPage() {
             downloadBytesPerSec={hoveredTelemetry?.downloadKbps ?? 0}
             uploadBytesPerSec={hoveredTelemetry?.uploadKbps ?? 0}
             avgPingMs={hoveredTelemetry?.avgPingMs ?? null}
+            authorityEntityCount={hoveredAuthorityEntityCount}
             outgoingConnectionCount={hoveredShardEdgeLabels.length}
             workerNodeName={hoveredShardWorkerNode}
           />

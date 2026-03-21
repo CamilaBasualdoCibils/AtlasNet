@@ -15,6 +15,7 @@ import {
   shapeHasHalfPlaneCell,
   type Point2,
 } from './shapeGeometry';
+import { formatPingMs } from '../../shared/networkTelemetryMetrics';
 export type { Point2 } from './shapeGeometry';
 
 export interface ShardHoverBounds {
@@ -147,6 +148,22 @@ export function computeOwnerPositions(
       y: value.sumY / Math.max(1, value.count),
     });
   }
+  return out;
+}
+
+export function computeAuthorityEntityCountsByShard(
+  authorityEntities: AuthorityEntityTelemetry[]
+): Map<string, number> {
+  const out = new Map<string, number>();
+
+  for (const entity of authorityEntities) {
+    const ownerId = normalizeShardId(entity.ownerId);
+    if (!isShardIdentity(ownerId)) {
+      continue;
+    }
+    out.set(ownerId, (out.get(ownerId) ?? 0) + 1);
+  }
+
   return out;
 }
 
@@ -553,7 +570,7 @@ export function buildHoveredShardEdgeLabels(args: {
         to: toPos,
         text: `In ${formatRate(rates.inBytesPerSec)} B/s • Out ${formatRate(
           rates.outBytesPerSec
-        )} B/s`,
+        )} B/s\nPing ${formatPingMs(shardTelemetryById.get(targetId)?.avgPingMs ?? null)}`,
       };
     })
     .filter((value): value is HoveredShardEdgeLabel => value != null)

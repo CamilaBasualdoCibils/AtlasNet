@@ -651,22 +651,39 @@ export function createMapRenderer({
     const fontPx = Number.isFinite(style.fontPx) ? Number(style.fontPx) : 11;
     const padX = Number.isFinite(style.padX) ? Number(style.padX) : 6;
     const boxHeight = Number.isFinite(style.boxHeight) ? Number(style.boxHeight) : 16;
+    const lines = text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0);
+    if (lines.length === 0) {
+      return;
+    }
 
     ctx.save();
     ctx.font = `${fontPx}px sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    const textWidth = ctx.measureText(text).width;
+    const textWidth = lines.reduce(
+      (maxWidth, line) => Math.max(maxWidth, ctx.measureText(line).width),
+      0
+    );
     const boxWidth = textWidth + padX * 2;
+    const boxVerticalPad = 4;
+    const lineHeight = Math.max(boxHeight - 4, fontPx + 2);
+    const totalHeight = lineHeight * lines.length + boxVerticalPad * 2;
     const boxX = screenX - boxWidth / 2;
-    const boxY = screenY - boxHeight / 2;
+    const boxY = screenY - totalHeight / 2;
     ctx.fillStyle = style.background ?? 'rgba(15, 23, 42, 0.86)';
     ctx.strokeStyle = style.border ?? 'rgba(148, 163, 184, 0.35)';
     ctx.lineWidth = 1;
-    ctx.fillRect(boxX, boxY, boxWidth, boxHeight);
-    ctx.strokeRect(boxX, boxY, boxWidth, boxHeight);
+    ctx.fillRect(boxX, boxY, boxWidth, totalHeight);
+    ctx.strokeRect(boxX, boxY, boxWidth, totalHeight);
     ctx.fillStyle = style.text ?? '#cbd5e1';
-    ctx.fillText(text, screenX, screenY + 0.5);
+    lines.forEach((line, index) => {
+      const lineCenterY =
+        boxY + boxVerticalPad + lineHeight * index + lineHeight / 2 + 0.5;
+      ctx.fillText(line, screenX, lineCenterY);
+    });
     ctx.restore();
   }
 

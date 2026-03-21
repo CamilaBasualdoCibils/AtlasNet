@@ -12,6 +12,7 @@ import {
   buildFilteredBaseShapes,
   buildOverlayShapes,
   buildShardTelemetryById,
+  computeAuthorityEntityCountsByShard,
   computeMapBoundsCenter,
   computeNetworkEdgeCount,
   computeNetworkNodeIds,
@@ -44,6 +45,7 @@ interface MapDerivedData {
   networkEdgeCount: number;
   networkNodeIds: string[];
   networkNodeIdSet: Set<string>;
+  authorityEntityCountsByShard: Map<string, number>;
   shardHoverBoundsById: Map<string, ShardHoverBounds>;
   shardHoverRegionsById: Map<string, ShardHoverRegion[]>;
   shardPolygonsById: Map<string, { x: number; y: number }[][]>;
@@ -64,6 +66,11 @@ export function useMapDerivedData({
 }: UseMapDerivedDataArgs): MapDerivedData {
   const ownerPositions = useMemo(
     () => computeOwnerPositions(authorityEntities),
+    [authorityEntities]
+  );
+
+  const authorityEntityCountsByShard = useMemo(
+    () => computeAuthorityEntityCountsByShard(authorityEntities),
     [authorityEntities]
   );
 
@@ -196,6 +203,7 @@ export function useMapDerivedData({
     networkEdgeCount,
     networkNodeIds,
     networkNodeIdSet,
+    authorityEntityCountsByShard,
     shardHoverBoundsById,
     shardHoverRegionsById: shardRegionsById,
     shardPolygonsById,

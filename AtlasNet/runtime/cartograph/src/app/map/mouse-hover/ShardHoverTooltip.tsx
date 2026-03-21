@@ -14,11 +14,13 @@ interface ShardHoverTooltipProps {
   downloadBytesPerSec: number;
   uploadBytesPerSec: number;
   avgPingMs: number | null;
+  authorityEntityCount: number;
   outgoingConnectionCount: number;
   workerNodeName: string | null;
 }
 
 export function ShardHoverTooltip({
+  authorityEntityCount,
   downloadBytesPerSec,
   avgPingMs,
   hoveredShardAnchor,
@@ -72,6 +74,9 @@ export function ShardHoverTooltip({
       </div>
       <div style={{ color: '#cbd5e1', marginBottom: 4 }}>
         Avg ping: {formatPingMs(avgPingMs)}
+      </div>
+      <div style={{ color: '#cbd5e1', marginBottom: 4 }}>
+        Authority entities: {authorityEntityCount}
       </div>
       <div style={{ color: '#94a3b8' }}>{outgoingConnectionCount} outgoing connections</div>
     </div>
