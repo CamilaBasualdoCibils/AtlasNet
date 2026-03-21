@@ -18,11 +18,15 @@ import {
 
 const POLL_INTERVAL_MS = 1000;
 const HEURISTIC_CONTROL_POLL_INTERVAL_MS = 5000;
+const MIN_RECOMPUTE_INTERVAL_MS = 100;
 
 const EMPTY_HEURISTIC_CONTROL: HeuristicControlState = {
   currentHeuristicType: null,
   desiredHeuristicType: null,
   allowedHeuristicTypes: [],
+  recomputeMode: 'interval',
+  recomputeIntervalMs: 5000,
+  loadState: 'stubbed',
 };
 
 interface RecomputeCycleGroup {
@@ -291,11 +295,16 @@ export default function RecomputePage() {
   const [heuristicControl, setHeuristicControl] =
     useState<HeuristicControlState>(EMPTY_HEURISTIC_CONTROL);
   const [selectedHeuristicType, setSelectedHeuristicType] = useState('');
+  const [selectedRecomputeMode, setSelectedRecomputeMode] = useState<
+    HeuristicControlState['recomputeMode']
+  >('interval');
+  const [selectedRecomputeIntervalMs, setSelectedRecomputeIntervalMs] = useState('5000');
   const [heuristicControlBusy, setHeuristicControlBusy] = useState(false);
   const [heuristicControlMessage, setHeuristicControlMessage] =
     useState<string | null>(null);
   const lastObservedFingerprintRef = useRef<string | null>(null);
   const nextObservedCycleIdRef = useRef(1);
+  const recomputeControlDraftDirtyRef = useRef(false);
 
   useEffect(() => {
     let alive = true;
@@ -325,6 +334,10 @@ export default function RecomputePage() {
           }
           return payload.desiredHeuristicType ?? payload.currentHeuristicType ?? '';
         });
+        if (!recomputeControlDraftDirtyRef.current) {
+          setSelectedRecomputeMode(payload.recomputeMode);
+          setSelectedRecomputeIntervalMs(String(payload.recomputeIntervalMs));
+        }
       } catch {}
     }
 
@@ -471,8 +484,58 @@ export default function RecomputePage() {
     }));
   };
 
-  async function applyHeuristicType() {
+  async function applyHeuristicControl() {
     if (!selectedHeuristicType || heuristicControlBusy) {
+      return;
+    }
+
+    const nextRecomputeIntervalMs = Math.max(
+      MIN_RECOMPUTE_INTERVAL_MS,
+      Math.round(Number(selectedRecomputeIntervalMs) || heuristicControl.recomputeIntervalMs)
+    );
+
+    setHeuristicControlBusy(true);
+    setHeuristicControlMessage(null);
+
+    try {
+      const response = await fetch('/api/heuristic-control', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          heuristicType: selectedHeuristicType,
+          recomputeMode: selectedRecomputeMode,
+          recomputeIntervalMs: nextRecomputeIntervalMs,
+        }),
+      });
+      if (!response.ok) {
+        setHeuristicControlMessage(`Set failed (${response.status}).`);
+        return;
+      }
+
+      const payload = (await response.json()) as HeuristicControlState;
+      setHeuristicControl(payload);
+      setSelectedHeuristicType(
+        payload.desiredHeuristicType ?? payload.currentHeuristicType ?? ''
+      );
+      recomputeControlDraftDirtyRef.current = false;
+      setSelectedRecomputeMode(payload.recomputeMode);
+      setSelectedRecomputeIntervalMs(String(payload.recomputeIntervalMs));
+      setHeuristicControlMessage(
+        payload.recomputeMode === 'load'
+          ? 'Heuristic control updated. Load mode is stubbed out in cartograph.'
+          : 'Heuristic control updated.'
+      );
+    } catch {
+      setHeuristicControlMessage('Set failed.');
+    } finally {
+      setHeuristicControlBusy(false);
+    }
+  }
+
+  async function requestManualRecompute() {
+    if (heuristicControlBusy) {
       return;
     }
 
@@ -486,22 +549,21 @@ export default function RecomputePage() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          heuristicType: selectedHeuristicType,
+          requestRecompute: true,
         }),
       });
       if (!response.ok) {
-        setHeuristicControlMessage(`Set failed (${response.status}).`);
+        setHeuristicControlMessage(`Manual recompute failed (${response.status}).`);
         return;
       }
 
       const payload = (await response.json()) as HeuristicControlState;
       setHeuristicControl(payload);
-      setSelectedHeuristicType(
-        payload.desiredHeuristicType ?? payload.currentHeuristicType ?? ''
-      );
-      setHeuristicControlMessage('Switch requested.');
+      setSelectedRecomputeMode(payload.recomputeMode);
+      setSelectedRecomputeIntervalMs(String(payload.recomputeIntervalMs));
+      setHeuristicControlMessage('Manual recompute requested.');
     } catch {
-      setHeuristicControlMessage('Set failed.');
+      setHeuristicControlMessage('Manual recompute failed.');
     } finally {
       setHeuristicControlBusy(false);
     }
@@ -607,7 +669,8 @@ export default function RecomputePage() {
               </div>
               <div className="text-xs text-slate-500">
                 current={heuristicControl.currentHeuristicType ?? 'unknown'} | desired=
-                {heuristicControl.desiredHeuristicType ?? 'unknown'}
+                {heuristicControl.desiredHeuristicType ?? 'unknown'} | mode=
+                {heuristicControl.recomputeMode}
               </div>
             </div>
 
@@ -629,18 +692,72 @@ export default function RecomputePage() {
               <button
                 type="button"
                 onClick={() => {
-                  void applyHeuristicType();
+                  void applyHeuristicControl();
                 }}
                 disabled={!selectedHeuristicType || heuristicControlBusy}
                 className="rounded-xl border border-cyan-500/40 bg-cyan-500/10 px-4 py-2 text-sm text-cyan-200 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {heuristicControlBusy ? 'Applying...' : 'Apply'}
               </button>
-              <span className="text-xs text-slate-500">
-                {heuristicControlMessage ??
-                  'Verify on Map or Recompute after the next cycle.'}
-              </span>
             </div>
+
+            <div className="mt-4 flex flex-wrap items-center gap-3">
+              <select
+                value={selectedRecomputeMode}
+                onChange={(event) => {
+                  recomputeControlDraftDirtyRef.current = true;
+                  setSelectedRecomputeMode(
+                    event.target.value as HeuristicControlState['recomputeMode']
+                  );
+                }}
+                className="rounded-xl border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-slate-100"
+              >
+                <option value="interval">interval</option>
+                <option value="manual">manual</option>
+                <option value="load">load</option>
+              </select>
+
+              {selectedRecomputeMode === 'interval' ? (
+                <label className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">
+                  <span>interval ms</span>
+                  <input
+                    type="number"
+                    min={MIN_RECOMPUTE_INTERVAL_MS}
+                    step={100}
+                    value={selectedRecomputeIntervalMs}
+                    onChange={(event) => {
+                      recomputeControlDraftDirtyRef.current = true;
+                      setSelectedRecomputeIntervalMs(event.target.value);
+                    }}
+                    className="w-28 rounded-md border border-slate-700 bg-slate-950 px-2 py-1 text-slate-100"
+                  />
+                </label>
+              ) : null}
+
+              {selectedRecomputeMode === 'manual' ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    void requestManualRecompute();
+                  }}
+                  disabled={heuristicControlBusy}
+                  className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-200 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  recompute
+                </button>
+              ) : null}
+
+              {selectedRecomputeMode === 'load' ? (
+                <span className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-sm text-amber-200">
+                  load mode is stubbed out in cartograph
+                </span>
+              ) : null}
+            </div>
+
+            <span className="mt-3 block text-xs text-slate-500">
+              {heuristicControlMessage ??
+                'Interval runs automatically, manual waits for recompute, and load is reserved for a future cartograph flow.'}
+            </span>
           </section>
 
           {selectedCycle ? (

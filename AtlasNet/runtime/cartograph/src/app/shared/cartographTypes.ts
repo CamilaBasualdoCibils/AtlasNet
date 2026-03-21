@@ -165,6 +165,9 @@ export interface HeuristicControlState {
   currentHeuristicType: string | null;
   desiredHeuristicType: string | null;
   allowedHeuristicTypes: string[];
+  recomputeMode: 'interval' | 'manual' | 'load';
+  recomputeIntervalMs: number;
+  loadState: 'stubbed';
 }
 
 export interface WorkerDaemonTelemetry {
