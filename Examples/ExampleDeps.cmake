@@ -61,7 +61,8 @@ target_include_directories(imgui PUBLIC
 )
 
 target_link_libraries(imgui PUBLIC glfw glew_s)
-
+target_compile_definitions(imgui PUBLIC
+IMGUI_DEFINE_MATH_OPERATORS)
 # OpenGL (required by imgui_impl_opengl3)
 
 target_link_libraries(imgui PUBLIC OpenGL::GL)

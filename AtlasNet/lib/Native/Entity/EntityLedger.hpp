@@ -14,6 +14,7 @@
 #include "Client/Client.hpp"
 #include "Debug/Log.hpp"
 #include "Entity/Entity.hpp"
+#include "Entity/Packet/EntityHandleFetchRequestPacket.hpp"
 #include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Global/Misc/Singleton.hpp"
 #include "Global/pch.hpp"
@@ -22,7 +23,7 @@ class EntityLedger : public Singleton<EntityLedger>
 {
 	std::unordered_map<AtlasEntityID, AtlasEntity> entities;
 	std::unordered_map<ClientID, AtlasEntityID> clients;
-	PacketManager::Subscription sub_EntityListRequestPacket;
+	PacketManager::Subscription sub_EntityListRequestPacket,sub_EntityHandleFetchRequestPacket;
 	Log logger = Log("EntityLedger");
 	std::jthread LoopThread;
 	mutable std::shared_mutex EntityListMutex;
@@ -30,8 +31,12 @@ class EntityLedger : public Singleton<EntityLedger>
    private:
 	const AtlasEntity& _GetEntity(AtlasEntityID ID) const { return entities.at(ID); }
 	AtlasEntity& _GetEntity(AtlasEntityID ID) { return entities.at(ID); }
-	const AtlasEntityID& _GetClientEntityID(const ClientID& cid) const { return clients.at(cid); }
-	void _EraseEntity(AtlasEntityID ID) { entities.erase(ID); }
+	std::optional<AtlasEntityID> _GetClientEntityID(const ClientID& cid) const
+	{
+		return clients.find(cid) != clients.end() ? std::optional<AtlasEntityID>(clients.at(cid))
+												  : std::nullopt;
+	}
+	void _EraseEntity(AtlasEntityID ID);
 	bool _ExistsEntity(AtlasEntityID ID) const { return entities.contains(ID); }
 
    public:
@@ -49,6 +54,7 @@ class EntityLedger : public Singleton<EntityLedger>
 	}
 	void Init();
 	template <typename ExecutionPolicy, typename Func>
+		requires std::is_invocable_v<Func, AtlasEntity&>
 	void ForEachEntityWrite(ExecutionPolicy&& policy, Func&& fn)
 	{
 		_WriteLock(
@@ -59,6 +65,7 @@ class EntityLedger : public Singleton<EntityLedger>
 			});
 	}
 	template <typename ExecutionPolicy, typename Func>
+		requires std::is_invocable_v<Func, const AtlasEntity&>
 	void ForEachEntityRead(ExecutionPolicy&& policy, Func&& fn)
 	{
 		_ReadLock(
@@ -66,6 +73,30 @@ class EntityLedger : public Singleton<EntityLedger>
 			{
 				std::for_each(std::forward<ExecutionPolicy>(policy), entities.begin(),
 							  entities.end(), [fn = fn](const auto& e) { fn(e.second); });
+			});
+	}
+	template <typename ExecutionPolicy, typename Func>
+		requires std::is_invocable_v<Func, AtlasEntity&>
+	void ForEachClientWrite(ExecutionPolicy&& policy, Func&& fn)
+	{
+		_WriteLock(
+			[&]()
+			{
+				std::for_each(std::forward<ExecutionPolicy>(policy), clients.begin(), clients.end(),
+							  [&](const std::pair<ClientID, AtlasEntityID>& entry)
+							  { fn(entities.at(entry.second)); });
+			});
+	}
+	template <typename ExecutionPolicy, typename Func>
+		requires std::is_invocable_v<Func, const AtlasEntity&>
+	void ForEachClientRead(ExecutionPolicy&& policy, Func&& fn)
+	{
+		_ReadLock(
+			[&]()
+			{
+				std::for_each(std::forward<ExecutionPolicy>(policy), clients.begin(), clients.end(),
+							  [&](const std::pair<ClientID, AtlasEntityID>& entry)
+							  { fn(entities.at(entry.second)); });
 			});
 	}
 	[[nodiscard]] bool IsEntityClient(AtlasEntityID ID) const
@@ -96,7 +127,7 @@ class EntityLedger : public Singleton<EntityLedger>
 	{
 		return _ReadLock([&]() { return entities.size(); });
 	}
-	AtlasEntityID GetClientEntityID(const ClientID& cid) const
+	std::optional<AtlasEntityID> GetClientEntityID(const ClientID& cid) const
 	{
 		return _ReadLock([&]() { return _GetClientEntityID(cid); });
 	}
@@ -123,22 +154,13 @@ class EntityLedger : public Singleton<EntityLedger>
 			});
 	}
 
-	void AddEntity(const AtlasEntity& e)
-	{
-		_WriteLock(
-			[&]()
-			{
-				entities.insert(std::make_pair(e.Entity_ID, e));
-				if (e.IsClient)
-				{
-					clients.insert(std::make_pair(e.Client_ID, e.Entity_ID));
-				}
-			});
-	}
+	void AddEntity(const AtlasEntity& e);
 
    private:
 	void OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,
 								  const PacketManager::PacketInfo& info);
 
+	void OnEntityHandleFetchRequest(const EntityHandleFetchRequestPacket& packet,
+									const PacketManager::PacketInfo& info);
 	void LoopThreadEntry(std::stop_token st);
 };

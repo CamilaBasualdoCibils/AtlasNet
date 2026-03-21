@@ -81,7 +81,6 @@ void SandboxServer::Run()
 	uint64_t frameCount = 0;
 	double accumulatedTime = 0.0;
 
-	AtlasEntityHandle h;
 
 	while (!ShouldShutdown)
 	{

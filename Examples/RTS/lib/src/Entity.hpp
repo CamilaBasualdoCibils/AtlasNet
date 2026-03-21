@@ -29,8 +29,8 @@ class Entity
 	virtual void DebugMenu() {}
 	void DebugTree();
 	#endif
-	void UpdateTransforms(const mat4& parent);
 	virtual void End() = 0;
+	void UpdateTransforms(const mat4& parent);
 	const mat4& GetWorldMatrix() const { return WorldMatrix; }
 	EntityID GetID() const { return ID; }
 	auto GetParent() const { return Parent; }

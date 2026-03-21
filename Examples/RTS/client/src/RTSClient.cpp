@@ -13,9 +13,11 @@
 #include "Entity.hpp"
 #include "GLFW/glfw3.h"
 #include "Global/pch.hpp"
+#include "PlayerColors.hpp"
 #include "Window.hpp"
 #include "World.hpp"
-#include "commands/ClientCameraMoveCommand.hpp"
+#include "commands/PlayerAssignStateCommand.hpp"
+#include "commands/PlayerCameraMoveCommand.hpp"
 #include "imgui.h"
 #include "imgui_internal.h"
 
@@ -41,31 +43,12 @@ void RTSClient::Run(const IPAddress& address)
 	camera = &World::Get().CreateEntity<Camera>();
 	camera->SetPerspective(false);
 	camera->transform.Pos = {0, 0, 200};
-
-	ImDrawList* drawList = ImGui::GetForegroundDrawList();
-
-	ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-
-	const char* text = "Connecting to AtlasNet";
-
-	// Choose a large font scale
-	float fontSize = 48.0f;
-
-	// Calculate text size
-	ImVec2 textSize = ImGui::CalcTextSize(text);
-
-	// Center position
-	ImVec2 pos = ImVec2((displaySize.x - textSize.x) * 0.5f, (displaySize.y - textSize.y) * 0.5f);
-
-	// Optional: shadow for readability
-	drawList->AddText(nullptr, fontSize, ImVec2(pos.x + 2, pos.y + 2), IM_COL32(0, 0, 0, 255),
-					  text);
-
-	// Main text
-	drawList->AddText(nullptr, fontSize, pos, IM_COL32(255, 255, 255, 255), text);
+	RenderScreenText("Connecting to server...", vec4(1, 1, 0, 1));
 	Window::Get().PostRender();
 	glfwPollEvents();
-
+	AtlasNetClient::Get().GetCommandBus().Subscribe<PlayerAssignStateCommand>(
+		[this](const auto& recvHeader, const auto& command)
+		{ OnPlayerAssignStateCommand(recvHeader, command); });
 	AtlasNetClient::InitializeProperties properties;
 	logger.DebugFormatted("Connecting To AtlasNet at {}", address.ToString());
 	properties.AtlasNetProxyIP = address;
@@ -137,6 +120,13 @@ void RTSClient::Render(float deltaTime)
 	World::Get().RenderAll();
 
 	DebugDraw::Get().Flush(camera->GetViewProjMat());
+
+	if (myAssignedTeam.has_value())
+	{
+		RenderScreenText(
+			std::format("Assigned Team {}", PlayerTeamToString(myAssignedTeam.value())),
+			vec4(PlayerTeamsToColor(*myAssignedTeam), 1));
+	}
 }
 glm::vec2 RightClickStartNDC;
 bool bRightClickDragging = false;
@@ -165,6 +155,28 @@ glm::vec3 NDCToWorldXZ(const glm::vec2& ndc, const glm::mat4& viewProj)
 	return rayOrigin + rayDir * t;
 }
 void RTSClient::Update(float DeltaTime)
+{
+	InputLogic();
+	World::Get().UpdateAllTransforms();
+	World::Get().UpdateAll(DeltaTime);	// pass deltaTime to world update
+}
+void RTSClient::FixedUpdate(float FixedStep)
+{
+	auto& CommandBus = AtlasNetClient::Get().GetCommandBus();
+
+	PlayerCameraMoveCommand cameraMoveCommand;
+	cameraMoveCommand.NewCameraLocation = cameraPivot->transform.Pos;
+	std::swap(cameraMoveCommand.NewCameraLocation.y, cameraMoveCommand.NewCameraLocation.z);
+	CommandBus.Dispatch(cameraMoveCommand);
+
+	CommandBus.Flush();
+}
+void RTSClient::OnPlayerAssignStateCommand(const NetServerStateHeader& header,
+										   const PlayerAssignStateCommand& command)
+{
+	myAssignedTeam = command.yourTeam;
+}
+void RTSClient::InputLogic()
 {
 	if (ImGui::IsMouseClicked(ImGuiMouseButton_Left))
 	{
@@ -251,17 +263,32 @@ void RTSClient::Update(float DeltaTime)
 		}
 		bRightClickDragging = false;
 	}
-	World::Get().UpdateAllTransforms();
-	World::Get().UpdateAll(DeltaTime);	// pass deltaTime to world update
 }
-void RTSClient::FixedUpdate(float FixedStep)
+void RTSClient::RenderScreenText(const std::string_view text, vec4 color)
 {
-	auto& CommandBus = AtlasNetClient::Get().GetCommandBus();
-	
-	ClientCameraMoveCommand cameraMoveCommand;
-	cameraMoveCommand.NewCameraLocation = cameraPivot->transform.Pos;
-	std::swap(cameraMoveCommand.NewCameraLocation.y, cameraMoveCommand.NewCameraLocation.z);
-	CommandBus.Dispatch(cameraMoveCommand);
+	ImDrawList* drawList = ImGui::GetForegroundDrawList();
 
-	CommandBus.Flush();
+	ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+
+	// Choose a large font scale
+	float fontSize = 48.0f;
+
+	// Calculate text size
+	ImVec2 textSize = ImGui::CalcTextSize(text.data());
+
+	const auto& IO = ImGui::GetIO();
+	// Center position
+
+	// I want to render at top left corner of window
+	ImVec2 pos = ImVec2(textSize.x * 0.5f, textSize.y * 0.5f) +
+				 ImVec2(10, 10);  // 10 pixels padding from top-left corner
+	ivec4 intColor = glm::floor(color * 255.0f);
+	// Optional: shadow for readability
+	drawList->AddText(nullptr, fontSize, ImVec2(pos.x + 2, pos.y + 2), IM_COL32(0, 0, 0, 255),
+					  text.data());
+
+	// Main text
+	drawList->AddText(nullptr, fontSize, pos,
+					  IM_COL32(intColor.r, intColor.g, intColor.b, intColor.a), text.data());
+	Window::Get().PostRender();
 }

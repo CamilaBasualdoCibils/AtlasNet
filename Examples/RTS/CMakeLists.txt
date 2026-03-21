@@ -32,13 +32,26 @@ add_custom_target(RTS_atlasnet_run_k3d
 #DEFINE_CUSTOM_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
 #DEFINE_CUSTOM_VALGRIND_TARGET(RTS_atlasnet_run_Docker_v2 ${RTS_SERVER_IMAGE_NAME})
 
+#add_custom_target(RTS_atlasnet_run_Docker
+#COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh atlasnet_dev ${RTS_SERVER_IMAGE_NAME}
+##COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/PruneUnusedDockerResources.sh
+#     USES_TERMINAL
+#     DEPENDS RTSServerDockerBuild AtlasnetDockerBuild_Fast 
+#     )
 add_custom_target(RTS_atlasnet_run_Docker
-COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR}/Dev ${CMAKE_SOURCE_DIR}/Dev/RunAtlasNetDevStack.sh atlasnet_dev ${RTS_SERVER_IMAGE_NAME}
-#COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/PruneUnusedDockerResources.sh
-     USES_TERMINAL
-     DEPENDS RTSServerDockerBuild AtlasnetDockerBuild_Fast 
-     )
+    COMMAND echo "Removing existing stack (if any)..."
+    COMMAND docker stack rm RTS || true
 
+    COMMAND ${CMAKE_COMMAND} -E echo "Waiting for stack to be removed..."
+    COMMAND bash -c "while docker stack ls --format '{{.Name}}' | grep -w RTS >/dev/null 2>&1; do sleep 1; done"
+
+    COMMAND echo "Deploying stack..."
+    COMMAND docker stack deploy -c ${CMAKE_CURRENT_SOURCE_DIR}/RTSDockerStack.yml RTS
+
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    VERBATIM
+    DEPENDS RTSServerDockerBuild AtlasnetDockerBuild_Fast 
+)
 add_custom_target(RTS_atlasnet_apply_latency
      COMMAND ${CMAKE_COMMAND} -E chdir ${CMAKE_SOURCE_DIR} bash ${CMAKE_SOURCE_DIR}/Dev/LocalRuntimeLatency.sh auto apply-auto
      USES_TERMINAL

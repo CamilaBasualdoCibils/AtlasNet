@@ -28,7 +28,7 @@ class Redis : public Singleton<Redis>
 	};
 
 	std::map<Options, std::weak_ptr<RedisConnection>> redis_connections;
-	std::mutex connections_mutex;  // 🔒 NEW
+	std::mutex connections_mutex; 
 
    public:
 	std::shared_ptr<RedisConnection> Connect(const Options& options, uint32_t max_retries = 0,

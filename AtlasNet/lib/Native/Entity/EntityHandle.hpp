@@ -3,37 +3,37 @@
 #include <future>
 #include <variant>
 
+#include "Debug/Log.hpp"
 #include "Entity.hpp"
+#include "Entity/Packet/EntityHandleFetchRequestPacket.hpp"
+#include "Network/Packet/PacketManager.hpp"
 class AtlasEntityHandle
 {
+	Log logger = Log("AtlasEntityHandle");
 	AtlasEntityID id;
-	std::variant<AtlasEntityMinimal, AtlasEntity> EntityData;
+	mutable std::optional<AtlasEntity> EntityData;
+
+	
+
+	mutable std::shared_future<AtlasEntity> future;
+	mutable std::optional<std::promise<AtlasEntity>> promise;
+	mutable bool requestInFlight = false;
 
    public:
-	std::future<const AtlasEntityMinimal&> GetAsync()
-	{
-		return std::async(std::launch::async,
-						  [this]() -> const AtlasEntityMinimal&
-						  {
-							  // Simulate delay
-							  std::this_thread::sleep_for(std::chrono::milliseconds(50));
-							  AtlasEntityMinimal em;
-							  EntityData = em;
-							  return em;
-						  });
-	}
-	std::future<const AtlasEntity&> GetFullAsync() {}
+	AtlasEntityHandle(AtlasEntityID id);
+	AtlasEntityHandle(const AtlasEntityHandle& o) = delete;
+	AtlasEntityHandle(AtlasEntityHandle&& o) = default;
 
-	const AtlasEntityMinimal& Get()
-	{
-		AtlasEntityMinimal em;
-		EntityData = em;
-		return em;
-	}
-	const AtlasEntity& GetFull() {}
+	std::shared_future<AtlasEntity> GetAsync() const;
 
-	std::future<bool> Call(std::function<bool(AtlasEntity&)>);
+	const AtlasEntity& Get() const;
 
-	bool IsLocal() const {}
-	bool IsRemote() const {return !IsLocal();}
+	// std::future<bool> Call(std::function<bool(AtlasEntity&)>);
+
+	bool IsLocal() const;
+	bool IsRemote() const { return !IsLocal(); }
+	const AtlasEntityID& GetID() const { return id; }
+
+   private:
+
 };
