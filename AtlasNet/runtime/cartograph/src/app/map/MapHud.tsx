@@ -43,6 +43,10 @@ const HUD_BUTTON_BASE_STYLE: CSSProperties = {
   border: '1px solid rgba(148, 163, 184, 0.45)',
   color: '#e2e8f0',
 };
+const HUD_STABLE_NUMERIC_STYLE: CSSProperties = {
+  fontVariantNumeric: 'tabular-nums',
+  fontFeatureSettings: "'tnum' 1",
+};
 const MIN_INTERACTION_SENSITIVITY = 0;
 const INTERACTION_SENSITIVITY_SLIDER_HEADROOM = 10;
 
@@ -137,6 +141,7 @@ export function MapHud({
         flexWrap: 'wrap',
         fontSize: 13,
         backdropFilter: 'blur(6px)',
+        ...HUD_STABLE_NUMERIC_STYLE,
       }}
     >
       <label style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -207,10 +212,24 @@ export function MapHud({
           resume live
         </button>
       )}
-      <span style={{ opacity: 0.8 }}>
+      <span
+        style={{
+          opacity: 0.8,
+          display: 'inline-flex',
+          minWidth: '20ch',
+          whiteSpace: 'nowrap',
+        }}
+      >
         entities: {entityCount} | shards: {shardCount}
       </span>
-      <span style={{ opacity: 0.8 }}>
+      <span
+        style={{
+          opacity: 0.8,
+          display: 'inline-flex',
+          minWidth: '31ch',
+          whiteSpace: 'nowrap',
+        }}
+      >
         connections: {networkEdgeCount} | claimed entities: {claimedEntityCount}
       </span>
 
@@ -293,7 +312,16 @@ export function MapHud({
             )
           }
         />
-        {interactionSensitivity.toFixed(1)}
+        <span
+          style={{
+            display: 'inline-block',
+            width: '4ch',
+            textAlign: 'right',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {interactionSensitivity.toFixed(1)}
+        </span>
       </label>
 
       <label
@@ -312,7 +340,16 @@ export function MapHud({
           value={pollSliderValue}
           onChange={(event) => handlePollIntervalChange(event.target.value)}
         />
-        poll: {pollDisabled ? 'off' : `${pollIntervalMs}ms`}
+        <span
+          style={{
+            display: 'inline-block',
+            width: '8ch',
+            textAlign: 'right',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          poll: {pollDisabled ? 'off' : `${pollIntervalMs}ms`}
+        </span>
       </label>
     </div>
   );
