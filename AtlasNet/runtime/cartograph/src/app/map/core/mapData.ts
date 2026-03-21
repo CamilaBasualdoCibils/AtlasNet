@@ -756,12 +756,21 @@ function buildHandoffEntityLinkOverlays(args: {
   handoffLinks: HandoffEntityLink[];
   projectedShardPositions: Map<string, Point2>;
   dimmed: boolean;
+  hoveredShardId?: string;
 }): ShapeJS[] {
-  const { dimmed, entity, handoffLinks, projectedShardPositions } = args;
+  const { dimmed, entity, handoffLinks, hoveredShardId, projectedShardPositions } = args;
   const overlays: ShapeJS[] = [];
 
   for (const handoffLink of handoffLinks) {
-    const targetShardId = resolveHandoffTargetShardId(handoffLink);
+    let targetShardId = resolveHandoffTargetShardId(handoffLink);
+    if (hoveredShardId && hoveredShardId.length > 0) {
+      const hoveredParticipates =
+        handoffLink.fromId === hoveredShardId || handoffLink.toId === hoveredShardId;
+      if (!hoveredParticipates) {
+        continue;
+      }
+      targetShardId = hoveredShardId;
+    }
     const linkTarget = projectedShardPositions.get(normalizeShardId(targetShardId));
     if (!linkTarget) {
       continue;
@@ -879,6 +888,7 @@ function buildAuthorityEntityOverlays(
         handoffLinks,
         projectedShardPositions,
         dimmed,
+        hoveredShardId: hoveredShardIdNormalized,
       })
     );
   }
