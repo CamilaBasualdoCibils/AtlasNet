@@ -52,6 +52,7 @@ export interface HoveredShardEdgeLabel {
 const SHARD_BOUNDS_PADDING = 2;
 const SHARD_BOUNDS_FALLBACK_HALF_SIZE = 8;
 const NON_HOVERED_ENTITY_DIM_FACTOR = 0.22;
+const DEFAULT_SHAPE_COLOR = 'rgba(100, 149, 255, 1)';
 
 const UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -604,7 +605,19 @@ function scaleColorAlpha(color: string, factor: number): string {
   if (factor >= 1) {
     return color;
   }
-  const match = color.match(
+
+  const value = color.trim();
+  if (value.startsWith('#') && value.length === 7) {
+    const r = Number.parseInt(value.slice(1, 3), 16);
+    const g = Number.parseInt(value.slice(3, 5), 16);
+    const b = Number.parseInt(value.slice(5, 7), 16);
+    if (!Number.isFinite(r) || !Number.isFinite(g) || !Number.isFinite(b)) {
+      return color;
+    }
+    return `rgba(${r}, ${g}, ${b}, ${Math.max(0, Math.min(1, factor))})`;
+  }
+
+  const match = value.match(
     /^rgba?\(\s*([0-9.]+)\s*,\s*([0-9.]+)\s*,\s*([0-9.]+)(?:\s*,\s*([0-9.]+))?\s*\)$/i
   );
   if (!match) {
@@ -620,6 +633,41 @@ function scaleColorAlpha(color: string, factor: number): string {
   return `rgba(${Math.round(Number(match[1]))}, ${Math.round(Number(match[2]))}, ${Math.round(
     Number(match[3])
   )}, ${alpha})`;
+}
+
+function withShapeOpacity(shape: ShapeJS, factor: number): ShapeJS {
+  return {
+    ...shape,
+    color: scaleColorAlpha(shape.color ?? DEFAULT_SHAPE_COLOR, factor),
+  };
+}
+
+function isShardHighlighted(
+  shardId: string,
+  filteredShardIdSet: Set<string> | null
+): boolean {
+  if (!filteredShardIdSet || filteredShardIdSet.size === 0) {
+    return true;
+  }
+  return !filteredShardIdSet.has(normalizeShardId(shardId));
+}
+
+export function buildFilteredBaseShapes(args: {
+  baseShapes: ShapeJS[];
+  filteredShardIdSet: Set<string> | null;
+}): ShapeJS[] {
+  const { baseShapes, filteredShardIdSet } = args;
+  if (!filteredShardIdSet || filteredShardIdSet.size === 0) {
+    return baseShapes;
+  }
+
+  return baseShapes.map((shape) => {
+    const ownerId = normalizeShardId(shape.ownerId ?? '');
+    if (!isShardIdentity(ownerId) || !filteredShardIdSet.has(ownerId)) {
+      return shape;
+    }
+    return withShapeOpacity(shape, NON_HOVERED_ENTITY_DIM_FACTOR);
+  });
 }
 
 function indexHandoffLinksByEntity(
@@ -738,7 +786,8 @@ function buildAuthorityEntityOverlays(
   projectedShardPositions: Map<string, Point2>,
   transferManifest: TransferManifestTelemetry[],
   hoveredShardId: string | null,
-  showEntityOwnershipHover: boolean
+  showEntityOwnershipHover: boolean,
+  filteredShardIdSet: Set<string> | null
 ): ShapeJS[] {
   const overlays: ShapeJS[] = [];
   const hoveredShardIdNormalized = showEntityOwnershipHover
@@ -751,9 +800,11 @@ function buildAuthorityEntityOverlays(
 
   for (const entity of authorityEntities) {
     const ownerIdNormalized = normalizeShardId(entity.ownerId);
-    const dimmed =
+    const filteredByHover =
       hoveredShardIdNormalized.length > 0 &&
       ownerIdNormalized !== hoveredShardIdNormalized;
+    const filteredByNode = !isShardHighlighted(ownerIdNormalized, filteredShardIdSet);
+    const dimmed = filteredByHover || filteredByNode;
     overlays.push(buildAuthorityEntityNodeOverlay(entity, dimmed));
 
     if (authorityLinkMode === 'owner') {
@@ -794,7 +845,8 @@ function buildGnsConnectionOverlays(
   networkTelemetry: ShardTelemetry[],
   networkNodeIdSet: Set<string>,
   projectedShardPositions: Map<string, Point2>,
-  hoveredShardId: string | null
+  hoveredShardId: string | null,
+  filteredShardIdSet: Set<string> | null
 ): ShapeJS[] {
   const overlays: ShapeJS[] = [];
   const seen = new Set<string>();
@@ -831,6 +883,15 @@ function buildGnsConnectionOverlays(
 
       const isFocusedEdge =
         hasFocusedShard && (fromId === focusedShardId || toId === focusedShardId);
+      const filteredByHover = hasFocusedShard && !isFocusedEdge;
+      const filteredByNode =
+        !isShardHighlighted(fromId, filteredShardIdSet) ||
+        !isShardHighlighted(toId, filteredShardIdSet);
+      const color = hasFocusedShard
+        ? isFocusedEdge
+          ? 'rgba(80, 200, 255, 0.9)'
+          : 'rgba(80, 200, 255, 0.16)'
+        : 'rgba(80, 200, 255, 0.65)';
 
       overlays.push({
         type: 'line',
@@ -839,11 +900,10 @@ function buildGnsConnectionOverlays(
           { x: fromPos.x, y: fromPos.y },
           { x: toPos.x, y: toPos.y },
         ],
-        color: hasFocusedShard
-          ? isFocusedEdge
-            ? 'rgba(80, 200, 255, 0.9)'
-            : 'rgba(80, 200, 255, 0.16)'
-          : 'rgba(80, 200, 255, 0.65)',
+        color:
+          filteredByNode && !filteredByHover
+            ? scaleColorAlpha(color, NON_HOVERED_ENTITY_DIM_FACTOR)
+            : color,
       });
     }
   }
@@ -888,7 +948,8 @@ function buildShardNodeOverlays(
   projectedShardPositions: Map<string, Point2>,
   networkTelemetry: ShardTelemetry[],
   networkNodeIdSet: Set<string>,
-  hoveredShardId: string | null
+  hoveredShardId: string | null,
+  filteredShardIdSet: Set<string> | null
 ): ShapeJS[] {
   const overlays: ShapeJS[] = [];
   const focusedShardId = normalizeShardId(String(hoveredShardId ?? ''));
@@ -909,22 +970,28 @@ function buildShardNodeOverlays(
 
     const hasOwnerSample = ownerPositions.has(shardId);
     const isFocusedRelated = focusedRelatedIds?.has(shardId) ?? false;
+    const filteredByHover = hasFocusedShard && !isFocusedRelated;
+    const filteredByNode = !isShardHighlighted(shardId, filteredShardIdSet);
+    const baseColor = hasFocusedShard
+      ? isFocusedRelated
+        ? hasOwnerSample
+          ? 'rgba(80, 200, 255, 0.98)'
+          : 'rgba(120, 170, 220, 0.9)'
+        : hasOwnerSample
+          ? 'rgba(80, 200, 255, 0.22)'
+          : 'rgba(120, 170, 220, 0.2)'
+      : hasOwnerSample
+        ? 'rgba(80, 200, 255, 0.95)'
+        : 'rgba(120, 170, 220, 0.75)';
 
     overlays.push({
       type: 'circle',
       position: anchor,
       radius: hasOwnerSample ? 2.6 : 2.1,
-      color: hasFocusedShard
-        ? isFocusedRelated
-          ? hasOwnerSample
-            ? 'rgba(80, 200, 255, 0.98)'
-            : 'rgba(120, 170, 220, 0.9)'
-          : hasOwnerSample
-            ? 'rgba(80, 200, 255, 0.22)'
-            : 'rgba(120, 170, 220, 0.2)'
-        : hasOwnerSample
-          ? 'rgba(80, 200, 255, 0.95)'
-          : 'rgba(120, 170, 220, 0.75)',
+      color:
+        filteredByNode && !filteredByHover
+          ? scaleColorAlpha(baseColor, NON_HOVERED_ENTITY_DIM_FACTOR)
+          : baseColor,
     });
   }
 
@@ -944,6 +1011,7 @@ export function buildOverlayShapes(args: {
   showGnsConnections: boolean;
   hoveredShardId: string | null;
   showEntityOwnershipHover: boolean;
+  filteredShardIdSet: Set<string> | null;
 }): ShapeJS[] {
   const overlays: ShapeJS[] = [];
 
@@ -955,7 +1023,8 @@ export function buildOverlayShapes(args: {
         args.projectedShardPositions,
         args.transferManifest,
         args.hoveredShardId,
-        args.showEntityOwnershipHover
+        args.showEntityOwnershipHover,
+        args.filteredShardIdSet
       )
     );
   }
@@ -966,7 +1035,8 @@ export function buildOverlayShapes(args: {
         args.networkTelemetry,
         args.networkNodeIdSet,
         args.projectedShardPositions,
-        args.hoveredShardId
+        args.hoveredShardId,
+        args.filteredShardIdSet
       ),
       ...buildShardNodeOverlays(
         args.networkNodeIds,
@@ -974,7 +1044,8 @@ export function buildOverlayShapes(args: {
         args.projectedShardPositions,
         args.networkTelemetry,
         args.networkNodeIdSet,
-        args.hoveredShardId
+        args.hoveredShardId,
+        args.filteredShardIdSet
       )
     );
   }

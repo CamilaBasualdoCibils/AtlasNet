@@ -8,6 +8,7 @@ import type {
 } from '../../shared/cartographTypes';
 import {
   buildHoveredShardEdgeLabels,
+  buildFilteredBaseShapes,
   buildOverlayShapes,
   buildShardTelemetryById,
   computeMapBoundsCenter,
@@ -33,6 +34,7 @@ interface UseMapDerivedDataArgs {
   showGnsConnections: boolean;
   hoveredShardId: string | null;
   showEntityOwnershipHover: boolean;
+  filteredShardIdSet: Set<string> | null;
 }
 
 interface MapDerivedData {
@@ -51,6 +53,7 @@ export function useMapDerivedData({
   authorityEntities,
   authorityLinkMode,
   baseShapes,
+  filteredShardIdSet,
   hoveredShardId,
   networkTelemetry,
   showEntityOwnershipHover,
@@ -61,6 +64,15 @@ export function useMapDerivedData({
   const ownerPositions = useMemo(
     () => computeOwnerPositions(authorityEntities),
     [authorityEntities]
+  );
+
+  const filteredBaseShapes = useMemo(
+    () =>
+      buildFilteredBaseShapes({
+        baseShapes,
+        filteredShardIdSet,
+      }),
+    [baseShapes, filteredShardIdSet]
   );
 
   const shardAnchorPositions = useMemo(
@@ -144,6 +156,7 @@ export function useMapDerivedData({
         showGnsConnections,
         hoveredShardId,
         showEntityOwnershipHover,
+        filteredShardIdSet,
       }),
     [
       authorityEntities,
@@ -158,12 +171,13 @@ export function useMapDerivedData({
       showGnsConnections,
       hoveredShardId,
       showEntityOwnershipHover,
+      filteredShardIdSet,
     ]
   );
 
   const combinedShapes = useMemo(
-    () => [...baseShapes, ...overlayShapes],
-    [baseShapes, overlayShapes]
+    () => [...filteredBaseShapes, ...overlayShapes],
+    [filteredBaseShapes, overlayShapes]
   );
 
   return {

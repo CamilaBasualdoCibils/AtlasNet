@@ -11,6 +11,7 @@ import type {
   TransferStateQueueTelemetry,
 } from '../shared/cartographTypes';
 import { useMapDerivedData } from './core/useMapDerivedData';
+import { useMapNodeFilterData } from './core/useMapNodeFilterData';
 import { useShardHoverState } from './mouse-hover/useShardHoverState';
 import {
   useAuthorityEntities,
@@ -31,6 +32,7 @@ import {
 } from './entity-inspector/useEntityInspectorLookup';
 import { useCtrlDragEntitySelection } from './entity-inspector/useCtrlDragEntitySelection';
 import { MapHud } from './MapHud';
+import { NodeFilterPanel } from './NodeFilterPanel';
 import { MapPlaybackBar } from './playback/MapPlaybackBar';
 import { ShardHoverTooltip } from './mouse-hover/ShardHoverTooltip';
 import {
@@ -41,6 +43,9 @@ import {
   snapToNearestTickMs,
   type ActiveTransferQueueEvent,
 } from './playback/transferPlaybackTimeline';
+import {
+  normalizeShardId,
+} from './core/mapData';
 
 const DEFAULT_POLL_INTERVAL_MS = 50;
 const MIN_POLL_INTERVAL_MS = 1;
@@ -164,6 +169,8 @@ export default function MapPage() {
   const [activeTransferQueueByEntity, setActiveTransferQueueByEntity] = useState<
     Record<string, ActiveTransferQueueEvent>
   >({});
+  const [showNodeFilterPanel, setShowNodeFilterPanel] = useState(false);
+  const [hiddenWorkerNodeNames, setHiddenWorkerNodeNames] = useState<string[]>([]);
 
   const telemetryPollIntervalMs =
     pollIntervalMs >= POLL_DISABLED_AT_MS ? 0 : pollIntervalMs;
@@ -519,6 +526,20 @@ export default function MapPage() {
     ? playbackTransferManifest
     : transferManifestLiveResolved;
   const shardPlacement = playbackFrame?.shardPlacement ?? shardPlacementLive;
+  const {
+    clusterNodeNames,
+    clusterNodes,
+    filteredShardIdSet,
+    hiddenWorkerNodeNameSet,
+    selectedWorkerNodeNameSet,
+    shardWorkerNodeById,
+    visibleShardCount,
+  } = useMapNodeFilterData({
+    baseShapes,
+    networkTelemetry,
+    shardPlacement,
+    hiddenWorkerNodeNames,
+  });
 
   const {
     combinedShapes,
@@ -540,7 +561,21 @@ export default function MapPage() {
     showGnsConnections,
     hoveredShardId,
     showEntityOwnershipHover,
+    filteredShardIdSet,
   });
+
+  useEffect(() => {
+    if (clusterNodeNames.length === 0) {
+      setHiddenWorkerNodeNames((previous) =>
+        previous.length === 0 ? previous : []
+      );
+      return;
+    }
+
+    setHiddenWorkerNodeNames((previous) =>
+      previous.filter((nodeName) => clusterNodeNames.includes(nodeName))
+    );
+  }, [clusterNodeNames]);
 
   const { clearHoveredShard, handleMapPointerWorld } = useShardHoverState({
     hoveredShardId,
@@ -636,21 +671,21 @@ export default function MapPage() {
   const hoveredTelemetry = hoveredShardId
     ? shardTelemetryById.get(hoveredShardId)
     : undefined;
-  const shardWorkerNodeById = useMemo(() => {
-    const out = new Map<string, string>();
-    for (const row of shardPlacement) {
-      const shardId = String(row.shardId || '').trim();
-      const nodeName = String(row.nodeName || '').trim();
-      if (!shardId || !nodeName || out.has(shardId)) {
-        continue;
-      }
-      out.set(shardId, nodeName);
-    }
-    return out;
-  }, [shardPlacement]);
   const hoveredShardWorkerNode = hoveredShardId
-    ? shardWorkerNodeById.get(String(hoveredShardId).trim()) ?? null
+    ? shardWorkerNodeById.get(normalizeShardId(hoveredShardId)) ?? null
     : null;
+
+  function toggleWorkerNode(nodeName: string): void {
+    setHiddenWorkerNodeNames((previous) => {
+      const hidden = new Set(previous);
+      if (hidden.has(nodeName)) {
+        hidden.delete(nodeName);
+      } else {
+        hidden.add(nodeName);
+      }
+      return clusterNodeNames.filter((name) => hidden.has(name));
+    });
+  }
 
   return (
     <div
@@ -683,6 +718,19 @@ export default function MapPage() {
         onContextMenuCapture={onContextMenuCapture}
         onMouseLeave={clearHoveredShard}
       >
+        <NodeFilterPanel
+          open={showNodeFilterPanel}
+          nodes={clusterNodes}
+          selectedNodeCount={selectedWorkerNodeNameSet.size}
+          totalShardCount={networkNodeIds.length}
+          visibleShardCount={visibleShardCount}
+          onToggleOpen={() => setShowNodeFilterPanel((value) => !value)}
+          onShowAllNodes={() => setHiddenWorkerNodeNames([])}
+          onHideAllNodes={() => setHiddenWorkerNodeNames(clusterNodeNames)}
+          onToggleNode={toggleWorkerNode}
+          isNodeSelected={(nodeName) => !hiddenWorkerNodeNameSet.has(nodeName)}
+        />
+
         {showShardHoverDetails && selectedEntities.length === 0 && (
           <ShardHoverTooltip
             hoveredShardId={hoveredShardId}
