@@ -178,7 +178,8 @@ void TransferCoordinator::TransferTick()
 									 NetworkMessageSendFlag::eReliableNow);
 
 		PreTransfer.stage = EntityTransferStage::ePrepare;
-		TransferManifest::Get().QueueEntityTransferStage(PreTransfer, EntityTransferStage::ePrepare);
+		TransferManifest::Get().QueueEntityTransferStage(PreTransfer,
+														 EntityTransferStage::ePrepare);
 
 		// Stage 3: Insert into internal state under lock
 		_WriteLock([&]() { EntityTransfers.insert({PreTransfer.ID, PreTransfer}); });
@@ -253,7 +254,15 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 
 		case EntityTransferStage::eReady:
 		{
-			ASSERT(hasTransfer, "No internal record for this transfer");
+			if (!hasTransfer)
+			{
+				
+				logger.ErrorFormatted(
+					"Received EntityTransferPacket in Ready Stage for unknown transfer ID with no "
+					"internal record: {}",
+					UUIDGen::ToString(p.TransferID));
+				return;
+			}
 			// Collect snapshots from EntityLedger outside lock
 			EntityTransferPacket::CommitStageData commitData;
 			for (const AtlasEntityID EntityID : transferEntrySnapshot.entityIDs)
@@ -271,8 +280,8 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 
 			Interlink::Get().SendMessage(info.sender, response,
 										 NetworkMessageSendFlag::eReliableNow);
-			TransferManifest::Get().QueueEntityTransferStage(
-				transferEntrySnapshot, EntityTransferStage::eCommit);
+			TransferManifest::Get().QueueEntityTransferStage(transferEntrySnapshot,
+															 EntityTransferStage::eCommit);
 
 			// Stage 3: Update internal state
 			_WriteLock(
@@ -302,8 +311,8 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 			completeResponse.SetAsCompleteStage();
 			Interlink::Get().SendMessage(info.sender, completeResponse,
 										 NetworkMessageSendFlag::eReliableNow);
-			TransferManifest::Get().QueueEntityTransferStage(
-				transferEntrySnapshot, EntityTransferStage::eComplete);
+			TransferManifest::Get().QueueEntityTransferStage(transferEntrySnapshot,
+															 EntityTransferStage::eComplete);
 
 			// Stage 3: Remove internal record under lock
 			_WriteLock([&]() { EntityTransfers.erase(p.TransferID); });

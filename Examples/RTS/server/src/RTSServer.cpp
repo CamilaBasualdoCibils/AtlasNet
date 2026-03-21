@@ -61,7 +61,7 @@ void RTSServer::Run()
 	double accumulatedTime = 0.0;
 	while (!ShouldShutdown)
 	{
-		
+
 		const auto frameStart = Clock::now();
 
 		const std::chrono::duration<double> delta = frameStart - lastTime;
