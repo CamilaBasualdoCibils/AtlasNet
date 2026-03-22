@@ -21,6 +21,7 @@ class SnapshotService : public Singleton<SnapshotService>
 	std::jthread snapshotThread;
 	std::mutex recoveryMutex;
 	std::optional<BoundsID> recoveredBoundID;
+	std::optional<long long> recoveredHeuristicVersion;
 
    public:
 	SnapshotService();
@@ -41,6 +42,7 @@ class SnapshotService : public Singleton<SnapshotService>
    private:
 	void SnapshotThreadLoop(std::stop_token st);
 	bool RecoverBoundSnapshot(BoundsID boundID);
+	void RecoverOrphanedEntitiesForCurrentHeuristicIfNeeded();
 	void ReconcileClaimedBoundEntityRecords();
 	void UploadSnapshot();
 	void TouchBoundSnapshotIndex(BoundsID boundID);
