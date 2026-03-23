@@ -171,6 +171,13 @@ void SandboxServer::Run()
 		}
 	}
 }
+
+void SandboxServer::Shutdown()
+{
+	ShouldShutdown = true;
+	Interlink::Get().Shutdown();
+}
+
 void SandboxServer::OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,
 								  AtlasEntityPayload& payload)
 {

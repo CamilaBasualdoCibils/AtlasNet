@@ -43,7 +43,8 @@ void IAtlasNetServer::AtlasNet_Initialize()
 	NetworkManifest::Get().ScheduleNetworkPings();
 	HealthManifest::Get().ScheduleHealthPings();
 	GlobalEvents::Get().Init();
-	DockerEvents::Get().Init(DockerEventsInit{});
+	DockerEvents::Get().Init(
+		DockerEventsInit{.OnShutdownRequest = [](SignalType signal) { GetInstance().Shutdown(); }});
 	GlobalEvents::Get().Subscribe<LogEvent>(
 		[&](const LogEvent &e) { logger->DebugFormatted("Received LogEvent: {}", e.message); });
 
@@ -68,6 +69,11 @@ void IAtlasNetServer::AtlasNet_Initialize()
 		});
 	logger->Debug("AtlasNet Initialize");
 	commandbus.emplace();
+}
+
+void IAtlasNetServer::Shutdown()
+{
+	Interlink::Get().Shutdown();
 }
 
 AtlasEntityHandle IAtlasNetServer::AtlasNet_CreateEntity(const AtlasTransform &t,

@@ -43,6 +43,7 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 
    public:
 	IAtlasNetServer() { Instance = this; };
+	virtual ~IAtlasNetServer() = default;
 	/**
 	 * @brief
 	 *
@@ -71,6 +72,7 @@ class ATLASNET_API IAtlasNetServer : public AtlasNetInterface
 
 	[[nodiscard]] AtlasEntityHandle AtlasNet_CreateEntity(const AtlasTransform& t,
 														  std::span<const uint8_t> metadata = {});
+	virtual void Shutdown();
 	
 	struct ClientSpawnInfo
 	{

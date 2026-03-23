@@ -1,5 +1,7 @@
 #pragma once
 
+#include <atomic>
+
 #include <SandboxWorld.hpp>
 
 #include "AtlasNetServer.hpp"
@@ -13,10 +15,11 @@ class SandboxServer : IAtlasNetServer
 {
 	Log logger = Log("Sandbox");
 	SandboxWorld world;
-	bool ShouldShutdown = false;
+	std::atomic_bool ShouldShutdown = false;
 
    public:
 	void Run();
+	void Shutdown() override;
 
 	private:
 	 void OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,

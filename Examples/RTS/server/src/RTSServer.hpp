@@ -17,6 +17,7 @@ class RTSServer : public Singleton<RTSServer>, public IAtlasNetServer
    public:
 	RTSServer();
 	void Run();
+	void Shutdown() override;
 
    private:
 	void OnClientSpawn(const ClientSpawnInfo& c, const AtlasEntityMinimal& entity,

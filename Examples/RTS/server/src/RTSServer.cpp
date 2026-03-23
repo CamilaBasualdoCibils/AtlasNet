@@ -97,6 +97,13 @@ void RTSServer::Run()
 		GetCommandBus().Flush();
 	}
 }
+
+void RTSServer::Shutdown()
+{
+	ShouldShutdown = true;
+	Interlink::Get().Shutdown();
+}
+
 void RTSServer::OnClientCameraMoveCommand(const NetClientIntentHeader& header,
 										  const PlayerCameraMoveCommand& c)
 {
