@@ -769,6 +769,12 @@ void Interlink::Init()
 	if (!EnsureGNSInitialized())
 		return;
 
+	if (IsInit.load(std::memory_order_acquire))
+	{
+		logger.Debug("Interlink::Init skipped (already initialized)");
+		return;
+	}
+
 	SteamNetworkingUtils()->SetDebugOutputFunction(
 		k_ESteamNetworkingSocketsDebugOutputType_Warning,
 		[](ESteamNetworkingSocketsDebugOutputType eType, const char *pszMsg)
@@ -786,13 +792,7 @@ void Interlink::Init()
 		identity.SetGenericBytes(IdentityByteStream.data(), IdentityByteStream.size());
 	ASSERT(SetIdentity, "Failed Identity set");
 	networkInterface->ResetIdentity(&identity);
-	// Create poll group
-	PollGroup = networkInterface->CreatePollGroup();
 
-	// grab public address
-	OpenListenSocket(_PORT_INTERLINK);
-
-	// registering to database + opening listen sockets
 	const std::string advertiseIp = ResolveInterlinkAdvertiseIp();
 	if (advertiseIp.empty())
 	{
@@ -800,6 +800,10 @@ void Interlink::Init()
 			"[Interlink] Could not resolve local advertise IP (env INTERLINK_ADVERTISE_IP/POD_IP or eth0).");
 		return;
 	}
+
+	PollGroup = networkInterface->CreatePollGroup();
+	OpenListenSocket(_PORT_INTERLINK);
+
 	IPAddress ipAddress = BuildInterlinkAddress(advertiseIp, _PORT_INTERLINK);
 	logger.DebugFormatted("[Interlink] Advertising address {}", ipAddress.ToString());
 	if (NetworkCredentials::Get().GetID().Type == NetworkIdentityType::eProxy)
@@ -939,8 +943,12 @@ void Interlink::Init()
 void Interlink::Shutdown()
 {
 	CloseAllConnections();
-	TickThread.request_stop();
-	TickThread.join();
+	if (TickThread.joinable())
+	{
+		TickThread.request_stop();
+		TickThread.join();
+	}
+	IsInit.store(false, std::memory_order_release);
 	logger.Debug("Interlink Shutdown");
 }
 

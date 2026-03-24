@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { NextResponse } from 'next/server';
+import { connectInternalRedisWithRetry } from '../../../lib/internalRedisConnect';
 
 const CURRENT_KEY = 'Heuristic:Type';
 const DESIRED_KEY = 'Heuristic:DesiredType';
@@ -94,10 +95,10 @@ async function readState(client: Redis) {
 }
 
 export async function GET() {
-  const client = createInternalDbClient();
+  let client: Redis | null = null;
 
   try {
-    await client.connect();
+    client = await connectInternalRedisWithRetry(() => createInternalDbClient());
     return NextResponse.json(await readState(client), { status: 200 });
   } catch {
     return NextResponse.json(
@@ -112,12 +113,16 @@ export async function GET() {
       { status: 200 }
     );
   } finally {
-    client.disconnect();
+    try {
+      client?.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
 }
 
 export async function POST(request: Request) {
-  const client = createInternalDbClient();
+  let client: Redis | null = null;
 
   try {
     const body = (await request.json()) as {
@@ -164,7 +169,7 @@ export async function POST(request: Request) {
       );
     }
 
-    await client.connect();
+    client = await connectInternalRedisWithRetry(() => createInternalDbClient());
     if (heuristicType) {
       await client.set(DESIRED_KEY, heuristicType);
     }
@@ -184,6 +189,10 @@ export async function POST(request: Request) {
       { status: 500 }
     );
   } finally {
-    client.disconnect();
+    try {
+      client?.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
 }

@@ -90,7 +90,11 @@ function readTransferStateQueueTelemetry(addon, transferStateQueueView) {
   }
 
   const telemetryVec = new addon.std_vector_std_vector_std_string__();
-  transferStateQueueView.DrainTransferStateQueue(telemetryVec);
+  try {
+    transferStateQueueView.DrainTransferStateQueue(telemetryVec);
+  } catch {
+    return [];
+  }
 
   const events = [];
   for (let i = 0; i < telemetryVec.size(); i += 1) {
@@ -156,7 +160,7 @@ async function collectNetworkTelemetry({
     () => readNetworkTelemetry(addon, networkTelemetry, { includeLiveIds }),
     []
   );
-  if (addonRead.ok) {
+  if (addonRead.ok && asArray(addonRead.value).length > 0) {
     return asArray(addonRead.value);
   }
 
@@ -202,7 +206,7 @@ async function collectAuthorityTelemetry({ addon, entityLedgersView }) {
       }),
     []
   );
-  if (addonRead.ok) {
+  if (addonRead.ok && asArray(addonRead.value).length > 0) {
     return asArray(addonRead.value);
   }
 

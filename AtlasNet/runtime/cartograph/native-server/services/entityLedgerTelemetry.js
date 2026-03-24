@@ -100,7 +100,11 @@ function readEntityLedgersTelemetry(addon, entityLedgersView, options = {}) {
       ? options.ownerByBoundId
       : {};
   const entities = new addon.std_vector_StreamEntityLedgerEntry_();
-  entityLedgersView.GetEntityLists(entities);
+  try {
+    entityLedgersView.GetEntityLists(entities);
+  } catch {
+    return [];
+  }
 
   const rows = [];
   let ownerByBoundIdFallback = null;

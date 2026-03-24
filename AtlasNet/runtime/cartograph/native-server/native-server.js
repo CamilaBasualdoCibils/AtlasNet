@@ -19,6 +19,7 @@ const {
   readHeuristicTypeFromDatabase,
   readShardPlacementFromDatabase,
 } = require('./services/databaseTelemetry');
+const { scheduleCartographPrereqs } = require('./services/cartographDeps');
 const { readWorkersSnapshot } = require('./services/workersSnapshot');
 
 const app = express();
@@ -42,12 +43,25 @@ let entityLedgersView = null;
 let transferStateQueueView = null;
 global.nodeJsWrapper = null;
 
-function ensureHybridCollectors() {
+let hybridBootstrapPromise = null;
+
+function scheduleHybridBootstrap() {
+  if (!addon) {
+    return Promise.resolve();
+  }
+  if (!hybridBootstrapPromise) {
+    hybridBootstrapPromise = scheduleCartographPrereqs();
+  }
+  return hybridBootstrapPromise;
+}
+
+function materializeHybridCollectors() {
   if (!addon) {
     return {
       addon: null,
       networkTelemetry: null,
       entityLedgersView: null,
+      transferStateQueueView: null,
     };
   }
 
@@ -71,6 +85,11 @@ function ensureHybridCollectors() {
     entityLedgersView,
     transferStateQueueView,
   };
+}
+
+async function ensureHybridCollectors() {
+  await scheduleHybridBootstrap();
+  return materializeHybridCollectors();
 }
 
 function parseBooleanQueryFlag(value, defaultValue) {
@@ -116,7 +135,7 @@ app.get('/networktelemetry', async (req, res) => {
   return respondJson(
     res,
     async () => {
-      const hybridCollectors = ensureHybridCollectors();
+      const hybridCollectors = await ensureHybridCollectors();
       const includeLiveIds = parseBooleanQueryFlag(req.query.liveIds, true);
       return collectNetworkTelemetry({
         addon: hybridCollectors.addon,
@@ -132,7 +151,7 @@ app.get('/authoritytelemetry', async (_req, res) => {
   return respondJson(
     res,
     async () => {
-      const hybridCollectors = ensureHybridCollectors();
+      const hybridCollectors = await ensureHybridCollectors();
       return collectAuthorityTelemetry({
         addon: hybridCollectors.addon,
         entityLedgersView: hybridCollectors.entityLedgersView,
@@ -150,7 +169,7 @@ app.get('/transferstatequeue', async (_req, res) => {
   return respondJson(
     res,
     async () => {
-      const hybridCollectors = ensureHybridCollectors();
+      const hybridCollectors = await ensureHybridCollectors();
       return collectTransferStateQueue({
         addon: hybridCollectors.addon,
         transferStateQueueView: hybridCollectors.transferStateQueueView,
@@ -164,7 +183,7 @@ app.get('/heuristic', async (_req, res) => {
   return respondJson(
     res,
     async () => {
-      const hybridCollectors = ensureHybridCollectors();
+      const hybridCollectors = await ensureHybridCollectors();
       return collectHeuristicShapes({
         addon: hybridCollectors.addon,
       });
@@ -186,6 +205,7 @@ app.get('/heuristictype', async (_req, res) => {
 
 app.get('/databases', async (req, res) => {
   try {
+    await scheduleCartographPrereqs();
     const probeResults = await Promise.all(
       getDatabaseTargets().map(probeDatabase)
     );
@@ -228,4 +248,5 @@ app.get('/shard-placement', async (_req, res) => {
 const PORT = Number(process.env.CARTOGRAPH_NATIVE_PORT || DEFAULT_PORT);
 app.listen(PORT, '0.0.0.0', () => {
   console.log(`Native server running on port ${PORT}`);
+  scheduleHybridBootstrap();
 });

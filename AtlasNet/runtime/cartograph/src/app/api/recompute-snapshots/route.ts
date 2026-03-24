@@ -1,5 +1,6 @@
 import Redis from 'ioredis';
 import { NextResponse } from 'next/server';
+import { connectInternalRedisWithRetry } from '../../../lib/internalRedisConnect';
 import type { RecomputeSnapshotsResponse } from '../../shared/cartographTypes';
 
 const SNAPSHOT_KEY = 'Heuristic:RecomputeSnapshots';
@@ -155,10 +156,10 @@ function parsePayload(raw: unknown): RecomputeSnapshotsResponse {
 }
 
 export async function GET() {
-  const client = createInternalDbClient();
+  let client: Redis | null = null;
 
   try {
-    await client.connect();
+    client = await connectInternalRedisWithRetry(() => createInternalDbClient());
 
     let payload = await client.call('JSON.GET', SNAPSHOT_KEY, '.');
     if (payload == null) {
@@ -169,6 +170,10 @@ export async function GET() {
   } catch {
     return NextResponse.json(EMPTY_RESPONSE, { status: 200 });
   } finally {
-    client.disconnect();
+    try {
+      client?.disconnect();
+    } catch {
+      /* ignore */
+    }
   }
 }

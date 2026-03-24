@@ -7,6 +7,20 @@ const {
   getDatabaseTargets,
   SNAPSHOT_CONNECT_TIMEOUT_MS,
 } = require('../config');
+const { scheduleCartographPrereqs, sleep } = require('./cartographDeps');
+
+const CONNECT_RETRIES = 5;
+const CONNECT_RETRY_DELAY_MS = 400;
+
+function attachInternalDbLifecycleHandlers(client, scope) {
+  const onDead = () => {
+    if (internalDbClients.get(scope) === client) {
+      resetInternalDatabaseClient(scope, client);
+    }
+  };
+  client.on('close', onDead);
+  client.on('end', onDead);
+}
 
 const AUTHORITY_TELEMETRY_KEY = 'Authority_Telemetry';
 const HEALTH_PING_KEY = 'Health_Ping';
@@ -86,32 +100,35 @@ async function getInternalDatabaseClient(options = {}) {
     return null;
   }
 
-  if (!internalDbClients.has(scope)) {
-    internalDbClients.set(
-      scope,
-      createRedisClient(target, SNAPSHOT_CONNECT_TIMEOUT_MS)
-    );
-  }
-  const client = internalDbClients.get(scope);
-  if (!client) {
-    return null;
-  }
-
-  const status = String(client.status || '');
-  if (status === 'ready') {
-    return client;
+  const existing = internalDbClients.get(scope);
+  if (existing && String(existing.status || '') === 'ready') {
+    return existing;
   }
 
   if (!internalDbConnectPromises.has(scope)) {
     internalDbConnectPromises.set(
       scope,
-      client
-      .connect()
-      .catch((err) => {
-        resetInternalDatabaseClient(scope, client);
-        throw err;
-      })
-      .finally(() => {
+      (async () => {
+        await scheduleCartographPrereqs();
+        let lastErr;
+        for (let attempt = 0; attempt < CONNECT_RETRIES; attempt += 1) {
+          resetInternalDatabaseClient(scope, internalDbClients.get(scope));
+          const client = createRedisClient(target, SNAPSHOT_CONNECT_TIMEOUT_MS);
+          internalDbClients.set(scope, client);
+          try {
+            await client.connect();
+            attachInternalDbLifecycleHandlers(client, scope);
+            return;
+          } catch (err) {
+            lastErr = err;
+            resetInternalDatabaseClient(scope, client);
+            if (attempt + 1 < CONNECT_RETRIES) {
+              await sleep(CONNECT_RETRY_DELAY_MS);
+            }
+          }
+        }
+        throw lastErr || new Error('InternalDB connect failed');
+      })().finally(() => {
         internalDbConnectPromises.delete(scope);
       })
     );

@@ -160,10 +160,14 @@ function readNetworkTelemetry(addon, networkTelemetry, options = {}) {
   const healthVec = new std_vector_std_string_();
   const telemetryVec = new std_vector_std_vector_std_string__();
 
-  if (includeLiveIds) {
-    networkTelemetry.GetLivePingIDs(idsVec, healthVec);
+  try {
+    if (includeLiveIds) {
+      networkTelemetry.GetLivePingIDs(idsVec, healthVec);
+    }
+    networkTelemetry.GetAllTelemetry(telemetryVec);
+  } catch {
+    return [];
   }
-  networkTelemetry.GetAllTelemetry(telemetryVec);
 
   const ids = [];
   const count = Math.min(idsVec.size(), healthVec.size());

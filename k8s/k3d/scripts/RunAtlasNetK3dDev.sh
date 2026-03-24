@@ -199,27 +199,26 @@ else
     echo "==> k3d cluster '$CLUSTER_NAME' already exists."
 fi
 
-write_host_kubeconfig() {
-    local server_lb host_cfg api_port cluster server_url
-    host_cfg="${ATLASNET_HOST_KUBECONFIG:-${K3D_DIR}/.kube/k3d-${CLUSTER_NAME}-host.yaml}"
-    mkdir -p "$(dirname "$host_cfg")"
-
-    if ! k3d kubeconfig get "$CLUSTER_NAME" >"$host_cfg"; then
-        echo "Error: failed to write host kubeconfig for cluster '$CLUSTER_NAME' to '$host_cfg'." >&2
-        exit 1
-    fi
-    if [[ ! -s "$host_cfg" ]]; then
-        echo "Error: host kubeconfig file '$host_cfg' is empty after write." >&2
-        exit 1
-    fi
-    chmod 600 "$host_cfg" 2>/dev/null || true
-
+# Host-published k3s API port (6443/tcp on serverlb), as seen from the Docker CLI context.
+k3d_apiserver_publish_port() {
+    local server_lb api_port=""
     server_lb="k3d-${CLUSTER_NAME}-serverlb"
     if docker ps --format '{{.Names}}' | grep -Fxq "$server_lb"; then
         api_port="$(docker inspect --format '{{with index .NetworkSettings.Ports "6443/tcp"}}{{(index . 0).HostPort}}{{end}}' "$server_lb" 2>/dev/null || true)"
     fi
+    printf '%s\n' "${api_port:-}"
+}
 
-    # Fallback: infer the API port from the kubeconfig endpoint when possible.
+# Point cluster server at https://127.0.0.1:<published-port> (same as IDE/host kubeconfig).
+# Avoid host.docker.internal here: on Linux devcontainers it often resolves but does not route to k3d.
+rewrite_k3d_kubeconfig_server_loopback() {
+    local host_cfg="$1"
+    local api_port cluster server_url
+
+    [[ -s "$host_cfg" ]] || return 0
+
+    api_port="$(k3d_apiserver_publish_port)"
+
     if [[ -z "${api_port:-}" ]] && command -v kubectl >/dev/null 2>&1; then
         server_url="$(kubectl --kubeconfig "$host_cfg" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
         if [[ "$server_url" =~ ^https://(0\.0\.0\.0|127\.0\.0\.1):([0-9]+)$ ]]; then
@@ -235,9 +234,27 @@ write_host_kubeconfig() {
     fi
 
     if [[ -n "${api_port:-}" ]]; then
-        # Fallback text rewrite in case kubectl config set-cluster is unavailable.
         sed -i -E "s#https://0\\.0\\.0\\.0:[0-9]+#https://127.0.0.1:${api_port}#g" "$host_cfg" || true
     fi
+}
+
+write_host_kubeconfig() {
+    local host_cfg api_port
+    host_cfg="${ATLASNET_HOST_KUBECONFIG:-${K3D_DIR}/.kube/k3d-${CLUSTER_NAME}-host.yaml}"
+    mkdir -p "$(dirname "$host_cfg")"
+
+    if ! k3d kubeconfig get "$CLUSTER_NAME" >"$host_cfg"; then
+        echo "Error: failed to write host kubeconfig for cluster '$CLUSTER_NAME' to '$host_cfg'." >&2
+        exit 1
+    fi
+    if [[ ! -s "$host_cfg" ]]; then
+        echo "Error: host kubeconfig file '$host_cfg' is empty after write." >&2
+        exit 1
+    fi
+    chmod 600 "$host_cfg" 2>/dev/null || true
+
+    rewrite_k3d_kubeconfig_server_loopback "$host_cfg"
+    api_port="$(k3d_apiserver_publish_port)"
     HOST_KUBECONFIG_PATH="$host_cfg"
 
     echo "==> Host kubeconfig written: $host_cfg"
@@ -250,6 +267,25 @@ write_host_kubeconfig() {
 }
 
 write_host_kubeconfig
+
+# server-0 may be stopped while server-1+ still runs; pick any running control-plane container for docker exec / Helm node name.
+discover_running_k3d_server_container() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -E "^k3d-${CLUSTER_NAME}-server-[0-9]+\$" | LC_ALL=C sort -V | head -n1
+}
+
+prefer_running_k3d_server_container_name() {
+    if docker ps --format '{{.Names}}' | grep -Fxq "$SERVER_NODE_NAME"; then
+        return 0
+    fi
+    local discovered=""
+    discovered="$(discover_running_k3d_server_container)"
+    if [[ -n "$discovered" ]]; then
+        echo "==> Using running server container '${discovered}' (replacing non-running '${SERVER_NODE_NAME}') for Helm serverNodeName / docker."
+        SERVER_NODE_NAME="$discovered"
+    fi
+}
+
+prefer_running_k3d_server_container_name
 
 if [[ "$LLM_IN_CLUSTER_ENABLED" == "0" && -z "$LLM_ENDPOINT" ]]; then
     echo "Warning: k3d in-cluster LLM is disabled and no external LLM endpoint is set."
@@ -476,6 +512,40 @@ external_endpoint_tcp_reachable() {
     timeout 1 bash -c "cat </dev/null >/dev/tcp/${host}/${port}" >/dev/null 2>&1
 }
 
+apiserver_port_from_kubeconfig() {
+    local cfg="$1" url
+    url="$(kubectl --kubeconfig "$cfg" config view --minify -o jsonpath='{.clusters[0].cluster.server}' 2>/dev/null || true)"
+    if [[ "$url" =~ ^https://[^/:]+:([0-9]+)$ ]]; then
+        printf '%s\n' "${BASH_REMATCH[1]}"
+    fi
+}
+
+# Hosts to try for https://<host>:<port> when running inside a devcontainer (k3d binds on Docker host).
+k3d_api_probe_host_candidates() {
+    local h
+    printf '%s\n' 127.0.0.1
+    if command -v getent >/dev/null 2>&1; then
+        if getent ahosts host.docker.internal >/dev/null 2>&1; then
+            printf '%s\n' host.docker.internal
+        fi
+    fi
+    printf '%s\n' 172.17.0.1
+    if [[ -r /etc/resolv.conf ]]; then
+        h="$(awk '/^nameserver /{print $2; exit}' /etc/resolv.conf 2>/dev/null || true)"
+        if [[ -n "$h" && "$h" != 127.0.0.11 ]]; then
+            printf '%s\n' "$h"
+        fi
+    fi
+    # Space-separated extras: ATLASNET_K3D_API_PROBE_HOSTS="host.docker.internal 10.0.0.1"
+    for h in ${ATLASNET_K3D_API_PROBE_HOSTS:-}; do
+        [[ -n "$h" ]] && printf '%s\n' "$h"
+    done
+}
+
+dedupe_lines() {
+    awk 'NF && !seen[$0]++'
+}
+
 setup_external_kubectl() {
     if [[ "$FORCE_INCLUSTER_KUBECTL" == "1" ]]; then
         return 1
@@ -485,44 +555,79 @@ setup_external_kubectl() {
     fi
 
     k3d kubeconfig get "$CLUSTER_NAME" >"$TEMP_KUBECONFIG"
-    local context cluster server_url
+    rewrite_k3d_kubeconfig_server_loopback "$TEMP_KUBECONFIG"
+
+    local context cluster endpoint probe_timeout_s api_port try_url
+    cluster="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.contexts[0].context.cluster}' 2>/dev/null || true)"
     context="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config current-context)"
-    cluster="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.contexts[0].context.cluster}')"
-    server_url="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-
-    # In dev containers k3d can emit 0.0.0.0:<api-port>, which is not a reachable destination.
-    if [[ "$server_url" =~ ^https://0\.0\.0\.0:([0-9]+)$ ]]; then
-        local api_port api_host fixed_server
-        api_port="${BASH_REMATCH[1]}"
-        api_host="127.0.0.1"
-        if getent hosts host.docker.internal >/dev/null 2>&1; then
-            api_host="host.docker.internal"
-        fi
-        fixed_server="https://${api_host}:${api_port}"
-        echo "==> Rewriting kube API endpoint '$server_url' -> '$fixed_server'"
-        kubectl --kubeconfig "$TEMP_KUBECONFIG" config set-cluster "$cluster" --server "$fixed_server" >/dev/null
-    fi
-
-    local endpoint probe_timeout_s
-    endpoint="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
-
-    if ! external_endpoint_tcp_reachable "$endpoint"; then
-        echo "==> External kube API endpoint not reachable via TCP from this environment."
-        echo "==> Endpoint tried: $endpoint"
+    if [[ -z "$cluster" ]]; then
+        echo "==> External kubectl: could not read cluster name from kubeconfig." >&2
         return 1
     fi
 
-    probe_timeout_s="${ATLASNET_EXTERNAL_KUBECTL_PROBE_TIMEOUT:-2s}"
-
-    KUBECTL=(kubectl --kubeconfig "$TEMP_KUBECONFIG" --context "$context")
-    echo "==> Using kubectl context '$context'..."
-    if "${KUBECTL[@]}" --request-timeout="$probe_timeout_s" get --raw=/readyz >/dev/null 2>&1; then
-        KUBECTL_MODE="external"
-        return 0
+    if [[ -n "${ATLASNET_K3D_API_SERVER:-}" && -n "$cluster" ]]; then
+        echo "==> Overriding kube API server with ATLASNET_K3D_API_SERVER=${ATLASNET_K3D_API_SERVER}"
+        kubectl --kubeconfig "$TEMP_KUBECONFIG" config set-cluster "$cluster" --server "$ATLASNET_K3D_API_SERVER" >/dev/null
+        endpoint="$ATLASNET_K3D_API_SERVER"
+    else
+        endpoint="$(kubectl --kubeconfig "$TEMP_KUBECONFIG" config view --minify -o jsonpath='{.clusters[0].cluster.server}')"
+        api_port="$(apiserver_port_from_kubeconfig "$TEMP_KUBECONFIG")"
     fi
 
-    echo "==> External kube API endpoint not reachable from this environment."
-    echo "==> Endpoint tried: $endpoint"
+    echo "==> External kubectl API endpoint (initial): $endpoint"
+
+    # TCP preflight is unreliable from devcontainers (published port may be on the VM/host, not container lo).
+    if [[ "${ATLASNET_K3D_STRICT_API_TCP_CHECK:-0}" == "1" ]]; then
+        if ! external_endpoint_tcp_reachable "$endpoint"; then
+            echo "==> Strict TCP check failed for $endpoint (ATLASNET_K3D_STRICT_API_TCP_CHECK=1)." >&2
+            return 1
+        fi
+    elif ! external_endpoint_tcp_reachable "$endpoint"; then
+        echo "==> Note: bash TCP preflight to $endpoint failed; still trying kubectl /readyz (normal in some devcontainers)."
+    fi
+
+    probe_timeout_s="${ATLASNET_EXTERNAL_KUBECTL_PROBE_TIMEOUT:-5s}"
+    KUBECTL=(kubectl --kubeconfig "$TEMP_KUBECONFIG" --context "$context")
+    echo "==> Using kubectl context '$context'..."
+
+    if [[ -n "${ATLASNET_K3D_API_SERVER:-}" ]]; then
+        if "${KUBECTL[@]}" --request-timeout="$probe_timeout_s" get --raw=/readyz >/dev/null 2>&1; then
+            KUBECTL_MODE="external"
+            return 0
+        fi
+        echo "==> External kubectl could not reach /readyz at $endpoint"
+        return 1
+    fi
+
+    if [[ -z "${api_port:-}" ]]; then
+        if "${KUBECTL[@]}" --request-timeout="$probe_timeout_s" get --raw=/readyz >/dev/null 2>&1; then
+            KUBECTL_MODE="external"
+            return 0
+        fi
+        echo "==> External kubectl could not reach /readyz at $endpoint (and could not parse API port to try other hosts)."
+        return 1
+    fi
+
+    local host tried
+    tried=0
+    while IFS= read -r host; do
+        [[ -z "$host" ]] && continue
+        try_url="https://${host}:${api_port}"
+        kubectl --kubeconfig "$TEMP_KUBECONFIG" config set-cluster "$cluster" --server "$try_url" >/dev/null 2>&1 || continue
+        tried=1
+        echo "==> Probing Kubernetes API at $try_url ..."
+        if "${KUBECTL[@]}" --request-timeout="$probe_timeout_s" get --raw=/readyz >/dev/null 2>&1; then
+            echo "==> Reached Kubernetes API at $try_url"
+            KUBECTL_MODE="external"
+            return 0
+        fi
+    done < <(k3d_api_probe_host_candidates | dedupe_lines)
+
+    if ((tried == 0)); then
+        echo "==> External kubectl: no probe hosts available for port ${api_port}." >&2
+    else
+        echo "==> External kubectl could not reach /readyz on any candidate host for port ${api_port}." >&2
+    fi
     return 1
 }
 
@@ -530,11 +635,23 @@ setup_incluster_kubectl() {
     local server_node
     server_node="$SERVER_NODE_NAME"
     if ! docker ps --format '{{.Names}}' | grep -Fxq "$server_node"; then
+        prefer_running_k3d_server_container_name
+        server_node="$SERVER_NODE_NAME"
+    fi
+    if ! docker ps --format '{{.Names}}' | grep -Fxq "$server_node"; then
+        echo "==> In-cluster kubectl: no running k3d-${CLUSTER_NAME}-server-* container (tried '$server_node')." >&2
+        echo "    Try: k3d cluster start ${CLUSTER_NAME}" >&2
+        docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | grep "k3d-${CLUSTER_NAME}" >&2 || true
         return 1
     fi
 
-    KUBECTL=(docker exec -i "$server_node" kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml)
-    if ! "${KUBECTL[@]}" --request-timeout=3s get --raw=/readyz >/dev/null 2>&1; then
+    if docker exec -i "$server_node" kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
+        KUBECTL=(docker exec -i "$server_node" kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml)
+    elif docker exec -i "$server_node" k3s kubectl --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
+        KUBECTL=(docker exec -i "$server_node" k3s kubectl)
+    else
+        echo "==> In-cluster kubectl: /readyz failed on '$server_node' (tried kubectl and k3s kubectl)." >&2
+        docker exec -i "$server_node" sh -c 'command -v kubectl; command -v k3s; ls -la /etc/rancher/k3s/k3s.yaml 2>&1 || true' 2>&1 | head -15 >&2 || true
         return 1
     fi
 
@@ -549,6 +666,8 @@ if ! setup_external_kubectl; then
         if ! command -v kubectl >/dev/null 2>&1; then
             echo "Hint: install kubectl (devcontainer feature ghcr.io/devcontainers/features/kubectl-helm-minikube:1)." >&2
         fi
+        echo "Hint: in devcontainers, try ATLASNET_FORCE_INCLUSTER_KUBECTL=1 (uses docker exec into k3d server-0)." >&2
+        echo "      Or set ATLASNET_K3D_API_SERVER to an API URL reachable from this environment." >&2
         exit 1
     fi
 fi
@@ -561,6 +680,15 @@ kctl wait --for=condition=Ready nodes --all --timeout=120s >/dev/null
 
 ATLASNET_FORCE_IMAGE_IMPORT="${ATLASNET_FORCE_IMAGE_IMPORT:-0}"
 IMAGE_CACHE_FILE="${ATLASNET_K3D_IMAGE_CACHE_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-image-cache.txt}"
+if ! docker ps --format '{{.Names}}' | grep -Fxq "$SERVER_NODE_NAME"; then
+    prefer_running_k3d_server_container_name
+fi
+if ! docker ps --format '{{.Names}}' | grep -Fxq "$SERVER_NODE_NAME"; then
+    echo "Error: no running k3d-${CLUSTER_NAME}-server-* container (needed for image import / cluster id)." >&2
+    echo "       Start the cluster: k3d cluster start ${CLUSTER_NAME}" >&2
+    docker ps -a --format '{{.Names}}\t{{.Status}}' 2>/dev/null | grep "k3d-${CLUSTER_NAME}" >&2 || true
+    exit 1
+fi
 server_node="$SERVER_NODE_NAME"
 current_cluster_id="$(docker inspect --format '{{.Id}}' "$server_node" 2>/dev/null || true)"
 current_cluster_id="${current_cluster_id:-unknown}"

@@ -6,7 +6,11 @@ function readHeuristicShapes(addon) {
   const { HeuristicDraw, std_vector_IBoundsDrawShape_ } = addon;
   const hd = new HeuristicDraw();
   const shapesVector = new std_vector_IBoundsDrawShape_();
-  hd.DrawCurrentHeuristic(shapesVector);
+  try {
+    hd.DrawCurrentHeuristic(shapesVector);
+  } catch {
+    return [];
+  }
 
   const shapes = [];
   for (let i = 0; i < shapesVector.size(); i += 1) {
