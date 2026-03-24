@@ -166,6 +166,23 @@ count_cluster_role_nodes() {
     '
 }
 
+# k3d can leave a "cluster" registered in metadata while every node is stopped (host reboot,
+# `docker stop`, OOM kill / exit 137). In that state nothing listens on the published API port and
+# both external and in-cluster kubectl fail until `k3d cluster start`.
+k3d_cluster_core_running() {
+    docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq "k3d-${CLUSTER_NAME}-server-0" \
+        && docker ps --format '{{.Names}}' 2>/dev/null | grep -Fxq "k3d-${CLUSTER_NAME}-serverlb"
+}
+
+ensure_k3d_cluster_running() {
+    if k3d_cluster_core_running; then
+        return 0
+    fi
+    echo "==> k3d cluster '$CLUSTER_NAME' exists but core containers are not running."
+    echo "==> Starting cluster (after reboot, manual stop, or node OOM, etc.)..."
+    k3d cluster start "$CLUSTER_NAME" --wait
+}
+
 CLUSTER_EXISTS=0
 if k3d cluster get "$CLUSTER_NAME" >/dev/null 2>&1; then
     CLUSTER_EXISTS=1
@@ -197,6 +214,7 @@ if ((CLUSTER_EXISTS == 0)); then
         --volume "/var/run/docker.sock:/var/run/docker.sock@all"
 else
     echo "==> k3d cluster '$CLUSTER_NAME' already exists."
+    ensure_k3d_cluster_running
 fi
 
 # Host-published k3s API port (6443/tcp on serverlb), as seen from the Docker CLI context.
@@ -647,8 +665,8 @@ setup_incluster_kubectl() {
 
     if docker exec -i "$server_node" kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
         KUBECTL=(docker exec -i "$server_node" kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml)
-    elif docker exec -i "$server_node" k3s kubectl --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
-        KUBECTL=(docker exec -i "$server_node" k3s kubectl)
+    elif docker exec -i "$server_node" k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml --request-timeout=5s get --raw=/readyz >/dev/null 2>&1; then
+        KUBECTL=(docker exec -i "$server_node" k3s kubectl --kubeconfig /etc/rancher/k3s/k3s.yaml)
     else
         echo "==> In-cluster kubectl: /readyz failed on '$server_node' (tried kubectl and k3s kubectl)." >&2
         docker exec -i "$server_node" sh -c 'command -v kubectl; command -v k3s; ls -la /etc/rancher/k3s/k3s.yaml 2>&1 || true' 2>&1 | head -15 >&2 || true
@@ -663,6 +681,9 @@ setup_incluster_kubectl() {
 if ! setup_external_kubectl; then
     if ! setup_incluster_kubectl; then
         echo "Error: Kubernetes API for cluster '$CLUSTER_NAME' is not reachable via external or in-cluster kubectl." >&2
+        if ! k3d_cluster_core_running; then
+            echo "Hint: k3d nodes may be stopped (check: docker ps -a --filter name=k3d-${CLUSTER_NAME}). Try: k3d cluster start ${CLUSTER_NAME} --wait" >&2
+        fi
         if ! command -v kubectl >/dev/null 2>&1; then
             echo "Hint: install kubectl (devcontainer feature ghcr.io/devcontainers/features/kubectl-helm-minikube:1)." >&2
         fi
