@@ -65,6 +65,7 @@ class BoundLeaser : public Singleton<BoundLeaser>
 		std::lock_guard lock(ClaimedBoundMutex);
 		return ClaimedBoundID.has_value();
 	}
+	[[nodiscard]] bool HasAuthoritativeBound() const;
 	void ClearClaimedBound()
 	{
 		std::lock_guard lock(ClaimedBoundMutex);

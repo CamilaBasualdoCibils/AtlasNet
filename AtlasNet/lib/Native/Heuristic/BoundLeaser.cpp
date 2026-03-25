@@ -7,6 +7,35 @@
 #include "Snapshot/SnapshotService.hpp"
 #include "Snapshot/TemporaryMigrationService.hpp"
 
+bool BoundLeaser::HasAuthoritativeBound() const
+{
+	std::optional<BoundsID> claimedBoundID;
+	{
+		std::lock_guard lock(ClaimedBoundMutex);
+		claimedBoundID = ClaimedBoundID;
+	}
+	if (!claimedBoundID.has_value())
+	{
+		return false;
+	}
+
+	const NetworkIdentity selfID = NetworkCredentials::Get().GetID();
+	try
+	{
+		return HeuristicManifest::Get().QueryOwnershipState(
+			[&](const HeuristicManifest::OwnershipStateWrapper& ownership)
+			{
+				const std::optional<NetworkIdentity> owner =
+					ownership.GetBoundOwner(claimedBoundID.value());
+				return owner.has_value() && owner.value() == selfID;
+			});
+	}
+	catch (...)
+	{
+		return false;
+	}
+}
+
 void BoundLeaser::ClaimBound()
 {
 	const auto& SelfID = NetworkCredentials::Get().GetID();

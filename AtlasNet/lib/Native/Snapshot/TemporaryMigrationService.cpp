@@ -27,7 +27,7 @@
 
 namespace
 {
-constexpr auto kAdoptionScanInterval = std::chrono::milliseconds(250);
+constexpr auto kAdoptionScanInterval = std::chrono::milliseconds(500);
 constexpr auto kEntityRecoveryLeaseTtl = std::chrono::seconds(5);
 
 class ScopedMigrationFlag

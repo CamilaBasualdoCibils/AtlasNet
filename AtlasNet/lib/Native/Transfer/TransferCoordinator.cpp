@@ -34,7 +34,7 @@ constexpr auto kEntityTransferRetryInterval = std::chrono::milliseconds(250);
 
 bool CanAcceptIncomingEntityTransfer()
 {
-	return BoundLeaser::Get().HasBound() &&
+	return BoundLeaser::Get().HasAuthoritativeBound() &&
 		   !TemporaryMigrationService::Get().IsMigrationInProgress();
 }
 }

@@ -18,6 +18,7 @@
 #include "Network/NetworkEnums.hpp"
 #include "Network/Packet/PacketManager.hpp"
 #include "Snapshot/SnapshotService.hpp"
+#include "Snapshot/TemporaryMigrationService.hpp"
 #include "Transfer/TransferCoordinator.hpp"
 void EntityLedger::Init()
 {
@@ -43,9 +44,26 @@ void EntityLedger::Init()
 void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& p,
 											const PacketManager::PacketInfo& info)
 {
-	// logger.DebugFormatted("received a EntityList request from {}", info.sender.ToString());
 	LocalEntityListRequestPacket response;
 	response.status = LocalEntityListRequestPacket::MsgStatus::eResponse;
+	response.Request_IncludeMetadata = p.Request_IncludeMetadata;
+
+	const bool canAdvertiseLocalAuthority =
+		BoundLeaser::Get().HasAuthoritativeBound() &&
+		!TemporaryMigrationService::Get().IsMigrationInProgress();
+	if (!canAdvertiseLocalAuthority)
+	{
+		if (p.Request_IncludeMetadata)
+		{
+			response.Response_Entities.emplace<std::vector<AtlasEntity>>();
+		}
+		else
+		{
+			response.Response_Entities.emplace<std::vector<AtlasEntityMinimal>>();
+		}
+		Interlink::Get().SendMessage(info.sender, response, NetworkMessageSendFlag::eReliableNow);
+		return;
+	}
 
 	if (p.Request_IncludeMetadata)
 	{
@@ -71,9 +89,7 @@ void EntityLedger::OnLocalEntityListRequest(const LocalEntityListRequestPacket& 
 				}
 			});
 	}
-	response.Request_IncludeMetadata = p.Request_IncludeMetadata;
-	// logger.DebugFormatted("responding:", info.sender.ToString());
-	Interlink::Get().SendMessage(info.sender, response, NetworkMessageSendFlag::eUnreliableNow);
+	Interlink::Get().SendMessage(info.sender, response, NetworkMessageSendFlag::eReliableNow);
 }
 void EntityLedger::LoopThreadEntry(std::stop_token st)
 {
@@ -93,7 +109,7 @@ void EntityLedger::LoopThreadEntry(std::stop_token st)
 			continue;
 
 		const NetworkIdentity selfId = NetworkCredentials::Get().GetID();
-		if (!BoundLeaser::Get().HasBound())
+		if (!BoundLeaser::Get().HasAuthoritativeBound())
 			continue;
 		BoundLeaser::Get().GetBound(
 			[&](const IBounds& b)

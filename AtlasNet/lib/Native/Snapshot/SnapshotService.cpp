@@ -26,6 +26,7 @@ namespace
 {
 constexpr std::string_view kEntitySnapshotBoundsIndexHashTable = "Entity:Snapshot:Bounds";
 constexpr std::string_view kHeuristicVersionKey = "Heuristic:Version";
+constexpr auto kLiveShardPresenceWait = std::chrono::milliseconds(500);
 
 std::string SerializeBoundID(BoundsID boundID)
 {
@@ -157,8 +158,8 @@ LiveShardEntityPresence CollectLiveShardEntityPresence()
 	}
 
 	std::unique_lock lock(presenceMutex);
-	(void)presenceCv.wait_for(
-		lock, std::chrono::milliseconds(250), [&]() { return pendingShardIDs.empty(); });
+	(void)presenceCv.wait_for(lock, kLiveShardPresenceWait,
+							  [&]() { return pendingShardIDs.empty(); });
 	return presence;
 }
 }  // namespace
