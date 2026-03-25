@@ -995,6 +995,17 @@ bool Interlink::EstablishConnectionTo(const NetworkIdentity &id)
 	return false;
 }
 
+bool Interlink::IsConnectedTo(const NetworkIdentity& id) const
+{
+	return _ReadLock(
+		[&]() -> bool
+		{
+			const auto& idx = Connections.get<IndexByTarget>();
+			const auto it = idx.find(id);
+			return it != idx.end() && it->state == ConnectionState::eConnected;
+		});
+}
+
 void Interlink::CloseConnectionTo(const NetworkIdentity &id, int reason, const char *debug)
 {
 	auto &byTarget = Connections.get<IndexByTarget>();

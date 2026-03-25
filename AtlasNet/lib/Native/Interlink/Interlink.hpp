@@ -104,6 +104,7 @@ class Interlink : public Singleton<Interlink>
 	void CloseConnectionTo(const NetworkIdentity &id, int reason = 0, const char *debug = nullptr);
 	void CloseAllConnections(int reason = 0);
 	bool EstablishConnectionTo(const NetworkIdentity &who);
+	[[nodiscard]] bool IsConnectedTo(const NetworkIdentity& who) const;
 
    private:
 	void GenerateNewConnections();

@@ -13,6 +13,7 @@
 #include "Entity/Entity.hpp"
 #include "Entity/EntityHandle.hpp"
 #include "Entity/EntityLedger.hpp"
+#include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Entity/Transform.hpp"
 #include "Events/Events/Client/ClientEvents.hpp"
 #include "Events/GlobalEvents.hpp"
@@ -22,6 +23,8 @@
 #include "Global/pch.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "InternalDB/InternalDB.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
+#include "Network/NetworkCredentials.hpp"
 #include "Snapshot/SnapshotService.hpp"
 
 void SandboxServer::Run()
@@ -39,6 +42,109 @@ void SandboxServer::Run()
 								  UUIDGen::ToString(e.client.ID), e.client.ip.ToString(),
 								  e.ConnectedProxy.ToString());
 		});
+
+	using InitClock = std::chrono::steady_clock;
+	std::mutex shardTransferProbeMutex;
+	std::unordered_map<NetworkIdentity, InitClock::time_point> lastShardTransferProbeAt;
+	std::unordered_map<NetworkIdentity, InitClock::time_point> lastShardTransferResponseAt;
+	InitClock::time_point lastTransferReadinessLogAt = InitClock::time_point::min();
+	const auto shardTransferProbeSubscription =
+		Interlink::Get().GetPacketManager().Subscribe<LocalEntityListRequestPacket>(
+			[&](const LocalEntityListRequestPacket& packet, const PacketManager::PacketInfo& info)
+			{
+				if (packet.status != LocalEntityListRequestPacket::MsgStatus::eResponse ||
+					info.sender.Type != NetworkIdentityType::eShard ||
+					info.sender == NetworkCredentials::Get().GetID())
+				{
+					return;
+				}
+
+				std::lock_guard<std::mutex> lock(shardTransferProbeMutex);
+				lastShardTransferResponseAt[info.sender] = InitClock::now();
+			});
+
+	const auto areShardTransfersReadyForBootstrap =
+		[&]() -> bool
+		{
+			const NetworkIdentity selfID = NetworkCredentials::Get().GetID();
+			std::vector<std::string> livePeerKeys;
+			HealthManifest::Get().GetLivePings(livePeerKeys);
+
+			std::vector<NetworkIdentity> liveShardPeers;
+			liveShardPeers.reserve(livePeerKeys.size());
+			for (const std::string& livePeerKey : livePeerKeys)
+			{
+				ByteReader livePeerReader(livePeerKey);
+				NetworkIdentity livePeerIdentity;
+				livePeerIdentity.Deserialize(livePeerReader);
+				if (livePeerIdentity.Type != NetworkIdentityType::eShard || livePeerIdentity == selfID)
+				{
+					continue;
+				}
+				liveShardPeers.push_back(livePeerIdentity);
+			}
+
+			if (liveShardPeers.empty())
+			{
+				return true;
+			}
+
+			LocalEntityListRequestPacket probePacket;
+			probePacket.status = LocalEntityListRequestPacket::MsgStatus::eQuery;
+			probePacket.Request_IncludeMetadata = false;
+
+			const auto now = InitClock::now();
+			bool allPeersReady = true;
+			size_t readyPeerCount = 0;
+
+			for (const auto& peerID : liveShardPeers)
+			{
+				bool sendProbe = false;
+				bool peerReady = false;
+				{
+					std::lock_guard<std::mutex> lock(shardTransferProbeMutex);
+					const auto probeIt = lastShardTransferProbeAt.find(peerID);
+					const auto responseIt = lastShardTransferResponseAt.find(peerID);
+					const bool responseAfterProbe =
+						responseIt != lastShardTransferResponseAt.end() &&
+						(probeIt == lastShardTransferProbeAt.end() ||
+						 responseIt->second >= probeIt->second);
+					peerReady = responseAfterProbe && Interlink::Get().IsConnectedTo(peerID);
+					if (!peerReady &&
+						(probeIt == lastShardTransferProbeAt.end() ||
+						 (now - probeIt->second) >= std::chrono::milliseconds(250)))
+					{
+						lastShardTransferProbeAt[peerID] = now;
+						sendProbe = true;
+					}
+				}
+
+				if (peerReady)
+				{
+					++readyPeerCount;
+					continue;
+				}
+
+				allPeersReady = false;
+				if (sendProbe)
+				{
+					Interlink::Get().SendMessage(peerID, probePacket,
+												 NetworkMessageSendFlag::eReliableNow);
+				}
+			}
+
+			if (!allPeersReady &&
+				(lastTransferReadinessLogAt == InitClock::time_point::min() ||
+				 (now - lastTransferReadinessLogAt) >= std::chrono::seconds(1)))
+			{
+				logger.DebugFormatted(
+					"Sandbox shard bootstrap is waiting for shard transfer readiness: {}/{} peers ready.",
+					readyPeerCount, liveShardPeers.size());
+				lastTransferReadinessLogAt = now;
+			}
+
+			return allPeersReady;
+		};
 
 	bool initialEntitySeedHandled = false;
 	while (!ShouldShutdown && !initialEntitySeedHandled)
@@ -73,6 +179,13 @@ void SandboxServer::Run()
 			}
 			if (boundID == 0 && entityOwnerEntries == 0 && localEntityCount == 0)
 			{
+				if (!areShardTransfersReadyForBootstrap())
+				{
+					std::this_thread::sleep_for(std::chrono::milliseconds(100));
+					continue;
+				}
+
+				size_t spawnedEntityCount = 0;
 				std::mt19937 rng(std::random_device{}());
 				std::uniform_real_distribution<float> dist(0.0f, 1.0f);
 				for (int i = 0; i < 100; i++)
@@ -88,10 +201,25 @@ void SandboxServer::Run()
 					vec3 velocityVec = vec3(x, y, 0);
 					AtlasTransform t;
 					t.position = vec3(0, 0, 0);
+					// Fallback if k3d shard-to-shard bootstrap remains unreliable:
+					// vec3 spawnCenter = vec3(0, 0, 0);
+					// BoundLeaser::Get().GetBound(
+					// 	[&](const IBounds& bound)
+					// 	{
+					// 		spawnCenter = bound.GetCenter();
+					// 	});
+					// const float spawnRadius = dist(rng) * 5.0f;
+					// t.position =
+					// 	spawnCenter + vec3(std::cos(theta), std::sin(theta), 0.0f) * spawnRadius;
 					ByteWriter metadataWriter;
 					metadataWriter.vec3(velocityVec);
 					AtlasNet_CreateEntity(t, metadataWriter.bytes());
+					++spawnedEntityCount;
 				}
+				logger.DebugFormatted(
+					"Seeded {} initial sandbox entities on bound {} after shard transfer readiness succeeded. Local entity count is now {}.",
+					spawnedEntityCount, boundID,
+					EntityLedger::Get().GetEntityCount());
 			}
 			else
 			{
