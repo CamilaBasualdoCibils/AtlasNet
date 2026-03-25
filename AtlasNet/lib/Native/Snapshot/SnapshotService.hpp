@@ -49,6 +49,7 @@ class SnapshotService : public Singleton<SnapshotService>
    private:
 	void SnapshotThreadLoop(std::stop_token st);
 	bool RecoverBoundSnapshot(BoundsID boundID);
+	void RecoverMissedEntitiesForClaimedBound();
 	void RecoverOrphanedEntitiesForCurrentHeuristicIfNeeded();
 	void ReconcileClaimedBoundEntityRecords();
 	void UploadSnapshot();

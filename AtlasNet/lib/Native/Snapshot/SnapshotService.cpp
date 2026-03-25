@@ -2,6 +2,7 @@
 
 #include <charconv>
 #include <chrono>
+#include <condition_variable>
 #include <execution>
 #include <string>
 #include <thread>
@@ -9,6 +10,7 @@
 #include "Entity/Entity.hpp"
 #include "Entity/EntityLedger.hpp"
 #include "Entity/GlobalEntityLedger.hpp"
+#include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Entity/Transform.hpp"
 #include "Global/Misc/UUID.hpp"
 #include "Global/Serialize/ByteReader.hpp"
@@ -17,6 +19,7 @@
 #include "Heuristic/IBounds.hpp"
 #include "InternalDB/InternalDB.hpp"
 #include "Interlink/Database/HealthManifest.hpp"
+#include "Interlink/Interlink.hpp"
 #include "Network/NetworkCredentials.hpp"
 
 namespace
@@ -70,6 +73,87 @@ std::optional<long long> ParseInt64(const std::optional<std::string>& rawValue)
 		return std::nullopt;
 	}
 	return parsedValue;
+}
+
+struct LiveShardEntityPresence
+{
+	std::unordered_set<AtlasEntityID> entityIDs;
+	std::unordered_set<std::string> responsiveShardIDs;
+};
+
+LiveShardEntityPresence CollectLiveShardEntityPresence()
+{
+	LiveShardEntityPresence presence;
+	const NetworkIdentity selfID = NetworkCredentials::Get().GetID();
+	presence.responsiveShardIDs.insert(UUIDGen::ToString(selfID.ID));
+	EntityLedger::Get().ForEachEntityRead(
+		std::execution::seq,
+		[&](const AtlasEntity& entity) { presence.entityIDs.insert(entity.Entity_ID); });
+
+	std::vector<std::string> livePeerKeys;
+	HealthManifest::Get().GetLivePings(livePeerKeys);
+
+	std::vector<NetworkIdentity> liveShardPeers;
+	liveShardPeers.reserve(livePeerKeys.size());
+	for (const std::string& livePeerKey : livePeerKeys)
+	{
+		ByteReader livePeerReader(livePeerKey);
+		NetworkIdentity livePeerIdentity;
+		livePeerIdentity.Deserialize(livePeerReader);
+		if (livePeerIdentity.Type == NetworkIdentityType::eShard && livePeerIdentity != selfID)
+		{
+			liveShardPeers.push_back(std::move(livePeerIdentity));
+		}
+	}
+
+	if (liveShardPeers.empty())
+	{
+		return presence;
+	}
+
+	std::mutex presenceMutex;
+	std::condition_variable presenceCv;
+	std::unordered_set<std::string> pendingShardIDs;
+	pendingShardIDs.reserve(liveShardPeers.size());
+	for (const NetworkIdentity& peer : liveShardPeers)
+	{
+		pendingShardIDs.insert(UUIDGen::ToString(peer.ID));
+	}
+
+	const auto subscription =
+		Interlink::Get().GetPacketManager().Subscribe<LocalEntityListRequestPacket>(
+			[&](const LocalEntityListRequestPacket& packet, const PacketManager::PacketInfo& info)
+			{
+				if (packet.status != LocalEntityListRequestPacket::MsgStatus::eResponse ||
+					info.sender.Type != NetworkIdentityType::eShard ||
+					!std::holds_alternative<std::vector<AtlasEntityMinimal>>(packet.Response_Entities))
+				{
+					return;
+				}
+
+				std::lock_guard lock(presenceMutex);
+				presence.responsiveShardIDs.insert(UUIDGen::ToString(info.sender.ID));
+				pendingShardIDs.erase(UUIDGen::ToString(info.sender.ID));
+				for (const AtlasEntityMinimal& entity :
+					 std::get<std::vector<AtlasEntityMinimal>>(packet.Response_Entities))
+				{
+					presence.entityIDs.insert(entity.Entity_ID);
+				}
+				presenceCv.notify_all();
+			});
+
+	LocalEntityListRequestPacket queryPacket;
+	queryPacket.status = LocalEntityListRequestPacket::MsgStatus::eQuery;
+	queryPacket.Request_IncludeMetadata = false;
+	for (const NetworkIdentity& peer : liveShardPeers)
+	{
+		Interlink::Get().SendMessage(peer, queryPacket, NetworkMessageSendFlag::eReliableNow);
+	}
+
+	std::unique_lock lock(presenceMutex);
+	(void)presenceCv.wait_for(
+		lock, std::chrono::milliseconds(250), [&]() { return pendingShardIDs.empty(); });
+	return presence;
 }
 }  // namespace
 
@@ -191,6 +275,7 @@ void SnapshotService::RecoverClaimedBoundSnapshotIfNeeded()
 	recoveredBoundID = boundID;
 	recoveredHeuristicVersion.reset();
 	RecoverBoundSnapshot(boundID);
+	RecoverMissedEntitiesForClaimedBound();
 	ReconcileClaimedBoundEntityRecords();
 }
 
@@ -264,6 +349,114 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 
 	logger.DebugFormatted("No entity snapshot found for bound {}", boundID);
 	return false;
+}
+
+void SnapshotService::RecoverMissedEntitiesForClaimedBound()
+{
+	if (!BoundLeaser::Get().HasBound())
+	{
+		return;
+	}
+
+	const BoundsID claimedBoundID = BoundLeaser::Get().GetBoundID();
+	const ShardID selfShardID = NetworkCredentials::Get().GetID().ID;
+	std::vector<std::string> livePeerKeys;
+	HealthManifest::Get().GetLivePings(livePeerKeys);
+	std::unordered_set<NetworkIdentity> livePeerSet;
+	livePeerSet.reserve(livePeerKeys.size());
+	for (const std::string& livePeerKey : livePeerKeys)
+	{
+		ByteReader livePeerReader(livePeerKey);
+		NetworkIdentity livePeerIdentity;
+		livePeerIdentity.Deserialize(livePeerReader);
+		livePeerSet.insert(std::move(livePeerIdentity));
+	}
+
+	std::unordered_map<AtlasEntityID, EntitySnapshotRecord> snapshotsByEntityID;
+	FetchEntitySnapshotsByID(snapshotsByEntityID);
+	std::unordered_map<AtlasEntityID, ShardID> entityOwners;
+	GlobalEntityLedger::Get().GetAllEntityOwners(entityOwners);
+	const LiveShardEntityPresence liveShardPresence = CollectLiveShardEntityPresence();
+
+	size_t recoveredOwnedBySelfCount = 0;
+	size_t reclaimedFromDeadOwnerCount = 0;
+	size_t reclaimedMissingFromLiveOwnerCount = 0;
+	size_t skippedMissingSnapshotCount = 0;
+	size_t skippedUnresponsiveLiveOwnerCount = 0;
+	size_t movedSnapshotCount = 0;
+
+	BoundLeaser::Get().GetBound(
+		[&](const IBounds& currentBound)
+		{
+			for (const auto& [entityID, ownerShard] : entityOwners)
+			{
+				if (liveShardPresence.entityIDs.contains(entityID))
+				{
+					continue;
+				}
+
+				const auto snapshotIt = snapshotsByEntityID.find(entityID);
+				if (snapshotIt == snapshotsByEntityID.end())
+				{
+					++skippedMissingSnapshotCount;
+					continue;
+				}
+
+				const EntitySnapshotRecord& snapshotRecord = snapshotIt->second;
+				const AtlasEntity& entity = snapshotRecord.entity;
+				if (!currentBound.Contains(entity.transform.position))
+				{
+					continue;
+				}
+
+				if (ownerShard == selfShardID)
+				{
+					++recoveredOwnedBySelfCount;
+				}
+				else
+				{
+					const NetworkIdentity ownerIdentity = NetworkIdentity::MakeIDShard(ownerShard);
+					if (livePeerSet.contains(ownerIdentity))
+					{
+						if (!liveShardPresence.responsiveShardIDs.contains(
+								UUIDGen::ToString(ownerShard)))
+						{
+							++skippedUnresponsiveLiveOwnerCount;
+							continue;
+						}
+
+						++reclaimedMissingFromLiveOwnerCount;
+					}
+					else
+					{
+						++reclaimedFromDeadOwnerCount;
+					}
+
+					GlobalEntityLedger::Get().DeclareEntityRecord(selfShardID, entityID);
+				}
+
+				EntityLedger::Get().AddEntity(entity);
+				if (snapshotRecord.boundID != claimedBoundID)
+				{
+					DeleteBoundEntitySnapshot(snapshotRecord.boundID, entityID);
+					++movedSnapshotCount;
+				}
+			}
+		});
+
+		if (recoveredOwnedBySelfCount > 0 || reclaimedFromDeadOwnerCount > 0 ||
+			reclaimedMissingFromLiveOwnerCount > 0 || skippedMissingSnapshotCount > 0 ||
+			skippedUnresponsiveLiveOwnerCount > 0 || movedSnapshotCount > 0)
+	{
+		logger.WarningFormatted(
+			"Backup-recovered entities for claimed bound {} using Entity:EntityOwner discrepancies "
+			"(recovered {} already-owned, reclaimed {} from dead owners, reclaimed {} missing "
+			"from responsive live owners, skipped {} without snapshots, skipped {} behind "
+			"unresponsive live owners, moved {} stale snapshot entries)",
+			claimedBoundID, recoveredOwnedBySelfCount, reclaimedFromDeadOwnerCount,
+			reclaimedMissingFromLiveOwnerCount, skippedMissingSnapshotCount,
+			skippedUnresponsiveLiveOwnerCount, movedSnapshotCount);
+	}
 }
 
 void SnapshotService::RecoverOrphanedEntitiesForCurrentHeuristicIfNeeded()
