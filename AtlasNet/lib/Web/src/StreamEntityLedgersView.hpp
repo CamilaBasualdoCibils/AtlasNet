@@ -13,7 +13,9 @@
 #include "Debug/Log.hpp"
 #include "Entity/Packet/LocalEntityListRequestPacket.hpp"
 #include "Global/Misc/UUID.hpp"
+#include "Global/Serialize/ByteReader.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
+#include "Interlink/Database/HealthManifest.hpp"
 #include "Interlink/Database/ServerRegistry.hpp"
 #include "Interlink/Interlink.hpp"
 #include "Network/NetworkEnums.hpp"
@@ -46,6 +48,18 @@ class StreamEntityLedgersView
 	std::mutex stateMutex;
 	std::unordered_map<NetworkIdentity, ShardLedgerState> shardStates;
 	std::jthread refreshThread;
+	Clock::time_point lastDataFailureLogAt = Clock::time_point::min();
+
+	void LogDataFailureThrottled(std::string_view message)
+	{
+		const auto now = Clock::now();
+		if (lastDataFailureLogAt == Clock::time_point::min() ||
+			(now - lastDataFailureLogAt) >= kTimeoutLogInterval)
+		{
+			logger.Warning(message.data());
+			lastDataFailureLogAt = now;
+		}
+	}
 
 	void OnLocalEntityListRequestPacket(const LocalEntityListRequestPacket& p,
 										const PacketManager::PacketInfo& info)
@@ -58,9 +72,23 @@ class StreamEntityLedgersView
 		std::vector<StreamEntityLedgerEntry> shardEntries;
 		shardEntries.reserve(std::get<std::vector<AtlasEntityMinimal>>(p.Response_Entities).size());
 
-		std::optional<BoundsID> boundId = HeuristicManifest::Get().QueryOwnershipState(
-			[&](const HeuristicManifest::OwnershipStateWrapper& w)
-			{ return w.GetBoundOwner(info.sender); });
+		std::optional<BoundsID> boundId;
+		try
+		{
+			boundId = HeuristicManifest::Get().QueryOwnershipState(
+				[&](const HeuristicManifest::OwnershipStateWrapper& w)
+				{ return w.GetBoundOwner(info.sender); });
+		}
+		catch (const std::exception&)
+		{
+			LogDataFailureThrottled(
+				"Entity ledger stream ownership lookup failed; falling back to cached shard state.");
+		}
+		catch (...)
+		{
+			LogDataFailureThrottled(
+				"Entity ledger stream ownership lookup failed; falling back to cached shard state.");
+		}
 
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
@@ -106,21 +134,47 @@ class StreamEntityLedgersView
 	void RefreshShardRequests()
 	{
 		const auto now = Clock::now();
-		const auto& serverList = ServerRegistry::Get().GetServers();
 		std::unordered_set<NetworkIdentity> liveShards;
 		std::vector<NetworkIdentity> shardsToQuery;
+		bool liveShardRefreshSucceeded = false;
 
-		for (const auto& [netID, entry] : serverList)
+		try
 		{
-			(void)entry;
-			if (netID.Type == NetworkIdentityType::eShard)
+			std::vector<std::string> liveShardKeys;
+			HealthManifest::Get().GetLivePings(liveShardKeys);
+			for (const auto& liveShardKey : liveShardKeys)
 			{
-				liveShards.insert(netID);
+				ByteReader br(liveShardKey);
+				NetworkIdentity netID;
+				netID.Deserialize(br);
+				if (netID.Type == NetworkIdentityType::eShard)
+				{
+					liveShards.insert(netID);
+				}
 			}
+			liveShardRefreshSucceeded = true;
+		}
+		catch (const std::exception&)
+		{
+			LogDataFailureThrottled(
+				"Entity ledger stream failed to refresh live shards from the database; keeping current shard set.");
+		}
+		catch (...)
+		{
+			LogDataFailureThrottled(
+				"Entity ledger stream failed to refresh live shards from the database; keeping current shard set.");
 		}
 
 		{
 			std::lock_guard<std::mutex> lock(stateMutex);
+			if (!liveShardRefreshSucceeded)
+			{
+				for (const auto& [shardId, shardState] : shardStates)
+				{
+					(void)shardState;
+					liveShards.insert(shardId);
+				}
+			}
 
 			std::erase_if(
 				shardStates,
@@ -172,7 +226,20 @@ class StreamEntityLedgersView
 	{
 		while (!stopToken.stop_requested())
 		{
-			RefreshShardRequests();
+			try
+			{
+				RefreshShardRequests();
+			}
+			catch (const std::exception&)
+			{
+				LogDataFailureThrottled(
+					"Entity ledger stream refresh loop hit an unexpected error; retrying.");
+			}
+			catch (...)
+			{
+				LogDataFailureThrottled(
+					"Entity ledger stream refresh loop hit an unexpected error; retrying.");
+			}
 			std::this_thread::sleep_for(kRefreshLoopSleep);
 		}
 	}

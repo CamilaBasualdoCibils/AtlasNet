@@ -22,6 +22,7 @@
 #include "Global/pch.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "InternalDB/InternalDB.hpp"
+#include "Snapshot/SnapshotService.hpp"
 
 void SandboxServer::Run()
 {
@@ -39,40 +40,80 @@ void SandboxServer::Run()
 								  e.ConnectedProxy.ToString());
 		});
 
-	while (!BoundLeaser::Get().HasBound())
+	bool initialEntitySeedHandled = false;
+	while (!ShouldShutdown && !initialEntitySeedHandled)
 	{
-		std::this_thread::sleep_for(std::chrono::milliseconds(20));
-	}
-
-	const BoundsID boundID = BoundLeaser::Get().GetBoundID();
-	const long long entityOwnerEntries = InternalDB::Get()->HLen("Entity:EntityOwner");
-	if (boundID != 0 && entityOwnerEntries == 0)
-	{
-		std::mt19937 rng(std::random_device{}());
-		std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-		for (int i = 0; i < 100; i++)
+		if (!BoundLeaser::Get().HasBound())
 		{
-			float z = dist(rng) * 2.0f - 1.0f;					// z in [-1, 1]
-			float theta = dist(rng) * 2.0f * glm::pi<float>();	// angle around Z
-
-			float r = std::sqrt(1.0f - z * z) * 120.0f;
-
-			float x = r * std::cos(theta);
-			float y = r * std::sin(theta);
-
-			vec3 velocityVec = vec3(x, y, 0);
-			AtlasTransform t;
-			t.position = vec3(0, 0, 0);
-			ByteWriter metadataWriter;
-			metadataWriter.vec3(velocityVec);
-			AtlasEntityHandle e = AtlasNet_CreateEntity(t, metadataWriter.bytes());
+			std::this_thread::sleep_for(std::chrono::milliseconds(50));
+			continue;
 		}
-	}
-	else
-	{
-		logger.DebugFormatted(
-			"Skipping initial sandbox entity spawn. Bound ID: {} Entity:EntityOwner entries: {}",
-			boundID, entityOwnerEntries);
+
+		try
+		{
+			// Recovery must complete successfully before we decide whether an empty shard
+			// should seed its initial sandbox entities.
+			SnapshotService::Get().RecoverClaimedBoundSnapshotIfNeeded();
+
+			if (!BoundLeaser::Get().HasBound())
+			{
+				logger.Warning("Sandbox shard lost its claimed bound during init; idling.");
+				std::this_thread::sleep_for(std::chrono::milliseconds(250));
+				continue;
+			}
+
+			const BoundsID boundID = BoundLeaser::Get().GetBoundID();
+			const long long entityOwnerEntries = InternalDB::Get()->HLen("Entity:EntityOwner");
+			const size_t localEntityCount = EntityLedger::Get().GetEntityCount();
+			if (!BoundLeaser::Get().HasBound() || BoundLeaser::Get().GetBoundID() != boundID)
+			{
+				logger.Warning("Sandbox shard lost or changed its claimed bound during init; idling.");
+				std::this_thread::sleep_for(std::chrono::milliseconds(250));
+				continue;
+			}
+			if (boundID == 0 && entityOwnerEntries == 0 && localEntityCount == 0)
+			{
+				std::mt19937 rng(std::random_device{}());
+				std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+				for (int i = 0; i < 100; i++)
+				{
+					float z = dist(rng) * 2.0f - 1.0f;					 // z in [-1, 1]
+					float theta = dist(rng) * 2.0f * glm::pi<float>();	 // angle around Z
+
+					float r = std::sqrt(1.0f - z * z) * 120.0f;
+
+					float x = r * std::cos(theta);
+					float y = r * std::sin(theta);
+
+					vec3 velocityVec = vec3(x, y, 0);
+					AtlasTransform t;
+					t.position = vec3(0, 0, 0);
+					ByteWriter metadataWriter;
+					metadataWriter.vec3(velocityVec);
+					AtlasNet_CreateEntity(t, metadataWriter.bytes());
+				}
+			}
+			else
+			{
+				logger.DebugFormatted(
+					"Skipping initial sandbox entity spawn. Bound ID: {} Entity:EntityOwner entries: {} local entities: {}",
+					boundID, entityOwnerEntries, localEntityCount);
+			}
+
+			initialEntitySeedHandled = true;
+		}
+		catch (const std::exception& ex)
+		{
+			logger.WarningFormatted(
+				"Sandbox shard init is idling until database access recovers. {}",
+				ex.what());
+			std::this_thread::sleep_for(std::chrono::milliseconds(250));
+		}
+		catch (...)
+		{
+			logger.Warning("Sandbox shard init is idling until database access recovers.");
+			std::this_thread::sleep_for(std::chrono::milliseconds(250));
+		}
 	}
 
 	using Clock = std::chrono::steady_clock;
