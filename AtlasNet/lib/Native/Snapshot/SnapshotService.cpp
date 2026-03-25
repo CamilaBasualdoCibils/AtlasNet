@@ -75,6 +75,12 @@ std::optional<long long> ParseInt64(const std::optional<std::string>& rawValue)
 	return parsedValue;
 }
 
+std::optional<BoundsID> QueryExpectedSnapshotBound(const AtlasEntity& entity)
+{
+	return HeuristicManifest::Get().PullHeuristic(
+		[&](const IHeuristic& heuristic) { return heuristic.QueryPosition(entity.transform.position); });
+}
+
 struct LiveShardEntityPresence
 {
 	std::unordered_set<AtlasEntityID> entityIDs;
@@ -285,6 +291,7 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 	if (!perEntityPayloads.empty())
 	{
 		size_t recoveredCount = 0;
+		size_t skippedCopiedSnapshotCount = 0;
 		size_t skippedMissingOwnerCount = 0;
 		size_t skippedLiveOwnedElsewhereCount = 0;
 		size_t recoveredFromDeadOwnerCount = 0;
@@ -314,6 +321,16 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 				continue;
 			}
 
+			const std::optional<BoundsID> expectedBoundID = QueryExpectedSnapshotBound(entity);
+			if (expectedBoundID.has_value() && expectedBoundID.value() != boundID &&
+				ownerShard.value() != selfShardID)
+			{
+				// This looks like a copied snapshot row. Keep the payload intact so the
+				// authoritative owner/discrepancy recovery path can reclaim it later if needed.
+				++skippedCopiedSnapshotCount;
+				continue;
+			}
+
 			if (ownerShard.has_value() && ownerShard.value() != selfShardID)
 			{
 				const NetworkIdentity ownerIdentity = NetworkIdentity::MakeIDShard(*ownerShard);
@@ -333,14 +350,16 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 			++recoveredCount;
 		}
 
-			if (recoveredCount > 0 || skippedMissingOwnerCount > 0 ||
+			if (recoveredCount > 0 || skippedCopiedSnapshotCount > 0 ||
+				skippedMissingOwnerCount > 0 ||
 				skippedLiveOwnedElsewhereCount > 0 || recoveredFromDeadOwnerCount > 0)
 			{
 				logger.WarningFormatted(
 					"Recovered {} entities for claimed bound {} from per-entity database snapshot "
-					"(skipped {} without owner records, skipped {} live-owned elsewhere, "
-					"reclaimed {} from dead owners)",
-					recoveredCount, boundID, skippedMissingOwnerCount,
+					"(skipped {} copied snapshots for later authoritative recovery, skipped {} without owner records, skipped {} "
+					"live-owned elsewhere, reclaimed {} from dead owners)",
+					recoveredCount, boundID, skippedCopiedSnapshotCount,
+					skippedMissingOwnerCount,
 					skippedLiveOwnedElsewhereCount,
 					recoveredFromDeadOwnerCount);
 			}
