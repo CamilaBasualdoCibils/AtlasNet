@@ -30,8 +30,7 @@ class TemporaryMigrationService : public Singleton<TemporaryMigrationService>
 	void AdoptionThreadLoop(std::stop_token st);
 	void RecoverAdoptableEntitiesIfNeeded();
 	bool TryClaimRecoveredEntityOwnership(const AtlasEntityID& entityID,
-										  const std::unordered_set<std::string>& liveShardIDs,
-										  std::optional<BoundsID> requiredUnownedBoundID = std::nullopt);
+										  const std::unordered_set<std::string>& liveShardIDs);
 	bool ShouldCurrentShardAdoptEntity(
 		const AtlasEntity& entity,
 		const std::unordered_map<BoundsID, ShardID>& liveClaimedBounds,

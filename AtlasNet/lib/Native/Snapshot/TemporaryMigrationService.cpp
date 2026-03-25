@@ -13,6 +13,7 @@
 #include "Entity/EntityLedger.hpp"
 #include "Entity/GlobalEntityLedger.hpp"
 #include "Global/Misc/UUID.hpp"
+#include "Global/Serialize/ByteReader.hpp"
 #include "Heuristic/BoundLeaser.hpp"
 #include "Heuristic/Database/HeuristicManifest.hpp"
 #include "Heuristic/IBounds.hpp"
@@ -172,7 +173,7 @@ void TemporaryMigrationService::TriggerForCurrentShardSigterm()
 		{
 			continue;
 		}
-		EntityLedger::Get().EraseEntity(entityID);
+		EntityLedger::Get().EraseEntityForRecovery(entityID);
 	}
 	TemporaryMigrationTriggerPacket triggerPacket;
 	triggerPacket.releasedBoundID = boundID;
@@ -193,8 +194,7 @@ void TemporaryMigrationService::TriggerForCurrentShardSigterm()
 }
 
 bool TemporaryMigrationService::TryClaimRecoveredEntityOwnership(
-	const AtlasEntityID& entityID, const std::unordered_set<std::string>& liveShardIDs,
-	std::optional<BoundsID> requiredUnownedBoundID)
+	const AtlasEntityID& entityID, const std::unordered_set<std::string>& liveShardIDs)
 {
 	if (!TryAcquireEntityRecoveryLease(entityID))
 	{
@@ -207,22 +207,14 @@ bool TemporaryMigrationService::TryClaimRecoveredEntityOwnership(
 
 	do
 	{
-		if (requiredUnownedBoundID.has_value())
-		{
-			const bool stillUnowned = HeuristicManifest::Get().QueryOwnershipState(
-				[&](const HeuristicManifest::OwnershipStateWrapper& ownership)
-				{
-					return !ownership.GetBoundOwner(*requiredUnownedBoundID).has_value();
-				});
-			if (!stillUnowned)
-			{
-				break;
-			}
-		}
-
 		const std::optional<ShardID> ownerShard =
 			GlobalEntityLedger::Get().GetEntityOwnerShard(entityID);
-		if (ownerShard.has_value() && UUIDGen::ToString(*ownerShard) != selfShardIDStr &&
+		if (!ownerShard.has_value())
+		{
+			break;
+		}
+
+		if (UUIDGen::ToString(*ownerShard) != selfShardIDStr &&
 			liveShardIDs.contains(UUIDGen::ToString(*ownerShard)))
 		{
 			break;
@@ -319,45 +311,43 @@ void TemporaryMigrationService::RecoverAdoptableEntitiesIfNeeded()
 		return;
 	}
 
-	std::unordered_map<BoundsID, std::vector<AtlasEntity>> snapshotsByBound;
-	SnapshotService::Get().FetchEntityListSnapshot(snapshotsByBound);
+	std::unordered_map<AtlasEntityID, SnapshotService::EntitySnapshotRecord> snapshotsByEntityID;
+	SnapshotService::Get().FetchEntitySnapshotsByID(snapshotsByEntityID);
+	std::unordered_map<AtlasEntityID, ShardID> entityOwners;
+	GlobalEntityLedger::Get().GetAllEntityOwners(entityOwners);
 
 	size_t adoptedCount = 0;
-	for (const auto& [snapshotBoundID, entities] : snapshotsByBound)
+	for (const auto& [entityID, ownerShard] : entityOwners)
 	{
-		if (snapshotBoundID == claimedBoundID || claimedBounds.contains(snapshotBoundID))
+		if (liveShardIDs.contains(UUIDGen::ToString(ownerShard)))
 		{
 			continue;
 		}
 
-		for (const AtlasEntity& entity : entities)
+		const auto snapshotIt = snapshotsByEntityID.find(entityID);
+		if (snapshotIt == snapshotsByEntityID.end())
 		{
-			if (EntityLedger::Get().ExistsEntity(entity.Entity_ID) ||
-				!ShouldCurrentShardAdoptEntity(entity, liveClaimedBounds, claimedBoundID))
-			{
-				continue;
-			}
-
-			const std::optional<ShardID> ownerShard =
-				GlobalEntityLedger::Get().GetEntityOwnerShard(entity.Entity_ID);
-			if (ownerShard.has_value() && liveShardIDs.contains(UUIDGen::ToString(*ownerShard)))
-			{
-				continue;
-			}
-
-			if (!TryClaimRecoveredEntityOwnership(entity.Entity_ID, liveShardIDs,
-												  snapshotBoundID))
-			{
-				continue;
-			}
-			if (EntityLedger::Get().ExistsEntity(entity.Entity_ID))
-			{
-				continue;
-			}
-
-			EntityLedger::Get().AddEntity(entity);
-			++adoptedCount;
+			continue;
 		}
+
+		const AtlasEntity& entity = snapshotIt->second.entity;
+		if (EntityLedger::Get().ExistsEntity(entity.Entity_ID) ||
+			!ShouldCurrentShardAdoptEntity(entity, liveClaimedBounds, claimedBoundID))
+		{
+			continue;
+		}
+
+		if (!TryClaimRecoveredEntityOwnership(entity.Entity_ID, liveShardIDs))
+		{
+			continue;
+		}
+		if (EntityLedger::Get().ExistsEntity(entity.Entity_ID))
+		{
+			continue;
+		}
+
+		EntityLedger::Get().AddEntity(entity);
+		++adoptedCount;
 	}
 
 	if (adoptedCount > 0)

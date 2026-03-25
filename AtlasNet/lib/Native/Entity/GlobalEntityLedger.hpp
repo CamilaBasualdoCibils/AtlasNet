@@ -3,6 +3,7 @@
 #include <span>
 #include <string>
 #include <string_view>
+#include <unordered_map>
 #include <unordered_set>
 #include <vector>
 
@@ -26,53 +27,20 @@ class GlobalEntityLedger : public Singleton<GlobalEntityLedger>
 	void ReplaceShardEntityRecords(const ShardID& NetID, std::span<const AtlasEntityID> entityIDs)
 	{
 		const std::string shardIDStr = UUIDGen::ToString(NetID);
-
-		std::unordered_set<std::string> desiredEntityIDs;
-		desiredEntityIDs.reserve(entityIDs.size());
+		// Refresh known ownership for entities we currently hold, but do not delete older rows.
+		// Entity:EntityOwner is treated as the durable session authority ledger.
 		for (const AtlasEntityID& entityID : entityIDs)
 		{
-			desiredEntityIDs.insert(UUIDGen::ToString(entityID));
-		}
-
-		std::vector<std::string> staleOwnedEntityIDs;
-		const std::unordered_map<std::string, std::string> entityOwners =
-			InternalDB::Get()->HGetAll(entityID2ShardHashMap);
-		for (const auto& [entityIDStr, ownerShardIDStr] : entityOwners)
-		{
-			if (ownerShardIDStr == shardIDStr)
-			{
-				if (!desiredEntityIDs.contains(entityIDStr))
-				{
-					staleOwnedEntityIDs.push_back(entityIDStr);
-				}
-			}
-		}
-
-		if (!staleOwnedEntityIDs.empty())
-		{
-			std::vector<std::string_view> staleOwnedEntityViews;
-			staleOwnedEntityViews.reserve(staleOwnedEntityIDs.size());
-			for (const std::string& entityIDStr : staleOwnedEntityIDs)
-			{
-				staleOwnedEntityViews.push_back(entityIDStr);
-			}
-			(void)InternalDB::Get()->HDel(entityID2ShardHashMap, staleOwnedEntityViews);
-		}
-
-		for (const std::string& entityIDStr : desiredEntityIDs)
-		{
-			(void)InternalDB::Get()->HSet(entityID2ShardHashMap, entityIDStr, shardIDStr);
+			(void)InternalDB::Get()->HSet(
+				entityID2ShardHashMap, UUIDGen::ToString(entityID), shardIDStr);
 		}
 	}
 	void DeleteEntityRecord(const ShardID& NetID, const AtlasEntityID& EntityID)
 	{
-		std::optional<std::string> existingOwner =
-			InternalDB::Get()->HGet(entityID2ShardHashMap, UUIDGen::ToString(EntityID));
-
-		if (existingOwner.has_value() && existingOwner.value() == UUIDGen::ToString(NetID))
-		{
-			(void)InternalDB::Get()->HDel(entityID2ShardHashMap, {UUIDGen::ToString(EntityID)});
-		}
+		(void)NetID;
+		(void)EntityID;
+		// Entity:EntityOwner is the durable authority ledger for the session.
+		// Ownership changes should overwrite the owner entry, not remove it.
 	}
 	// using back inserter
 	void GetAllEntitiesInShard(const ShardID& NetID,
@@ -100,6 +68,17 @@ class GlobalEntityLedger : public Singleton<GlobalEntityLedger>
 			AtlasEntityHandle handle(UUIDGen::FromString(idStr));
 			inserter = std::move(handle);
 			/* logger.DebugFormatted("Found EntityID in Global Ledger: {}", idStr); */
+		}
+	}
+	void GetAllEntityOwners(std::unordered_map<AtlasEntityID, ShardID>& out)
+	{
+		out.clear();
+		const std::unordered_map<std::string, std::string> entityOwners =
+			InternalDB::Get()->HGetAll(entityID2ShardHashMap);
+		out.reserve(entityOwners.size());
+		for (const auto& [entityIDStr, ownerShardIDStr] : entityOwners)
+		{
+			out.emplace(UUIDGen::FromString(entityIDStr), UUIDGen::FromString(ownerShardIDStr));
 		}
 	}
 

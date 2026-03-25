@@ -140,6 +140,10 @@ class EntityLedger : public Singleton<EntityLedger>
 	{
 		_WriteLock([&]() { _EraseEntity(ID); });
 	}
+	void EraseEntityForRecovery(AtlasEntityID ID)
+	{
+		_WriteLock([&]() { _EraseEntity(ID, true, true); });
+	}
 	bool ExistsEntity(AtlasEntityID ID) const
 	{
 		return _ReadLock([&]() { return _ExistsEntity(ID); });

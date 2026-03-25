@@ -601,6 +601,15 @@ void TransferCoordinator::OnEntityTransferPacketArrival(const EntityTransferPack
 				return;
 			}
 
+			if (!DoesTargetOwnTransferredEntities(transferEntrySnapshot))
+			{
+				logger.WarningFormatted(
+					"Deferring entity transfer {} finalization until Entity:EntityOwner shows "
+					"target {} as owner",
+					UUIDGen::ToString(p.TransferID), transferEntrySnapshot.shard.ToString());
+				return;
+			}
+
 			FinalizeSendingEntityTransfer(transferEntrySnapshot);
 		}
 		break;

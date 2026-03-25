@@ -200,6 +200,7 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 	if (!perEntityPayloads.empty())
 	{
 		size_t recoveredCount = 0;
+		size_t skippedMissingOwnerCount = 0;
 		size_t skippedLiveOwnedElsewhereCount = 0;
 		size_t recoveredFromDeadOwnerCount = 0;
 		const ShardID selfShardID = NetworkCredentials::Get().GetID().ID;
@@ -222,6 +223,12 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 			entity.Deserialize(reader);
 			const std::optional<ShardID> ownerShard =
 				GlobalEntityLedger::Get().GetEntityOwnerShard(entity.Entity_ID);
+			if (!ownerShard.has_value())
+			{
+				++skippedMissingOwnerCount;
+				continue;
+			}
+
 			if (ownerShard.has_value() && ownerShard.value() != selfShardID)
 			{
 				const NetworkIdentity ownerIdentity = NetworkIdentity::MakeIDShard(*ownerShard);
@@ -241,13 +248,15 @@ bool SnapshotService::RecoverBoundSnapshot(BoundsID boundID)
 			++recoveredCount;
 		}
 
-			if (recoveredCount > 0 || skippedLiveOwnedElsewhereCount > 0 ||
-				recoveredFromDeadOwnerCount > 0)
+			if (recoveredCount > 0 || skippedMissingOwnerCount > 0 ||
+				skippedLiveOwnedElsewhereCount > 0 || recoveredFromDeadOwnerCount > 0)
 			{
 				logger.WarningFormatted(
 					"Recovered {} entities for claimed bound {} from per-entity database snapshot "
-					"(skipped {} live-owned elsewhere, reclaimed {} from dead owners)",
-					recoveredCount, boundID, skippedLiveOwnedElsewhereCount,
+					"(skipped {} without owner records, skipped {} live-owned elsewhere, "
+					"reclaimed {} from dead owners)",
+					recoveredCount, boundID, skippedMissingOwnerCount,
+					skippedLiveOwnedElsewhereCount,
 					recoveredFromDeadOwnerCount);
 			}
 		return recoveredCount > 0;
@@ -293,57 +302,47 @@ void SnapshotService::RecoverOrphanedEntitiesForCurrentHeuristicIfNeeded()
 
 	size_t recoveredCount = 0;
 	size_t movedSnapshotCount = 0;
-	const std::vector<std::string> indexedBounds =
-		InternalDB::Get()->HKeys(kEntitySnapshotBoundsIndexHashTable);
+	std::unordered_map<AtlasEntityID, SnapshotService::EntitySnapshotRecord> snapshotsByEntityID;
+	FetchEntitySnapshotsByID(snapshotsByEntityID);
+	std::unordered_map<AtlasEntityID, ShardID> entityOwners;
+	GlobalEntityLedger::Get().GetAllEntityOwners(entityOwners);
 
 	BoundLeaser::Get().GetBound(
 		[&](const IBounds& currentBound)
 		{
-			for (const std::string& boundIDStr : indexedBounds)
+			for (const auto& [entityID, ownerShard] : entityOwners)
 			{
-				BoundsID snapshotBoundID = 0;
-				const auto [ptr, ec] = std::from_chars(boundIDStr.data(),
-												   boundIDStr.data() + boundIDStr.size(),
-												   snapshotBoundID);
-				if (ec != std::errc() || ptr != boundIDStr.data() + boundIDStr.size())
+				if (ownerShard == selfShardID)
 				{
 					continue;
 				}
 
-				const auto perEntityPayloads = FetchPerEntitySnapshotEntries(snapshotBoundID);
-				for (const auto& [entityIDStr, payload] : perEntityPayloads)
+				const NetworkIdentity ownerIdentity = NetworkIdentity::MakeIDShard(ownerShard);
+				if (livePeerSet.contains(ownerIdentity))
 				{
-					(void)entityIDStr;
-					ByteReader reader(payload);
-					AtlasEntity entity;
-					entity.Deserialize(reader);
+					continue;
+				}
 
-					if (EntityLedger::Get().ExistsEntity(entity.Entity_ID) ||
-						!currentBound.Contains(entity.transform.position))
-					{
-						continue;
-					}
+				const auto snapshotIt = snapshotsByEntityID.find(entityID);
+				if (snapshotIt == snapshotsByEntityID.end())
+				{
+					continue;
+				}
 
-					const std::optional<ShardID> ownerShard =
-						GlobalEntityLedger::Get().GetEntityOwnerShard(entity.Entity_ID);
-					if (ownerShard.has_value() && ownerShard.value() != selfShardID)
-					{
-						const NetworkIdentity ownerIdentity =
-							NetworkIdentity::MakeIDShard(ownerShard.value());
-						if (livePeerSet.contains(ownerIdentity))
-						{
-							continue;
-						}
-					}
+				const AtlasEntity& entity = snapshotIt->second.entity;
+				if (EntityLedger::Get().ExistsEntity(entity.Entity_ID) ||
+					!currentBound.Contains(entity.transform.position))
+				{
+					continue;
+				}
 
-					EntityLedger::Get().AddEntity(entity);
-					++recoveredCount;
+				EntityLedger::Get().AddEntity(entity);
+				++recoveredCount;
 
-					if (snapshotBoundID != claimedBoundID)
-					{
-						DeleteBoundEntitySnapshot(snapshotBoundID, entity.Entity_ID);
-						++movedSnapshotCount;
-					}
+				if (snapshotIt->second.boundID != claimedBoundID)
+				{
+					DeleteBoundEntitySnapshot(snapshotIt->second.boundID, entity.Entity_ID);
+					++movedSnapshotCount;
 				}
 			}
 		});
@@ -404,27 +403,28 @@ void SnapshotService::UploadSnapshot()
 		ReconcileClaimedBoundEntityRecords();
 	}
 }
-void SnapshotService::FetchEntityListSnapshot(
-	std::unordered_map<BoundsID, std::vector<AtlasEntity>>& data)
+void SnapshotService::FetchEntitySnapshotsByID(
+	std::unordered_map<AtlasEntityID, EntitySnapshotRecord>& data)
 {
 	data.clear();
 	const std::vector<std::string> indexedBounds =
 		InternalDB::Get()->HKeys(kEntitySnapshotBoundsIndexHashTable);
-	data.reserve(indexedBounds.size());
 	for (const std::string& boundIDStr : indexedBounds)
 	{
 		const BoundsID boundID = std::stoi(boundIDStr);
-		data.emplace(boundID, std::vector<AtlasEntity>{});
-		auto& vec = data.at(boundID);
 		const auto entries = FetchPerEntitySnapshotEntries(boundID);
 		for (const auto& [entityIDStr, payload] : entries)
 		{
 			(void)entityIDStr;
 			ByteReader reader(payload);
-			vec.emplace_back(AtlasEntity{}).Deserialize(reader);
+			AtlasEntity entity;
+			entity.Deserialize(reader);
+			data.insert_or_assign(entity.Entity_ID, EntitySnapshotRecord{.boundID = boundID,
+																			 .entity = std::move(entity)});
 		}
 	}
 }
+
 void SnapshotService::FetchBoundsTransformList(
 	std::unordered_map<BoundsID, std::vector<AtlasTransform>>& transforms)
 {

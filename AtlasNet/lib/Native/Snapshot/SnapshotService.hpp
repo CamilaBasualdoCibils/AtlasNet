@@ -15,6 +15,14 @@
 #include "Heuristic/IBounds.hpp"
 class SnapshotService : public Singleton<SnapshotService>
 {
+   public:
+	struct EntitySnapshotRecord
+	{
+		BoundsID boundID;
+		AtlasEntity entity;
+	};
+
+   private:
 	static constexpr const char* EntitySnapshotBoundsIndex_HashTable =
 		"Entity:Snapshot:Bounds";
 	Log logger = Log("SnapshotService");
@@ -31,9 +39,7 @@ class SnapshotService : public Singleton<SnapshotService>
 	void UpsertClaimedBoundEntitySnapshot(const AtlasEntity& entity);
 	void DeleteBoundEntitySnapshot(BoundsID boundID, const AtlasEntityID& entityID);
 	void DeleteClaimedBoundEntitySnapshot(const AtlasEntityID& entityID);
-
-	void FetchEntityListSnapshot(
-		std::unordered_map<BoundsID, std::vector<AtlasEntity>>& data);
+	void FetchEntitySnapshotsByID(std::unordered_map<AtlasEntityID, EntitySnapshotRecord>& data);
 
 	void FetchBoundsTransformList(
 		std::unordered_map<BoundsID, std::vector<AtlasTransform>>& transforms);
