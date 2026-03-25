@@ -12,6 +12,7 @@
 #include "Heuristic/IBounds.hpp"
 #include "Heuristic/IHeuristic.hpp"
 #include "Network/NetworkIdentity.hpp"
+#include "Snapshot/TemporaryMigrationService.hpp"
 class BoundLeaser : public Singleton<BoundLeaser>
 {
 	Log logger = Log("BoundLeaser");
@@ -25,6 +26,12 @@ class BoundLeaser : public Singleton<BoundLeaser>
 	{
 		while (!st.stop_requested())
 		{
+			if (TemporaryMigrationService::Get().IsMigrationInProgress())
+			{
+				std::this_thread::sleep_for(std::chrono::milliseconds(100));
+				continue;
+			}
+
 			std::optional<BoundsID> claimedBoundID;
 			{
 				std::lock_guard lock(ClaimedBoundMutex);

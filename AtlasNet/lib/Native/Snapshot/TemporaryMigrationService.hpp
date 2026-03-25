@@ -20,14 +20,20 @@ class TemporaryMigrationService : public Singleton<TemporaryMigrationService>
 	Log logger = Log("TemporaryMigrationService");
 	std::jthread adoptionThread;
 	std::atomic_bool migrationInProgress = false;
+	std::atomic_bool processTerminating = false;
 	std::mutex migrationMutex;
 	PacketManager::Subscription migrationTriggerSubscription;
 
    public:
 	TemporaryMigrationService();
+	void BeginProcessTermination()
+	{
+		processTerminating.store(true, std::memory_order_release);
+	}
 	bool IsMigrationInProgress() const
 	{
-		return migrationInProgress.load(std::memory_order_acquire);
+		return migrationInProgress.load(std::memory_order_acquire) ||
+			   processTerminating.load(std::memory_order_acquire);
 	}
 	void TriggerForCurrentShardSigterm();
 	void Shutdown();

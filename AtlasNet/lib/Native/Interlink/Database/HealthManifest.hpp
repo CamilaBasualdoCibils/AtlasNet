@@ -62,6 +62,19 @@ class HealthManifest : public Singleton<HealthManifest>
 				}
 				});
 	}
+	void Shutdown()
+	{
+		if (HealthPingIntervalFunc.joinable())
+		{
+			HealthPingIntervalFunc.request_stop();
+			HealthPingIntervalFunc.join();
+		}
+		if (HealthCheckOnFailureFunc.joinable())
+		{
+			HealthCheckOnFailureFunc.request_stop();
+			HealthCheckOnFailureFunc.join();
+		}
+	}
 	void RemovePingByIdentity(const NetworkIdentity& key)
 	{
 		ByteWriter bw;

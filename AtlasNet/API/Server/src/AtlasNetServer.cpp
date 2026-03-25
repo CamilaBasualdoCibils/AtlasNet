@@ -60,7 +60,6 @@ void IAtlasNetServer::AtlasNet_Initialize()
 				[](SignalType signal)
 				{
 					(void)signal;
-					TemporaryMigrationService::Get().TriggerForCurrentShardSigterm();
 					GetInstance().Shutdown();
 				}});
 	GlobalEvents::Get().Subscribe<ClientConnectEvent>(
@@ -87,6 +86,8 @@ void IAtlasNetServer::Shutdown()
 		return;
 	}
 
+	TemporaryMigrationService::Get().BeginProcessTermination();
+	HealthManifest::Get().Shutdown();
 	TemporaryMigrationService::Get().TriggerForCurrentShardSigterm();
 	TemporaryMigrationService::Get().Shutdown();
 	Interlink::Get().Shutdown();
