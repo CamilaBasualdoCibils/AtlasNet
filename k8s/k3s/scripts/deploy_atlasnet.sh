@@ -127,6 +127,7 @@ fi
 : "${DOCKERHUB_EMAIL:=atlasnet@example.invalid}"
 : "${ATLASNET_WAIT_FOR_SHARD_READY:=true}"
 : "${ATLASNET_HELM_RELEASE_NAME:=atlasnet}"
+: "${ATLASNET_NODE_LOSS_TOLERATION_SECONDS:=5}"
 : "${ATLASNET_CARTOGRAPH_INGRESS_CLASS_NAME:=nginx}"
 : "${ATLASNET_CARTOGRAPH_INGRESS_HOST:=cartograph.atlasnet.local}"
 : "${ATLASNET_K8S_LLM_ENABLED:=1}"
@@ -167,6 +168,7 @@ echo " - sandbox server image: $ATLASNET_SANDBOX_SERVER_IMAGE"
 echo " - cartograph image: $ATLASNET_CARTOGRAPH_IMAGE"
 echo " - imagePullPolicy: $ATLASNET_IMAGE_PULL_POLICY"
 echo " - cartograph ingress host: $ATLASNET_CARTOGRAPH_INGRESS_HOST"
+echo " - node loss toleration seconds: $ATLASNET_NODE_LOSS_TOLERATION_SECONDS"
 echo " - llm enabled: $ATLASNET_K8S_LLM_ENABLED"
 
 warn_if_mixed_arch_cluster
@@ -184,6 +186,7 @@ helm upgrade --install "$ATLASNET_HELM_RELEASE_NAME" "$CHART_DIR" \
   --set-string images.proxy="$ATLASNET_PROXY_IMAGE" \
   --set-string images.shard="$ATLASNET_SANDBOX_SERVER_IMAGE" \
   --set-string images.cartograph="$ATLASNET_CARTOGRAPH_IMAGE" \
+  --set failover.nodeLossTolerationSeconds="$ATLASNET_NODE_LOSS_TOLERATION_SECONDS" \
   --set-string cartograph.mode="production" \
   --set-string cartograph.ingress.className="$ATLASNET_CARTOGRAPH_INGRESS_CLASS_NAME" \
   --set-string cartograph.ingress.host="$ATLASNET_CARTOGRAPH_INGRESS_HOST" \

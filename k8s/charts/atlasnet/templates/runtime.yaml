@@ -6,6 +6,7 @@
 {{- $cartographImage := required "values.images.cartograph is required" .Values.images.cartograph -}}
 {{- $internaldbImage := required "values.images.internaldb is required" .Values.images.internaldb -}}
 {{- $cartographMode := default "development" .Values.cartograph.mode -}}
+{{- $nodeLossTolerationSeconds := int (default 15 .Values.failover.nodeLossTolerationSeconds) -}}
 {{- $llmEnabled := default false .Values.llm.enabled -}}
 {{- $llmImage := default "ghcr.io/ggml-org/llama.cpp:server" .Values.llm.image -}}
 {{- $llmServicePort := int (default 8080 .Values.llm.servicePort) -}}
@@ -164,6 +165,14 @@ spec:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
       containers:
         - name: watchdog
           image: {{ $watchdogImage | quote }}
@@ -225,6 +234,15 @@ spec:
         atlasnet.role: shard
     spec:
       terminationGracePeriodSeconds: 5
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -378,6 +396,14 @@ spec:
         - key: node-role.kubernetes.io/master
           operator: Exists
           effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
       containers:
         - name: cartograph
           image: {{ $cartographImage | quote }}
@@ -506,6 +532,15 @@ spec:
       labels:
         app: atlasnet-proxy
     spec:
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -623,6 +658,15 @@ spec:
         app: atlasnet-llm
         atlasnet.role: llm
     spec:
+      tolerations:
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
       initContainers:
         - name: model-download
           image: curlimages/curl:8.12.1

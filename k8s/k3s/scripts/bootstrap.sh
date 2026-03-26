@@ -9,6 +9,21 @@ CONTEXT_NAME="k3s-homelab"
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it first."; }
 
+append_arg_if_missing() {
+  local -n ref="$1"
+  local prefix="$2"
+  local full_arg="$3"
+
+  if [[ " ${ref} " == *" ${prefix}"* ]]; then
+    return 0
+  fi
+
+  if [[ -n "$ref" ]]; then
+    ref+=" "
+  fi
+  ref+="$full_arg"
+}
+
 CLI_SERVER_IPS=""
 CLI_SERVER_SSH_USER=""
 CLI_SSH_KEY=""
@@ -101,9 +116,13 @@ done
 : "${WORKER_SSH_USER:=pi}"
 : "${WORKER_IPS:=}"
 : "${K3S_EXTRA_ARGS:=}"
+: "${K3S_AGENT_EXTRA_ARGS:=}"
 : "${K3S_VERSION:=}"
 : "${K3SUP_VERSION:=}"
 : "${K3SUP_USE_SUDO:=true}"
+: "${K3S_NODE_MONITOR_PERIOD:=2s}"
+: "${K3S_NODE_MONITOR_GRACE_PERIOD:=10s}"
+: "${K3S_KUBELET_NODE_STATUS_UPDATE_FREQUENCY:=4s}"
 
 # Derive primary server entry (may be \"user@ip\" or just \"ip\")
 PRIMARY_SERVER_ENTRY="${SERVER_IPS%% *}"
@@ -404,8 +423,29 @@ install_k3sup_if_missing
 
 echo "Installing k3s server on $PRIMARY_SERVER_IP (first server) ..."
 K3S_SERVER_ARGS="--write-kubeconfig-mode 644"
+append_arg_if_missing \
+  K3S_SERVER_ARGS \
+  "--kube-controller-manager-arg=node-monitor-period=" \
+  "--kube-controller-manager-arg=node-monitor-period=${K3S_NODE_MONITOR_PERIOD}"
+append_arg_if_missing \
+  K3S_SERVER_ARGS \
+  "--kube-controller-manager-arg=node-monitor-grace-period=" \
+  "--kube-controller-manager-arg=node-monitor-grace-period=${K3S_NODE_MONITOR_GRACE_PERIOD}"
+append_arg_if_missing \
+  K3S_SERVER_ARGS \
+  "--kubelet-arg=node-status-update-frequency=" \
+  "--kubelet-arg=node-status-update-frequency=${K3S_KUBELET_NODE_STATUS_UPDATE_FREQUENCY}"
 if [[ -n "$K3S_EXTRA_ARGS" ]]; then
   K3S_SERVER_ARGS+=" ${K3S_EXTRA_ARGS}"
+fi
+
+K3S_JOIN_AGENT_ARGS=""
+append_arg_if_missing \
+  K3S_JOIN_AGENT_ARGS \
+  "--kubelet-arg=node-status-update-frequency=" \
+  "--kubelet-arg=node-status-update-frequency=${K3S_KUBELET_NODE_STATUS_UPDATE_FREQUENCY}"
+if [[ -n "$K3S_AGENT_EXTRA_ARGS" ]]; then
+  K3S_JOIN_AGENT_ARGS+=" ${K3S_AGENT_EXTRA_ARGS}"
 fi
 
 K3SUP_INSTALL_ARGS=(
@@ -456,6 +496,7 @@ if [[ ${#SERVER_IPS_ARR[@]} -gt 1 ]]; then
       --user "$join_user" \
       --server \
       --sudo "$K3SUP_USE_SUDO" \
+      --k3s-extra-args "$K3S_SERVER_ARGS" \
       --ssh-key "$SSH_KEY" &
     join_pids+=($!)
     join_labels+=("server $join_user@$join_host")
@@ -499,6 +540,7 @@ else
       --ip "$worker_host" \
       --user "$worker_user" \
       --sudo "$K3SUP_USE_SUDO" \
+      --k3s-extra-args "$K3S_JOIN_AGENT_ARGS" \
       --ssh-key "$SSH_KEY" &
     worker_pids+=($!)
     worker_labels+=("worker $worker_user@$worker_host")

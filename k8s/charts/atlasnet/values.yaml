@@ -2,6 +2,9 @@ serverNodeName: ""
 
 imagePullPolicy: IfNotPresent
 
+failover:
+  nodeLossTolerationSeconds: 15
+
 images:
   watchdog: watchdog:latest
   proxy: proxy:latest

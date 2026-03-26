@@ -17,6 +17,10 @@ SKIP_RESTART_ON_FRESH_CLUSTER="${ATLASNET_K3D_SKIP_RESTART_ON_FRESH_CLUSTER:-1}"
 CORE_ROLLOUT_MODE="${ATLASNET_K3D_CORE_ROLLOUT_MODE:-parallel}"
 WAIT_FOR_SHARD_READY="${ATLASNET_K3D_WAIT_FOR_SHARD_READY:-1}"
 IMAGE_PULL_POLICY="${ATLASNET_IMAGE_PULL_POLICY:-IfNotPresent}"
+NODE_LOSS_TOLERATION_SECONDS="${ATLASNET_K3D_NODE_LOSS_TOLERATION_SECONDS:-${ATLASNET_NODE_LOSS_TOLERATION_SECONDS:-5}}"
+NODE_MONITOR_PERIOD="${ATLASNET_K3D_NODE_MONITOR_PERIOD:-2s}"
+NODE_MONITOR_GRACE_PERIOD="${ATLASNET_K3D_NODE_MONITOR_GRACE_PERIOD:-10s}"
+KUBELET_NODE_STATUS_UPDATE_FREQUENCY="${ATLASNET_K3D_KUBELET_NODE_STATUS_UPDATE_FREQUENCY:-4s}"
 WATCHDOG_IMAGE_NAME="${ATLASNET_WATCHDOG_IMAGE:-watchdog:latest}"
 PROXY_IMAGE_NAME="${ATLASNET_PROXY_IMAGE:-proxy:latest}"
 CARTOGRAPH_IMAGE_NAME="${ATLASNET_CARTOGRAPH_IMAGE:-cartograph:latest}"
@@ -206,6 +210,10 @@ if ((CLUSTER_EXISTS == 0)); then
         -p "80:80@loadbalancer" \
         -p "443:443@loadbalancer" \
         -p "2555:2555/udp@loadbalancer" \
+        --k3s-arg "--kube-controller-manager-arg=node-monitor-period=${NODE_MONITOR_PERIOD}@server:*" \
+        --k3s-arg "--kube-controller-manager-arg=node-monitor-grace-period=${NODE_MONITOR_GRACE_PERIOD}@server:*" \
+        --k3s-arg "--kubelet-arg=node-status-update-frequency=${KUBELET_NODE_STATUS_UPDATE_FREQUENCY}@server:*" \
+        --k3s-arg "--kubelet-arg=node-status-update-frequency=${KUBELET_NODE_STATUS_UPDATE_FREQUENCY}@agent:*" \
         --volume "/var/run/docker.sock:/var/run/docker.sock@all"
 else
     echo "==> k3d cluster '$CLUSTER_NAME' already exists."
@@ -806,6 +814,7 @@ helm template "$HELM_RELEASE_NAME" "$CHART_DIR" \
     --set-string images.proxy="$PROXY_IMAGE_NAME" \
     --set-string images.shard="$SHARD_IMAGE_NAME" \
     --set-string images.cartograph="$CARTOGRAPH_IMAGE_NAME" \
+    --set failover.nodeLossTolerationSeconds="$NODE_LOSS_TOLERATION_SECONDS" \
     --set-string cartograph.mode="development" \
     --set-string cartograph.ingress.className="$CARTOGRAPH_INGRESS_CLASS_NAME" \
     --set-string cartograph.ingress.host="$CARTOGRAPH_INGRESS_HOST" \
