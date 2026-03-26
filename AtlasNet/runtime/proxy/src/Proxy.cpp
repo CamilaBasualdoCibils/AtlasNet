@@ -1,5 +1,8 @@
 #include "Proxy.hpp"
 
+#include <boost/uuid/name_generator.hpp>
+
+#include <cstdlib>
 #include <thread>
 
 #include "Command/CommandRouter.hpp"
@@ -10,6 +13,35 @@
 #include "Interlink/Interlink.hpp"
 #include "Interlink/Telemetry/NetworkManifest.hpp"
 #include "Network/NetworkCredentials.hpp"
+
+namespace
+{
+std::optional<UUID> ResolveStableProxyUUID()
+{
+	if (const char* configuredUUID = std::getenv("ATLASNET_PROXY_UUID");
+		configuredUUID && *configuredUUID)
+	{
+		try
+		{
+			return UUIDGen::FromString(configuredUUID);
+		}
+		catch (...)
+		{
+		}
+	}
+
+	if (const char* podName = std::getenv("POD_NAME"); podName && *podName)
+	{
+		static const UUID dnsNamespace =
+			UUIDGen::FromString("6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+		static boost::uuids::name_generator generator(dnsNamespace);
+		return generator(std::string("atlasnet-proxy:") + podName);
+	}
+
+	return std::nullopt;
+}
+}  // namespace
+
 void Proxy::Run()
 {
 	logger->Debug("Init");	// hello
@@ -30,7 +62,8 @@ void Proxy::Run()
 void Proxy::Init()
 {
 	CrashHandler::Get().Init();
-	NetworkCredentials::Make(NetworkIdentity(NetworkIdentityType::eProxy, UUIDGen::Gen()));
+	const UUID proxyUUID = ResolveStableProxyUUID().value_or(UUIDGen::Gen());
+	NetworkCredentials::Make(NetworkIdentity(NetworkIdentityType::eProxy, proxyUUID));
 
 	Interlink::Get().Init();
 	CommandRouter::Ensure();

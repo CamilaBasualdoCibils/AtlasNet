@@ -528,6 +528,10 @@ spec:
           env:
             - name: HANDSHAKE_SERVICE_ENABLE
               value: "1"
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
             - name: POD_IP
               valueFrom:
                 fieldRef:
