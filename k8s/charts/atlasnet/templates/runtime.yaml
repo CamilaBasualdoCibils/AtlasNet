@@ -224,7 +224,7 @@ spec:
         app: atlasnet-shard
         atlasnet.role: shard
     spec:
-      terminationGracePeriodSeconds: 60
+      terminationGracePeriodSeconds: 5
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -256,7 +256,7 @@ spec:
                     i=0
                     while kill -0 1 2>/dev/null; do
                       i=$((i + 1))
-                      if [ "$i" -ge 55 ]; then
+                      if [ "$i" -ge 4 ]; then
                         break
                       fi
                       sleep 1
