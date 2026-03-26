@@ -619,6 +619,24 @@ void AppendSeedsForHotspot(
 
 	const float minExtent =
 		std::min(options.NetHalfExtent.x, options.NetHalfExtent.y);
+	const bool isSingleEntityHotspot = hotspot.weight >= 0.999;
+	if (isSingleEntityHotspot)
+	{
+		const float spread = std::clamp(minExtent * 0.7f, 24.0f, minExtent * 0.85f);
+		const uint32_t ringCount = seedCountForHotspot - 1;
+		for (uint32_t ringIndex = 0; ringIndex < ringCount; ++ringIndex)
+		{
+			const double angle =
+				(kTau * static_cast<double>(ringIndex)) /
+				static_cast<double>(std::max<uint32_t>(1, ringCount));
+			const glm::vec2 offset(
+				static_cast<float>(std::cos(angle)) * spread,
+				static_cast<float>(std::sin(angle)) * spread);
+			seeds.push_back(ClampToWorld(center + offset, options));
+		}
+		return;
+	}
+
 	const float spread = std::clamp(
 		static_cast<float>(hotspot.radius) * minExtent * 1.7f,
 		6.0f,
