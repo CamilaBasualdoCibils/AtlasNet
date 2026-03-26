@@ -5,6 +5,7 @@
 {{- $shardImage := required "values.images.shard is required" .Values.images.shard -}}
 {{- $cartographImage := required "values.images.cartograph is required" .Values.images.cartograph -}}
 {{- $internaldbImage := required "values.images.internaldb is required" .Values.images.internaldb -}}
+{{- $internaldbHost := printf "internaldb.%s.svc.cluster.local" .Release.Namespace -}}
 {{- $cartographMode := default "development" .Values.cartograph.mode -}}
 {{- $nodeLossTolerationSeconds := int (default 15 .Values.failover.nodeLossTolerationSeconds) -}}
 {{- $llmEnabled := default false .Values.llm.enabled -}}
@@ -189,7 +190,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: {{ $internaldbHost | quote }}
             - name: INTERNAL_REDIS_PORT
               value: "6379"
             {{- if or $llmEnabled $llmEndpoint }}
@@ -293,7 +294,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: {{ $internaldbHost | quote }}
             - name: INTERNAL_REDIS_PORT
               value: "6379"
           ports:
@@ -444,7 +445,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: {{ $internaldbHost | quote }}
             - name: INTERNAL_REDIS_PORT
               value: "6379"
           ports:
@@ -572,7 +573,7 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: {{ $internaldbHost | quote }}
             - name: INTERNAL_REDIS_PORT
               value: "6379"
           ports:
