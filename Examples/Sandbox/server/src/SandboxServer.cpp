@@ -117,37 +117,37 @@ void SandboxServer::Run()
 					logger.DebugFormatted(
 						"Skipping initial sandbox entity spawn. Bound {} did not win the atomic seed claim.",
 						boundID);
-					initialEntitySeedHandled = true;
-					continue;
 				}
-
-				size_t spawnedEntityCount = 0;
-				std::mt19937 rng(std::random_device{}());
-				std::uniform_real_distribution<float> dist(0.0f, 1.0f);
-				for (int i = 0; i < kInitialSandboxEntityCount; i++)
+				else
 				{
-					float z = dist(rng) * 2.0f - 1.0f;					 // z in [-1, 1]
-					float theta = dist(rng) * 2.0f * glm::pi<float>();	 // angle around Z
+					size_t spawnedEntityCount = 0;
+					std::mt19937 rng(std::random_device{}());
+					std::uniform_real_distribution<float> dist(0.0f, 1.0f);
+					for (int i = 0; i < kInitialSandboxEntityCount; i++)
+					{
+						float z = dist(rng) * 2.0f - 1.0f;					 // z in [-1, 1]
+						float theta = dist(rng) * 2.0f * glm::pi<float>();	 // angle around Z
 
-					float r = std::sqrt(1.0f - z * z) * 120.0f;
+						float r = std::sqrt(1.0f - z * z) * 120.0f;
 
-					float x = r * std::cos(theta);
-					float y = r * std::sin(theta);
+						float x = r * std::cos(theta);
+						float y = r * std::sin(theta);
 
-					vec3 velocityVec = vec3(x, y, 0);
-					AtlasTransform t;
-					const float spawnRadius = dist(rng) * 5.0f;
-					t.position =
-						spawnCenter + vec3(std::cos(theta), std::sin(theta), 0.0f) * spawnRadius;
-					ByteWriter metadataWriter;
-					metadataWriter.vec3(velocityVec);
-					AtlasNet_CreateEntity(t, metadataWriter.bytes());
-					++spawnedEntityCount;
+						vec3 velocityVec = vec3(x, y, 0);
+						AtlasTransform t;
+						const float spawnRadius = dist(rng) * 5.0f;
+						t.position = spawnCenter +
+									 vec3(std::cos(theta), std::sin(theta), 0.0f) * spawnRadius;
+						ByteWriter metadataWriter;
+						metadataWriter.vec3(velocityVec);
+						AtlasNet_CreateEntity(t, metadataWriter.bytes());
+						++spawnedEntityCount;
+					}
+
+					logger.DebugFormatted(
+						"Seeded {} initial sandbox entities on bound {} after winning the atomic seed claim. Local entity count is now {}.",
+						spawnedEntityCount, boundID, EntityLedger::Get().GetEntityCount());
 				}
-				logger.DebugFormatted(
-					"Seeded {} initial sandbox entities on bound {} after winning the atomic seed claim. Local entity count is now {}.",
-					spawnedEntityCount, boundID,
-					EntityLedger::Get().GetEntityCount());
 			}
 			else
 			{
