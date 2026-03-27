@@ -291,6 +291,16 @@ spec:
               value: {{ $internaldbHost | quote }}
             - name: INTERNAL_REDIS_PORT
               value: "6379"
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  getent hosts "$INTERNAL_REDIS_SERVICE_NAME" >/dev/null 2>&1
+            periodSeconds: 2
+            timeoutSeconds: 1
+            failureThreshold: 1
           ports:
             - name: interlink
               containerPort: 25555

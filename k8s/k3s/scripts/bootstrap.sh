@@ -24,6 +24,213 @@ append_arg_if_missing() {
   ref+="$full_arg"
 }
 
+configure_coredns_for_failover() {
+  local total_nodes=0
+  local desired_replicas=1
+  local primary_manifest_path="/var/lib/rancher/k3s/server/manifests/coredns.yaml"
+
+  for _entry in $SERVER_IPS; do
+    [[ -n "${_entry// }" ]] || continue
+    total_nodes=$((total_nodes + 1))
+  done
+  for _entry in $WORKER_IPS; do
+    [[ -n "${_entry// }" ]] || continue
+    total_nodes=$((total_nodes + 1))
+  done
+
+  if ((total_nodes > 1)); then
+    desired_replicas=2
+  fi
+
+  echo "Configuring CoreDNS for failover (replicas=${desired_replicas}) ..."
+  for _entry in $SERVER_IPS; do
+    [[ -n "$_entry" ]] || continue
+    _entry="${_entry//\"/}"
+    if [[ "$_entry" == *@* ]]; then
+      _user="${_entry%@*}"
+      _host="${_entry#*@}"
+    else
+      _user="$SERVER_SSH_USER"
+      _host="$_entry"
+    fi
+
+    if [[ "$K3SUP_USE_SUDO" == "true" ]]; then
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "sudo sh -s -- '$desired_replicas' '$primary_manifest_path'" <<'EOF'
+set -eu
+
+replicas="$1"
+manifest="$2"
+tmp="$(mktemp)"
+
+awk -v replicas="$replicas" '
+function print_affinity() {
+    print "      affinity:"
+    print "        podAntiAffinity:"
+    print "          preferredDuringSchedulingIgnoredDuringExecution:"
+    print "          - weight: 100"
+    print "            podAffinityTerm:"
+    print "              labelSelector:"
+    print "                matchLabels:"
+    print "                  k8s-app: kube-dns"
+    print "              topologyKey: kubernetes.io/hostname"
+}
+
+BEGIN {
+    in_deployment = 0
+    deployment_spec_seen = 0
+    in_pod_spec = 0
+    skipping_affinity = 0
+}
+
+$0 == "kind: Deployment" {
+    in_deployment = 1
+}
+
+in_deployment && !deployment_spec_seen && $0 == "spec:" {
+    print
+    print "  replicas: " replicas
+    deployment_spec_seen = 1
+    next
+}
+
+deployment_spec_seen && $0 ~ /^  replicas: / {
+    next
+}
+
+$0 == "    spec:" {
+    in_pod_spec = 1
+    print
+    next
+}
+
+in_pod_spec && $0 == "      affinity:" {
+    skipping_affinity = 1
+    next
+}
+
+skipping_affinity {
+    if ($0 == "      topologySpreadConstraints:" || $0 == "      volumes:") {
+        print_affinity()
+        skipping_affinity = 0
+        in_pod_spec = 0
+        print
+    }
+    next
+}
+
+in_pod_spec && $0 == "      topologySpreadConstraints:" {
+    print_affinity()
+    in_pod_spec = 0
+    print
+    next
+}
+
+{
+    print
+}
+' "$manifest" >"$tmp"
+
+mv "$tmp" "$manifest"
+EOF
+    else
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "sh -s -- '$desired_replicas' '$primary_manifest_path'" <<'EOF'
+set -eu
+
+replicas="$1"
+manifest="$2"
+tmp="$(mktemp)"
+
+awk -v replicas="$replicas" '
+function print_affinity() {
+    print "      affinity:"
+    print "        podAntiAffinity:"
+    print "          preferredDuringSchedulingIgnoredDuringExecution:"
+    print "          - weight: 100"
+    print "            podAffinityTerm:"
+    print "              labelSelector:"
+    print "                matchLabels:"
+    print "                  k8s-app: kube-dns"
+    print "              topologyKey: kubernetes.io/hostname"
+}
+
+BEGIN {
+    in_deployment = 0
+    deployment_spec_seen = 0
+    in_pod_spec = 0
+    skipping_affinity = 0
+}
+
+$0 == "kind: Deployment" {
+    in_deployment = 1
+}
+
+in_deployment && !deployment_spec_seen && $0 == "spec:" {
+    print
+    print "  replicas: " replicas
+    deployment_spec_seen = 1
+    next
+}
+
+deployment_spec_seen && $0 ~ /^  replicas: / {
+    next
+}
+
+$0 == "    spec:" {
+    in_pod_spec = 1
+    print
+    next
+}
+
+in_pod_spec && $0 == "      affinity:" {
+    skipping_affinity = 1
+    next
+}
+
+skipping_affinity {
+    if ($0 == "      topologySpreadConstraints:" || $0 == "      volumes:") {
+        print_affinity()
+        skipping_affinity = 0
+        in_pod_spec = 0
+        print
+    }
+    next
+}
+
+in_pod_spec && $0 == "      topologySpreadConstraints:" {
+    print_affinity()
+    in_pod_spec = 0
+    print
+    next
+}
+
+{
+    print
+}
+' "$manifest" >"$tmp"
+
+mv "$tmp" "$manifest"
+EOF
+    fi
+  done
+
+  ssh -i "$SSH_KEY" \
+    -o BatchMode=yes \
+    -o StrictHostKeyChecking=accept-new \
+    -o ConnectTimeout=5 \
+    "${PRIMARY_SERVER_USER_DEFAULT}@${PRIMARY_SERVER_IP}" \
+    "cat '$primary_manifest_path'" | kubectl apply -f - >/dev/null
+
+  kubectl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null
+}
+
 CLI_SERVER_IPS=""
 CLI_SERVER_SSH_USER=""
 CLI_SSH_KEY=""
@@ -562,6 +769,8 @@ fi
 
 echo "Cluster context: $CONTEXT_NAME"
 kubectl config use-context "$CONTEXT_NAME" >/dev/null
+
+configure_coredns_for_failover
 
 echo
 echo "Done. Verify with:"

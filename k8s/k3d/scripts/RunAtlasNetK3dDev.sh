@@ -618,7 +618,102 @@ kctl() {
     "${KUBECTL[@]}" "$@"
 }
 
+configure_coredns_for_failover() {
+    local total_nodes desired_replicas server_node manifest_path
+    total_nodes=$((K3D_SERVER_COUNT + K3D_AGENT_COUNT))
+    desired_replicas=1
+    if ((total_nodes > 1)); then
+        desired_replicas=2
+    fi
+
+    server_node="$SERVER_NODE_NAME"
+    manifest_path="/var/lib/rancher/k3s/server/manifests/coredns.yaml"
+
+    echo "==> Configuring CoreDNS for failover (replicas=${desired_replicas})..."
+    docker exec -i "$server_node" sh -s -- "$desired_replicas" "$manifest_path" <<'EOF'
+set -eu
+
+replicas="$1"
+manifest="$2"
+tmp="$(mktemp)"
+
+awk -v replicas="$replicas" '
+function print_affinity() {
+    print "      affinity:"
+    print "        podAntiAffinity:"
+    print "          preferredDuringSchedulingIgnoredDuringExecution:"
+    print "          - weight: 100"
+    print "            podAffinityTerm:"
+    print "              labelSelector:"
+    print "                matchLabels:"
+    print "                  k8s-app: kube-dns"
+    print "              topologyKey: kubernetes.io/hostname"
+}
+
+BEGIN {
+    in_deployment = 0
+    deployment_spec_seen = 0
+    in_pod_spec = 0
+    skipping_affinity = 0
+}
+
+$0 == "kind: Deployment" {
+    in_deployment = 1
+}
+
+in_deployment && !deployment_spec_seen && $0 == "spec:" {
+    print
+    print "  replicas: " replicas
+    deployment_spec_seen = 1
+    next
+}
+
+deployment_spec_seen && $0 ~ /^  replicas: / {
+    next
+}
+
+$0 == "    spec:" {
+    in_pod_spec = 1
+    print
+    next
+}
+
+in_pod_spec && $0 == "      affinity:" {
+    skipping_affinity = 1
+    next
+}
+
+skipping_affinity {
+    if ($0 == "      topologySpreadConstraints:" || $0 == "      volumes:") {
+        print_affinity()
+        skipping_affinity = 0
+        in_pod_spec = 0
+        print
+    }
+    next
+}
+
+in_pod_spec && $0 == "      topologySpreadConstraints:" {
+    print_affinity()
+    in_pod_spec = 0
+    print
+    next
+}
+
+{
+    print
+}
+' "$manifest" >"$tmp"
+
+mv "$tmp" "$manifest"
+EOF
+
+    docker exec -i "$server_node" cat "$manifest_path" | kctl apply -f - >/dev/null
+    kctl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null
+}
+
 kctl wait --for=condition=Ready nodes --all --timeout=120s >/dev/null
+configure_coredns_for_failover
 
 ATLASNET_FORCE_IMAGE_IMPORT="${ATLASNET_FORCE_IMAGE_IMPORT:-0}"
 IMAGE_CACHE_FILE="${ATLASNET_K3D_IMAGE_CACHE_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-image-cache.txt}"

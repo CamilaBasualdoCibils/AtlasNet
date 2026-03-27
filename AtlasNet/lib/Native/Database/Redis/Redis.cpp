@@ -6,8 +6,12 @@
 #include <sw/redis++/redis.h>
 #include <sw/redis++/redis_cluster.h>
 
+#include <chrono>
+#include <cctype>
+#include <format>
 #include <iostream>
 #include <memory>
+#include <thread>
 static bool LooksLikeNotClusterError(const std::string& msg)
 {
 	std::string s;
@@ -52,8 +56,8 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint3
 												uint32_t retry_interval_ms)
 {
 	// ---- Fast path (locked, no I/O) ----
-	std::lock_guard<std::mutex> lock(connections_mutex);
 	{
+		std::lock_guard<std::mutex> lock(connections_mutex);
 		auto it = redis_connections.find(in_options);
 		if (it != redis_connections.end())
 		{
@@ -71,6 +75,9 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint3
 	pool.size = 5;
 
 	uint32_t attempt = 0;
+	const bool retry_forever = (max_retries == 0);
+	const std::string total_attempts_label =
+		retry_forever ? "infinite" : std::to_string(max_retries + 1);
 
 	for (;;)
 	{
@@ -100,26 +107,29 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint3
 			}
 			redisC->Set("test", "test");
 			redisC->Del("test");
-			auto& slot = redis_connections[in_options];
+			{
+				std::lock_guard<std::mutex> lock(connections_mutex);
+				auto& slot = redis_connections[in_options];
 
-			// Another thread may have won the race
-			if (auto existing = slot.lock())
-				return existing;
+				// Another thread may have won the race while we were connecting.
+				if (auto existing = slot.lock())
+					return existing;
 
-			slot = redisC;
+				slot = redisC;
+			}
 
 			std::cerr << "Successfully Connected to Redis\n";
 			return redisC;
 		}
 		catch (const sw::redis::Error& e)
 		{
-			if (attempt >= max_retries)
+			if (!retry_forever && attempt >= max_retries)
 				throw;
 
 			++attempt;
 
 			std::cerr << std::format("Redis connect failed (attempt {}/{}): {}", attempt,
-									 max_retries + 1, e.what())
+									 total_attempts_label, e.what())
 					  << std::endl;
 
 			if (retry_interval_ms > 0)
