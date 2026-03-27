@@ -217,6 +217,11 @@ fi
 report_image_pull_issues
 
 echo
+echo "AtlasNet node quarantine report:"
+bash "$ROOT_DIR/scripts/report_atlasnet_cluster_status.sh" "$ATLASNET_K8S_NAMESPACE" || true
+
+echo
 echo "Deployment complete."
 kubectl -n "$ATLASNET_K8S_NAMESPACE" get pods,svc -o wide
 echo "Cartograph ingress: http://$ATLASNET_CARTOGRAPH_INGRESS_HOST"
+echo "Reconnect validation target: real k3s cable pull / replug. Local k3d pause/unpause is only a dev approximation."

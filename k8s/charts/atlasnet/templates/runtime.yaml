@@ -6,6 +6,10 @@
 {{- $cartographImage := required "values.images.cartograph is required" .Values.images.cartograph -}}
 {{- $internaldbImage := required "values.images.internaldb is required" .Values.images.internaldb -}}
 {{- $internaldbHost := printf "internaldb.%s.svc.cluster.local" .Release.Namespace -}}
+{{- $internaldbUnreachableTaintKey := "atlasnet.io/internaldb-unreachable" -}}
+{{- $internaldbNetcheckStatusAnnotation := "atlasnet.io/internaldb-netcheck-status" -}}
+{{- $internaldbNetcheckReasonAnnotation := "atlasnet.io/internaldb-netcheck-reason" -}}
+{{- $internaldbNetcheckUpdatedAtAnnotation := "atlasnet.io/internaldb-netcheck-updated-at" -}}
 {{- $cartographMode := default "development" .Values.cartograph.mode -}}
 {{- $nodeLossTolerationSeconds := int (default 15 .Values.failover.nodeLossTolerationSeconds) -}}
 {{- $llmEnabled := default false .Values.llm.enabled -}}
@@ -57,6 +61,18 @@ apiVersion: v1
 kind: ServiceAccount
 metadata:
   name: atlasnet-cartograph
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-node-netcheck
+  namespace: {{ .Release.Namespace }}
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlasnet-node-taint-controller
   namespace: {{ .Release.Namespace }}
 ---
 apiVersion: rbac.authorization.k8s.io/v1
@@ -122,6 +138,316 @@ roleRef:
   kind: ClusterRole
   name: atlasnet-cartograph-cluster-reader
 ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: atlasnet-node-taint-controller
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+      - list
+      - patch
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - pods
+      - pods/log
+    verbs:
+      - get
+      - list
+      - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: atlasnet-node-taint-controller
+subjects:
+  - kind: ServiceAccount
+    name: atlasnet-node-taint-controller
+    namespace: {{ .Release.Namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: atlasnet-node-taint-controller
+---
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: atlasnet-node-netcheck
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: atlasnet-node-netcheck
+spec:
+  selector:
+    matchLabels:
+      app: atlasnet-node-netcheck
+  template:
+    metadata:
+      labels:
+        app: atlasnet-node-netcheck
+    spec:
+      serviceAccountName: atlasnet-node-netcheck
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: netcheck
+          image: nicolaka/netshoot:v0.13
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+            - name: TARGET_HOST
+              value: {{ $internaldbHost | quote }}
+            - name: TARGET_PORT
+              value: "6379"
+          volumeMounts:
+            - name: netcheck-status
+              mountPath: /var/run/atlasnet-netcheck
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              STATUS_DIR="/var/run/atlasnet-netcheck"
+              READY_FILE="${STATUS_DIR}/ready"
+              REASON_FILE="${STATUS_DIR}/reason"
+              mkdir -p "$STATUS_DIR"
+              last_reason=""
+
+              while true; do
+                reason="ok"
+                if ! getent hosts "$TARGET_HOST" >/dev/null 2>&1; then
+                  reason="dns"
+                elif ! nc -z -w 2 "$TARGET_HOST" "$TARGET_PORT" >/dev/null 2>&1; then
+                  reason="internaldb-tcp"
+                elif ! nc -z -w 2 "$KUBERNETES_SERVICE_HOST" "$KUBERNETES_SERVICE_PORT" >/dev/null 2>&1; then
+                  reason="api-tcp"
+                fi
+
+                printf '%s\n' "$reason" >"$REASON_FILE"
+                if [ "$reason" = "ok" ]; then
+                  : >"$READY_FILE"
+                else
+                  rm -f "$READY_FILE"
+                fi
+
+                if [ "$reason" != "$last_reason" ]; then
+                  status="healthy"
+                  if [ "$reason" != "ok" ]; then
+                    status="unhealthy"
+                  fi
+                  echo "$(date -Iseconds) atlasnet-node-netcheck node=${NODE_NAME} status=${status} reason=${reason}"
+                  last_reason="$reason"
+                fi
+
+                sleep 2
+              done
+          readinessProbe:
+            exec:
+              command:
+                - /bin/sh
+                - -c
+                - |
+                  test -f /var/run/atlasnet-netcheck/ready
+            periodSeconds: 2
+            timeoutSeconds: 3
+            failureThreshold: 1
+      volumes:
+        - name: netcheck-status
+          emptyDir: {}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: atlasnet-node-taint-controller
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: atlasnet-node-taint-controller
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: atlasnet-node-taint-controller
+  template:
+    metadata:
+      labels:
+        app: atlasnet-node-taint-controller
+    spec:
+      serviceAccountName: atlasnet-node-taint-controller
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: kubernetes.io/hostname
+                    operator: In
+                    values:
+                      - {{ $serverNodeName | quote }}
+      tolerations:
+        - key: node-role.kubernetes.io/control-plane
+          operator: Exists
+          effect: NoSchedule
+        - key: node-role.kubernetes.io/master
+          operator: Exists
+          effect: NoSchedule
+        - key: node.kubernetes.io/not-ready
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: node.kubernetes.io/unreachable
+          operator: Exists
+          effect: NoExecute
+          tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
+      containers:
+        - name: controller
+          image: nicolaka/netshoot:v0.13
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: TAINT_KEY
+              value: {{ $internaldbUnreachableTaintKey | quote }}
+            - name: STATUS_ANNOTATION
+              value: {{ $internaldbNetcheckStatusAnnotation | quote }}
+            - name: REASON_ANNOTATION
+              value: {{ $internaldbNetcheckReasonAnnotation | quote }}
+            - name: UPDATED_AT_ANNOTATION
+              value: {{ $internaldbNetcheckUpdatedAtAnnotation | quote }}
+          command:
+            - /bin/sh
+            - -c
+            - |
+              set -eu
+              TOKEN_PATH="/var/run/secrets/kubernetes.io/serviceaccount/token"
+              CA_PATH="/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
+              API_BASE="https://${KUBERNETES_SERVICE_HOST}:${KUBERNETES_SERVICE_PORT}"
+
+              api_get() {
+                curl --silent --show-error --fail \
+                  --cacert "$CA_PATH" \
+                  -H "Authorization: Bearer $(cat "$TOKEN_PATH")" \
+                  "$@"
+              }
+
+              api_try_get() {
+                curl --silent --show-error \
+                  --cacert "$CA_PATH" \
+                  -H "Authorization: Bearer $(cat "$TOKEN_PATH")" \
+                  "$@" 2>/dev/null || true
+              }
+
+              patch_node_state() {
+                node="$1"
+                taints_json="$2"
+                status="$3"
+                reason="$4"
+                updated_at="$5"
+                payload="$(jq -cn \
+                  --argjson taints "$taints_json" \
+                  --arg status "$status" \
+                  --arg reason "$reason" \
+                  --arg updated_at "$updated_at" \
+                  --arg status_annotation "$STATUS_ANNOTATION" \
+                  --arg reason_annotation "$REASON_ANNOTATION" \
+                  --arg updated_at_annotation "$UPDATED_AT_ANNOTATION" \
+                  '{spec:{taints:$taints},metadata:{annotations:{($status_annotation):$status,($reason_annotation):$reason,($updated_at_annotation):$updated_at}}}')"
+                curl --silent --show-error --fail \
+                  --cacert "$CA_PATH" \
+                  -H "Authorization: Bearer $(cat "$TOKEN_PATH")" \
+                  -H "Content-Type: application/merge-patch+json" \
+                  -X PATCH \
+                  "${API_BASE}/api/v1/nodes/${node}" \
+                  -d "$payload" >/dev/null
+              }
+
+              while true; do
+                for node in $(api_get "${API_BASE}/api/v1/nodes" | jq -r '.items[].metadata.name'); do
+                  node_json="$(api_get "${API_BASE}/api/v1/nodes/${node}")"
+                  node_ready="$(printf '%s' "$node_json" | jq -r '([.status.conditions[]? | select(.type == "Ready") | .status] | first) // ""')"
+                  node_status="$(printf '%s' "$node_json" | jq -r --arg key "$STATUS_ANNOTATION" '.metadata.annotations[$key] // ""')"
+                  node_reason="$(printf '%s' "$node_json" | jq -r --arg key "$REASON_ANNOTATION" '.metadata.annotations[$key] // ""')"
+                  pod_json="$(api_get --get "${API_BASE}/api/v1/namespaces/${POD_NAMESPACE}/pods" \
+                    --data-urlencode "labelSelector=app=atlasnet-node-netcheck" \
+                    --data-urlencode "fieldSelector=spec.nodeName=${node}" \
+                    )"
+                  pod_name="$(printf '%s' "$pod_json" | jq -r '([.items[]?.metadata.name] | first) // ""')"
+                  ready="$(printf '%s' "$pod_json" | jq -r '([.items[]?.status.conditions[]? | select(.type=="Ready") | .status] | first) // ""')"
+                  tainted="$(printf '%s' "$node_json" | jq -r --arg key "$TAINT_KEY" '([.spec.taints[]? | select(.key == $key) | .effect] | first) // ""')"
+
+                  status="healthy"
+                  reason="ok"
+                  if [ -z "$pod_name" ]; then
+                    status="unhealthy"
+                    reason="netcheck-missing"
+                  elif [ "$ready" != "True" ]; then
+                    status="unhealthy"
+                    if [ "$node_ready" != "True" ]; then
+                      reason="node-unreachable"
+                    else
+                      reason="$(api_try_get "${API_BASE}/api/v1/namespaces/${POD_NAMESPACE}/pods/${pod_name}/log?tailLines=1" \
+                        | sed -n 's/.*reason=\([^[:space:]]*\).*/\1/p' | tail -n 1)"
+                      if [ -z "$reason" ]; then
+                        reason="netcheck-unready"
+                      fi
+                    fi
+                  fi
+
+                  if [ "$status" = "healthy" ]; then
+                    new_taints="$(printf '%s' "$node_json" | jq -c --arg key "$TAINT_KEY" '(.spec.taints // []) | map(select(.key != $key))')"
+                  else
+                    new_taints="$(printf '%s' "$node_json" | jq -c --arg key "$TAINT_KEY" '(.spec.taints // []) + [{"key":$key,"value":"true","effect":"NoSchedule"}] | unique_by(.key + ":" + .effect)')"
+                  fi
+
+                  expected_taint=""
+                  if [ "$status" != "healthy" ]; then
+                    expected_taint="NoSchedule"
+                  fi
+
+                  if [ "$tainted" != "$expected_taint" ] || [ "$node_status" != "$status" ] || [ "$node_reason" != "$reason" ]; then
+                    updated_at="$(date -Iseconds)"
+                    action="refresh"
+                    if [ -z "$tainted" ] && [ "$expected_taint" = "NoSchedule" ]; then
+                      action="taint"
+                    elif [ -n "$tainted" ] && [ -z "$expected_taint" ]; then
+                      action="untaint"
+                    fi
+                    echo "${updated_at} atlasnet-node-taint-controller node=${node} status=${status} reason=${reason} action=${action}"
+                    patch_node_state "$node" "$new_taints" "$status" "$reason" "$updated_at" || true
+                  fi
+                done
+                sleep 3
+              done
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
@@ -168,6 +494,9 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: watchdog
           image: {{ $watchdogImage | quote }}
@@ -299,7 +628,7 @@ spec:
                 - |
                   getent hosts "$INTERNAL_REDIS_SERVICE_NAME" >/dev/null 2>&1
             periodSeconds: 2
-            timeoutSeconds: 1
+            timeoutSeconds: 3
             failureThreshold: 1
           ports:
             - name: interlink
@@ -349,6 +678,9 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: internaldb
           image: {{ $internaldbImage | quote }}
@@ -442,6 +774,9 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
       containers:
         - name: cartograph
           image: {{ $cartographImage | quote }}
@@ -585,6 +920,9 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -638,6 +976,8 @@ kind: Service
 metadata:
   name: atlasnet-proxy
   namespace: {{ .Release.Namespace }}
+  labels:
+    svccontroller.k3s.cattle.io/lbpool: atlasnet-server
 spec:
   type: LoadBalancer
   sessionAffinity: ClientIP
@@ -720,6 +1060,9 @@ spec:
           operator: Exists
           effect: NoExecute
           tolerationSeconds: {{ $nodeLossTolerationSeconds }}
+        - key: {{ $internaldbUnreachableTaintKey | quote }}
+          operator: Exists
+          effect: NoSchedule
       initContainers:
         - name: model-download
           image: curlimages/curl:8.12.1

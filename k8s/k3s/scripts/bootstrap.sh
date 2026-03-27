@@ -5,9 +5,28 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PROJECT_KUBECONFIG_PATH="$ROOT_DIR/config/kubeconfig"
 TARGET_KUBECONFIG_PATH="${K3S_KUBECONFIG_PATH:-$HOME/.kube/config}"
 CONTEXT_NAME="k3s-homelab"
+NODELOCALDNS_TEMPLATE_PATH="$ROOT_DIR/manifests/nodelocaldns.yaml.tmpl"
+SERVICELB_POOL_NAME="${ATLASNET_K3S_SERVICELB_POOL_NAME:-atlasnet-server}"
+NODELOCAL_DNS_LOCAL_IP="${ATLASNET_K3S_NODELOCAL_DNS_LOCAL_IP:-169.254.20.10}"
+CLUSTER_DNS_DOMAIN="${ATLASNET_K3S_CLUSTER_DNS_DOMAIN:-cluster.local}"
 
 die() { echo "ERROR: $*" >&2; exit 1; }
 need_cmd() { command -v "$1" >/dev/null 2>&1 || die "Missing '$1'. Install it first."; }
+
+detect_server_node_name() {
+  local detected=""
+
+  detected="$(kubectl get nodes -l node-role.kubernetes.io/control-plane -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  if [[ -z "$detected" ]]; then
+    detected="$(kubectl get nodes -l node-role.kubernetes.io/master -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  fi
+  if [[ -z "$detected" ]]; then
+    detected="$(kubectl get nodes -o jsonpath='{.items[0].metadata.name}' 2>/dev/null || true)"
+  fi
+
+  [[ -n "$detected" ]] || die "Could not detect a Kubernetes node name while configuring cluster networking."
+  echo "$detected"
+}
 
 append_arg_if_missing() {
   local -n ref="$1"
@@ -229,6 +248,153 @@ EOF
     "cat '$primary_manifest_path'" | kubectl apply -f - >/dev/null
 
   kubectl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null
+}
+
+configure_external_entrypoints() {
+  local server_node_name
+  local traefik_config_path="/var/lib/rancher/k3s/server/manifests/traefik-config.yaml"
+
+  server_node_name="$(detect_server_node_name)"
+
+  echo "Configuring server-only external entrypoints on '${server_node_name}' ..."
+  while IFS= read -r node_name; do
+    [[ -n "${node_name:-}" ]] || continue
+    if [[ "$node_name" == "$server_node_name" ]]; then
+      kubectl label node "$node_name" \
+        svccontroller.k3s.cattle.io/enablelb=true \
+        svccontroller.k3s.cattle.io/lbpool="$SERVICELB_POOL_NAME" \
+        --overwrite >/dev/null
+    else
+      kubectl label node "$node_name" svccontroller.k3s.cattle.io/enablelb- >/dev/null 2>&1 || true
+      kubectl label node "$node_name" svccontroller.k3s.cattle.io/lbpool- >/dev/null 2>&1 || true
+    fi
+  done < <(kubectl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+
+  for _entry in $SERVER_IPS; do
+    [[ -n "$_entry" ]] || continue
+    _entry="${_entry//\"/}"
+    if [[ "$_entry" == *@* ]]; then
+      _user="${_entry%@*}"
+      _host="${_entry#*@}"
+    else
+      _user="$SERVER_SSH_USER"
+      _host="$_entry"
+    fi
+
+    if [[ "$K3SUP_USE_SUDO" == "true" ]]; then
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "sudo tee '$traefik_config_path' >/dev/null" <<EOF
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    nodeSelector:
+      kubernetes.io/hostname: ${server_node_name}
+    service:
+      labels:
+        svccontroller.k3s.cattle.io/lbpool: ${SERVICELB_POOL_NAME}
+EOF
+    else
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "tee '$traefik_config_path' >/dev/null" <<EOF
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    nodeSelector:
+      kubernetes.io/hostname: ${server_node_name}
+    service:
+      labels:
+        svccontroller.k3s.cattle.io/lbpool: ${SERVICELB_POOL_NAME}
+EOF
+    fi
+  done
+
+  kubectl apply -f - >/dev/null <<EOF
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    nodeSelector:
+      kubernetes.io/hostname: ${server_node_name}
+    service:
+      labels:
+        svccontroller.k3s.cattle.io/lbpool: ${SERVICELB_POOL_NAME}
+EOF
+
+  if kubectl -n kube-system get deployment/traefik >/dev/null 2>&1; then
+    kubectl -n kube-system rollout status deployment/traefik --timeout=180s >/dev/null
+  fi
+}
+
+configure_nodelocal_dns() {
+  local kube_dns_ip server_manifest_path rendered_manifest
+  server_manifest_path="/var/lib/rancher/k3s/server/manifests/nodelocaldns.yaml"
+
+  [[ -f "$NODELOCALDNS_TEMPLATE_PATH" ]] || die "Missing NodeLocal DNS template: $NODELOCALDNS_TEMPLATE_PATH"
+
+  kube_dns_ip="$(kubectl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}')"
+  [[ -n "$kube_dns_ip" ]] || die "Could not determine kube-dns ClusterIP while configuring NodeLocal DNSCache."
+
+  rendered_manifest="$(sed \
+    -e "s/__PILLAR__LOCAL__DNS__/${NODELOCAL_DNS_LOCAL_IP}/g" \
+    -e "s/__PILLAR__DNS__DOMAIN__/${CLUSTER_DNS_DOMAIN}/g" \
+    -e "s/__PILLAR__DNS__SERVER__/${kube_dns_ip}/g" \
+    "$NODELOCALDNS_TEMPLATE_PATH")"
+
+  echo "Configuring NodeLocal DNSCache (local IP ${NODELOCAL_DNS_LOCAL_IP}, kube-dns ${kube_dns_ip}) ..."
+  for _entry in $SERVER_IPS; do
+    [[ -n "$_entry" ]] || continue
+    _entry="${_entry//\"/}"
+    if [[ "$_entry" == *@* ]]; then
+      _user="${_entry%@*}"
+      _host="${_entry#*@}"
+    else
+      _user="$SERVER_SSH_USER"
+      _host="$_entry"
+    fi
+
+    if [[ "$K3SUP_USE_SUDO" == "true" ]]; then
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "sudo tee '$server_manifest_path' >/dev/null" <<EOF
+${rendered_manifest}
+EOF
+    else
+      ssh -i "$SSH_KEY" \
+        -o BatchMode=yes \
+        -o StrictHostKeyChecking=accept-new \
+        -o ConnectTimeout=5 \
+        "${_user}@${_host}" "tee '$server_manifest_path' >/dev/null" <<EOF
+${rendered_manifest}
+EOF
+    fi
+  done
+
+  kubectl apply -f - >/dev/null <<EOF
+${rendered_manifest}
+EOF
+
+  if kubectl -n kube-system get daemonset/node-local-dns >/dev/null 2>&1; then
+    kubectl -n kube-system rollout status daemonset/node-local-dns --timeout=180s >/dev/null
+  fi
 }
 
 CLI_SERVER_IPS=""
@@ -771,6 +937,8 @@ echo "Cluster context: $CONTEXT_NAME"
 kubectl config use-context "$CONTEXT_NAME" >/dev/null
 
 configure_coredns_for_failover
+configure_external_entrypoints
+configure_nodelocal_dns
 
 echo
 echo "Done. Verify with:"

@@ -9,6 +9,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 K3D_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)"
 REPO_ROOT="$(cd "${K3D_DIR}/../.." && pwd)"
 CHART_DIR="${REPO_ROOT}/k8s/charts/atlasnet"
+NODELOCALDNS_TEMPLATE="${REPO_ROOT}/k8s/k3s/manifests/nodelocaldns.yaml.tmpl"
 K3D_SERVER_COUNT="${ATLASNET_K3D_SERVERS:-1}"
 K3D_AGENT_COUNT="${ATLASNET_K3D_AGENTS:-2}"
 PORT_WAIT_TIMEOUT="${ATLASNET_K3D_PORT_WAIT_TIMEOUT:-15}"
@@ -21,6 +22,9 @@ NODE_LOSS_TOLERATION_SECONDS="${ATLASNET_K3D_NODE_LOSS_TOLERATION_SECONDS:-${ATL
 NODE_MONITOR_PERIOD="${ATLASNET_K3D_NODE_MONITOR_PERIOD:-2s}"
 NODE_MONITOR_GRACE_PERIOD="${ATLASNET_K3D_NODE_MONITOR_GRACE_PERIOD:-10s}"
 KUBELET_NODE_STATUS_UPDATE_FREQUENCY="${ATLASNET_K3D_KUBELET_NODE_STATUS_UPDATE_FREQUENCY:-4s}"
+SERVICELB_POOL_NAME="${ATLASNET_K3D_SERVICELB_POOL_NAME:-atlasnet-server}"
+NODELOCAL_DNS_LOCAL_IP="${ATLASNET_K3D_NODELOCAL_DNS_LOCAL_IP:-169.254.20.10}"
+CLUSTER_DNS_DOMAIN="${ATLASNET_K3D_CLUSTER_DNS_DOMAIN:-cluster.local}"
 WATCHDOG_IMAGE_NAME="${ATLASNET_WATCHDOG_IMAGE:-watchdog:latest}"
 PROXY_IMAGE_NAME="${ATLASNET_PROXY_IMAGE:-proxy:latest}"
 CARTOGRAPH_IMAGE_NAME="${ATLASNET_CARTOGRAPH_IMAGE:-cartograph:latest}"
@@ -89,6 +93,10 @@ fi
 
 if [[ ! -d "$CHART_DIR" ]]; then
     echo "Error: Helm chart not found at '$CHART_DIR'."
+    exit 1
+fi
+if [[ ! -f "$NODELOCALDNS_TEMPLATE" ]]; then
+    echo "Error: NodeLocal DNS template not found at '$NODELOCALDNS_TEMPLATE'."
     exit 1
 fi
 
@@ -712,8 +720,78 @@ EOF
     kctl -n kube-system rollout status deployment/coredns --timeout=180s >/dev/null
 }
 
+configure_external_entrypoints() {
+    local server_node manifest_path node
+    server_node="$SERVER_NODE_NAME"
+    manifest_path="/var/lib/rancher/k3s/server/manifests/traefik-config.yaml"
+
+    echo "==> Pinning external entrypoints to server node '$server_node'..."
+    while IFS= read -r node; do
+        [[ -n "${node:-}" ]] || continue
+        if [[ "$node" == "$server_node" ]]; then
+            kctl label node "$node" \
+                svccontroller.k3s.cattle.io/enablelb=true \
+                svccontroller.k3s.cattle.io/lbpool="$SERVICELB_POOL_NAME" \
+                --overwrite >/dev/null
+        else
+            kctl label node "$node" svccontroller.k3s.cattle.io/enablelb- >/dev/null 2>&1 || true
+            kctl label node "$node" svccontroller.k3s.cattle.io/lbpool- >/dev/null 2>&1 || true
+        fi
+    done < <(kctl get nodes -o jsonpath='{range .items[*]}{.metadata.name}{"\n"}{end}')
+
+    docker exec -i "$server_node" sh -c "cat > '$manifest_path'" <<EOF
+apiVersion: helm.cattle.io/v1
+kind: HelmChartConfig
+metadata:
+  name: traefik
+  namespace: kube-system
+spec:
+  valuesContent: |-
+    nodeSelector:
+      kubernetes.io/hostname: ${server_node}
+    service:
+      labels:
+        svccontroller.k3s.cattle.io/lbpool: ${SERVICELB_POOL_NAME}
+EOF
+
+    docker exec -i "$server_node" cat "$manifest_path" | kctl apply -f - >/dev/null
+    if kctl -n kube-system get deployment/traefik >/dev/null 2>&1; then
+        kctl -n kube-system rollout status deployment/traefik --timeout=180s >/dev/null
+    fi
+}
+
+configure_nodelocal_dns() {
+    local server_node manifest_path kube_dns_ip rendered_manifest
+    server_node="$SERVER_NODE_NAME"
+    manifest_path="/var/lib/rancher/k3s/server/manifests/nodelocaldns.yaml"
+    kube_dns_ip="$(kctl -n kube-system get svc kube-dns -o jsonpath='{.spec.clusterIP}')"
+
+    [[ -n "$kube_dns_ip" ]] || {
+        echo "Error: failed to determine kube-dns ClusterIP while configuring NodeLocal DNS." >&2
+        exit 1
+    }
+
+    rendered_manifest="$(sed \
+        -e "s/__PILLAR__LOCAL__DNS__/${NODELOCAL_DNS_LOCAL_IP}/g" \
+        -e "s/__PILLAR__DNS__DOMAIN__/${CLUSTER_DNS_DOMAIN}/g" \
+        -e "s/__PILLAR__DNS__SERVER__/${kube_dns_ip}/g" \
+        "$NODELOCALDNS_TEMPLATE")"
+
+    echo "==> Enabling NodeLocal DNSCache (local IP ${NODELOCAL_DNS_LOCAL_IP}, kube-dns ${kube_dns_ip})..."
+    docker exec -i "$server_node" sh -c "cat > '$manifest_path'" <<EOF
+${rendered_manifest}
+EOF
+
+    docker exec -i "$server_node" cat "$manifest_path" | kctl apply -f - >/dev/null
+    if kctl -n kube-system get daemonset/node-local-dns >/dev/null 2>&1; then
+        kctl -n kube-system rollout status daemonset/node-local-dns --timeout=180s >/dev/null
+    fi
+}
+
 kctl wait --for=condition=Ready nodes --all --timeout=120s >/dev/null
 configure_coredns_for_failover
+configure_external_entrypoints
+configure_nodelocal_dns
 
 ATLASNET_FORCE_IMAGE_IMPORT="${ATLASNET_FORCE_IMAGE_IMPORT:-0}"
 IMAGE_CACHE_FILE="${ATLASNET_K3D_IMAGE_CACHE_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-image-cache.txt}"
@@ -988,6 +1066,9 @@ else
     echo "==> Skipping watchdog-driven shard scale-up wait (ATLASNET_K3D_WAIT_FOR_SHARD_READY=$WAIT_FOR_SHARD_READY)."
 fi
 
+echo "==> AtlasNet node quarantine report..."
+bash "${SCRIPT_DIR}/ReportAtlasNetK3dStatus.sh" "$CLUSTER_NAME" "$NAMESPACE" || true
+
 sync_headlamp_default_kubeconfig
 PORT_FORWARD_PID_FILE="${ATLASNET_K3D_CARTOGRAPH_PORT_FORWARD_PID_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-cartograph-port-forward.pid}"
 PORT_FORWARD_LOG_FILE="${ATLASNET_K3D_CARTOGRAPH_PORT_FORWARD_LOG_FILE:-/tmp/atlasnet-k3d-${CLUSTER_NAME}-cartograph-port-forward.log}"
@@ -1007,3 +1088,6 @@ echo "Cartograph loopback: http://127.0.0.1:${ACTIVE_CARTOGRAPH_LOOPBACK_PORT}"
 echo "Cartograph inspect loopback: 127.0.0.1:${ACTIVE_CARTOGRAPH_INSPECT_PORT}"
 echo "Proxy UDP: 127.0.0.1:2555"
 echo "InternalDB: Cluster-internal service (internaldb:6379)"
+echo "Supported k3d transient node-loss test: bash k8s/k3d/scripts/PauseK3dNode.sh ${CLUSTER_NAME} agent-0"
+echo "Node resume: bash k8s/k3d/scripts/UnpauseK3dNode.sh ${CLUSTER_NAME} agent-0"
+echo "Avoid docker network disconnect/connect for reconnect validation; it can leave flannel unrecovered in k3d."

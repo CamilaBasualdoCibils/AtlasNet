@@ -16,6 +16,15 @@ cmake --build build --target sandbox_atlasnet_run_k3d
 cmake --build build --target sandbox_atlasnet_run_k3d_fast
 ```
 
+Supported transient node-loss test:
+```bash
+bash k8s/k3d/scripts/PauseK3dNode.sh atlasnet-dev agent-0
+bash k8s/k3d/scripts/UnpauseK3dNode.sh atlasnet-dev agent-0
+bash k8s/k3d/scripts/ReportAtlasNetK3dStatus.sh atlasnet-dev atlasnet-dev
+```
+
+`docker network disconnect/connect` is not a supported reconnect-validation path for `k3d`; it can leave the nested node without a recovered flannel overlay (`flannel.1`).
+
 ### Remote/homelab cluster (k3s)
 From `k8s/k3s`:
 ```bash
@@ -25,6 +34,13 @@ make k3s-deploy
 make atlasnet-push
 make atlasnet-deploy
 ```
+
+Cluster quarantine state can be inspected with:
+```bash
+bash k8s/k3s/scripts/report_atlasnet_cluster_status.sh atlasnet
+```
+
+Real reconnect validation target: physical `k3s` cable pull / replug. That is the source of truth for shard return after a node recovers.
 
 ## Notes
 - AtlasNet runtime deploys now come from `k8s/charts/atlasnet` for both k3d and k3s paths.
