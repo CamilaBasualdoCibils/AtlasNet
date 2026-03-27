@@ -147,12 +147,12 @@ export function parseAuthorityRows(raw: unknown): AuthorityEntityTelemetry[] {
     return EMPTY_AUTHORITY_ROWS;
   }
 
-  const rows: AuthorityEntityTelemetry[] = [];
+  const rowsByEntityId = new Map<string, AuthorityEntityTelemetry>();
   for (const item of raw) {
     if (!Array.isArray(item) || item.length < 8) {
       continue;
     }
-    rows.push({
+    const row = {
       entityId: String(item[0]),
       ownerId: String(item[1]),
       world: toNumber(item[2]),
@@ -161,12 +161,14 @@ export function parseAuthorityRows(raw: unknown): AuthorityEntityTelemetry[] {
       z: toNumber(item[5]),
       isClient: String(item[6]) === '1' || item[6] === true,
       clientId: String(item[7]),
-    });
+    };
+    if (!row.entityId || !row.ownerId) {
+      continue;
+    }
+    rowsByEntityId.set(row.entityId, row);
   }
 
-  const normalized = rows.filter(
-    (row) => row.entityId.length > 0 && row.ownerId.length > 0
-  );
+  const normalized = Array.from(rowsByEntityId.values());
   return normalized.length > 0 ? normalized : EMPTY_AUTHORITY_ROWS;
 }
 

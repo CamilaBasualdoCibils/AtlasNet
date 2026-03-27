@@ -265,6 +265,12 @@ class StreamEntityLedgersView
 		std::lock_guard<std::mutex> lock(stateMutex);
 
 		entities.clear();
+		struct EntitySelectionState
+		{
+			size_t index = 0;
+			Clock::time_point lastResponseAt = Clock::time_point::min();
+		};
+		std::unordered_map<std::string, EntitySelectionState> entityIndexById;
 		for (const auto& [shardId, shardState] : shardStates)
 		{
 			(void)shardId;
@@ -277,7 +283,26 @@ class StreamEntityLedgersView
 				continue;
 			}
 
-			entities.insert(entities.end(), shardState.entries.begin(), shardState.entries.end());
+			for (const auto& entry : shardState.entries)
+			{
+				const auto [it, inserted] = entityIndexById.emplace(
+					entry.EntityID,
+					EntitySelectionState{.index = entities.size(),
+										 .lastResponseAt = shardState.lastResponseAt});
+				if (inserted)
+				{
+					entities.push_back(entry);
+					continue;
+				}
+
+				if (shardState.lastResponseAt < it->second.lastResponseAt)
+				{
+					continue;
+				}
+
+				entities[it->second.index] = entry;
+				it->second.lastResponseAt = shardState.lastResponseAt;
+			}
 		}
 
 		logger.DebugFormatted("GetEntityLists returned {} streamed entries", entities.size());
