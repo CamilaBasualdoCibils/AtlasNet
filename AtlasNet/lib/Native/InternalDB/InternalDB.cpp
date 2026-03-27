@@ -9,6 +9,11 @@ namespace
 {
 std::string ResolveRedisHost()
 {
+	if (const char* serviceHost = std::getenv("INTERNALDB_SERVICE_HOST");
+		serviceHost && *serviceHost)
+	{
+		return std::string(serviceHost);
+	}
 	if (const char* host = std::getenv("INTERNAL_REDIS_SERVICE_NAME");
 		host && *host)
 	{

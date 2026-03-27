@@ -142,6 +142,7 @@ spec:
         atlasnet.role: watchdog
     spec:
       serviceAccountName: atlasnet-watchdog
+      enableServiceLinks: true
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -180,9 +181,9 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: "$(INTERNALDB_SERVICE_HOST)"
             - name: INTERNAL_REDIS_PORT
-              value: "6379"
+              value: "$(INTERNALDB_SERVICE_PORT)"
             {{- if or $llmEnabled $llmEndpoint }}
             - name: ATLASNET_LLM_ENDPOINT
               value: {{ default (printf "http://atlasnet-llm:%d/v1/chat/completions" $llmServicePort) $llmEndpoint | quote }}
@@ -225,6 +226,7 @@ spec:
         atlasnet.role: shard
     spec:
       terminationGracePeriodSeconds: 5
+      enableServiceLinks: true
       affinity:
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
@@ -275,9 +277,9 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: "$(INTERNALDB_SERVICE_HOST)"
             - name: INTERNAL_REDIS_PORT
-              value: "6379"
+              value: "$(INTERNALDB_SERVICE_PORT)"
           ports:
             - name: interlink
               containerPort: 25555
@@ -302,6 +304,7 @@ spec:
       labels:
         app: atlasnet-internaldb
     spec:
+      enableServiceLinks: true
       containers:
         - name: internaldb
           image: {{ $internaldbImage | quote }}
@@ -370,6 +373,7 @@ spec:
         app: atlasnet-cartograph
     spec:
       serviceAccountName: atlasnet-cartograph
+      enableServiceLinks: true
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -432,9 +436,9 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: "$(INTERNALDB_SERVICE_HOST)"
             - name: INTERNAL_REDIS_PORT
-              value: "6379"
+              value: "$(INTERNALDB_SERVICE_PORT)"
           ports:
             - name: http
               containerPort: 3000
@@ -520,6 +524,7 @@ spec:
       labels:
         app: atlasnet-proxy
     spec:
+      enableServiceLinks: true
       affinity:
         nodeAffinity:
           requiredDuringSchedulingIgnoredDuringExecution:
@@ -547,9 +552,9 @@ spec:
                 fieldRef:
                   fieldPath: status.podIP
             - name: INTERNAL_REDIS_SERVICE_NAME
-              value: internaldb
+              value: "$(INTERNALDB_SERVICE_HOST)"
             - name: INTERNAL_REDIS_PORT
-              value: "6379"
+              value: "$(INTERNALDB_SERVICE_PORT)"
           ports:
             - name: interlink
               containerPort: 25555
@@ -633,6 +638,7 @@ spec:
         app: atlasnet-llm
         atlasnet.role: llm
     spec:
+      enableServiceLinks: true
       initContainers:
         - name: model-download
           image: curlimages/curl:8.12.1

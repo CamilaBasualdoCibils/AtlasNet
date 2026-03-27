@@ -5,12 +5,20 @@ const MAX_PAYLOAD_CHARS = 32 * 1024;
 const MAX_KEYS_PER_DB = 2000;
 const SCAN_COUNT = 200;
 
+function resolveInternalRedisHost() {
+  return (
+    process.env.INTERNALDB_SERVICE_HOST ||
+    process.env.INTERNAL_REDIS_SERVICE_NAME ||
+    'internaldb'
+  );
+}
+
 function getDatabaseTargets() {
   return [
     {
       id: 'internal',
       name: 'InternalDB',
-      host: process.env.INTERNAL_REDIS_SERVICE_NAME || 'internaldb',
+      host: resolveInternalRedisHost(),
       port: Number(process.env.INTERNAL_REDIS_PORT || 6379),
     },
     {

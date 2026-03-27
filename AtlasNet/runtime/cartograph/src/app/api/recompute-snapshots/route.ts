@@ -12,9 +12,17 @@ const EMPTY_RESPONSE: RecomputeSnapshotsResponse = {
   snapshots: [],
 };
 
+function resolveInternalDbHost() {
+  return (
+    process.env.INTERNALDB_SERVICE_HOST ||
+    process.env.INTERNAL_REDIS_SERVICE_NAME ||
+    'internaldb'
+  );
+}
+
 function createInternalDbClient() {
   return new Redis({
-    host: process.env.INTERNAL_REDIS_SERVICE_NAME || 'internaldb',
+    host: resolveInternalDbHost(),
     port: Number(process.env.INTERNAL_REDIS_PORT || 6379),
     lazyConnect: true,
     connectTimeout: CONNECT_TIMEOUT_MS,
