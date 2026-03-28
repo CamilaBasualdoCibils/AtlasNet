@@ -177,35 +177,41 @@ template <typename FN>
 	requires std::is_invocable_v<FN, const IHeuristic&>
 inline auto HeuristicManifest::PullHeuristic(FN&& f)
 {
-
-	const std::optional<std::string> timestamp_s = InternalDB::Get()->Get(HeuristicVersionKey);
-	if (!timestamp_s)
+	while (true)
 	{
-		throw std::runtime_error("Heuristic timestamp missing");
-	}
-	const long long PushTimeStamp = std::stoll(timestamp_s.value());
-
-	if (PushTimeStamp != localHeuristicCache.HeuristicVersion)
-	{
-		auto heuData = InternalDB::Get()->Get(HeuristicSerializeDataKey);
-		auto heuType_s = InternalDB::Get()->Get(HeuristicTypeKey);
-
-		std::unique_lock lock_unique(HeuristicFetchMutex);
+		const std::optional<std::string> timestamp_s = InternalDB::Get()->Get(HeuristicVersionKey);
+		if (!timestamp_s)
+		{
+			throw std::runtime_error("Heuristic timestamp missing");
+		}
+		const long long PushTimeStamp = std::stoll(timestamp_s.value());
 
 		if (PushTimeStamp != localHeuristicCache.HeuristicVersion)
 		{
-			logger.DebugFormatted("Heuristic Cache out of date. Fetching version {}",
-								  PushTimeStamp);
-			IHeuristic::Type hType;
-			IHeuristic::TypeFromString(*heuType_s, hType);
+			auto heuData = InternalDB::Get()->Get(HeuristicSerializeDataKey);
+			auto heuType_s = InternalDB::Get()->Get(HeuristicTypeKey);
+			if (!heuData.has_value() || !heuType_s.has_value())
+			{
+				logger.ErrorFormatted("Failed to pull heuristic, trying again");
+				continue;
+			}
+			std::unique_lock lock_unique(HeuristicFetchMutex);
 
-			Internal_ParseHeuristic(hType, *heuData);
-			localHeuristicCache.HeuristicVersion = PushTimeStamp;
+			if (PushTimeStamp != localHeuristicCache.HeuristicVersion)
+			{
+				logger.DebugFormatted("Heuristic Cache out of date. Fetching version {}",
+									  PushTimeStamp);
+				IHeuristic::Type hType;
+				IHeuristic::TypeFromString(*heuType_s, hType);
 
-			logger.DebugFormatted("Heuristic Cache Fetch Done");
+				Internal_ParseHeuristic(hType, *heuData);
+				localHeuristicCache.HeuristicVersion = PushTimeStamp;
+
+				logger.DebugFormatted("Heuristic Cache Fetch Done");
+			}
 		}
+		break;
 	}
-
 	std::shared_lock lock_shared(HeuristicFetchMutex);
 	return f(*localHeuristicCache.CachedHeuristic);
 }

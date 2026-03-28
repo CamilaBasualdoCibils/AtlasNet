@@ -303,11 +303,15 @@ void RTSServer::OnWorkerMoveCommand(const NetClientIntentHeader& header,
 		std::swap(newPos.y, newPos.z);	// client-server coordinate system difference
 		ackCommand.WorkerPositions[move.WorkerID] = newPos;
 	}
-	for (const auto& shard : remoteShards)
+	for (const auto& server : ServerRegistry::Get().GetServers())
 	{
-		Interlink::Get().SendMessage(NetworkIdentity::MakeIDShard(shard.first), ackCommand,
+		if (server.first.Type == NetworkIdentityType::eShard)
+		{
+			Interlink::Get().SendMessage(server.first, ackCommand,
 									 NetworkMessageSendFlag::eReliableBatched);
+		}
 	}
+
 }
 void RTSServer::OnWorkerMoveNotify(const WorkerMoveNotify& notify,
 								   const PacketManager::PacketInfo& info)

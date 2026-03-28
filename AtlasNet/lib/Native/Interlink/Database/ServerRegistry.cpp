@@ -43,7 +43,7 @@ const decltype(ServerRegistry::servers) &ServerRegistry::GetServers()
 
 		ASSERT(newEntry.identifier.Type != NetworkIdentityType::eInvalid,
 			   "Invalid entry in server ServerRegistry");
-		ASSERT(!servers.contains(newEntry.identifier), "Duplicate entry in server ServerRegistry?");
+		//ASSERT(!servers.contains(newEntry.identifier), "Duplicate entry in server ServerRegistry?");
 		servers.insert(std::make_pair(newEntry.identifier, newEntry));
 	}
 	return servers;

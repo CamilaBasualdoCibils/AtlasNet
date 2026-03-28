@@ -49,7 +49,11 @@ class BoundLeaser : public Singleton<BoundLeaser>
 			{
 				if (ClaimedBoundID.has_value())
 				{
-					return f(h.GetBound(ClaimedBoundID.value()));
+					if (h.GetBoundsCount() >= ClaimedBoundID.value())
+					{
+						return f(h.GetBound(ClaimedBoundID.value()));
+					}
+					
 				}
 			});
 	}

@@ -102,6 +102,9 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
+      placement:
+          constraints:
+            - 'node.role == manager'
     
   BuiltInDB_Redis:
     image: valkey/valkey:latest
@@ -121,16 +124,4 @@ services:
       replicas: 1
       restart_policy:
         condition: on-failure
-  BuiltInDB_PostGres:
-    image: postgres:16-alpine
-    command: ["postgres", "-c", "port=5432"]
-    ports:
-      - target: 5432
-        published: 5432
-        protocol: tcp
-        mode: ingress
-    environment:
-      POSTGRES_PASSWORD: postgres
-    volumes:
-      - pgdata:/var/lib/postgresql/data
-    networks: [RTS_AtlasNet]
+ 
