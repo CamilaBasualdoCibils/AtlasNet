@@ -49,7 +49,9 @@ static bool LooksLikeNotClusterError(const std::string& msg)
 			 throw;
 		 }*/
 std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint32_t max_retries,
-												uint32_t retry_interval_ms)
+												uint32_t retry_interval_ms,
+												uint32_t connect_timeout_ms,
+												uint32_t socket_timeout_ms)
 {
 	// ---- Fast path (locked, no I/O) ----
 	std::lock_guard<std::mutex> lock(connections_mutex);
@@ -66,6 +68,8 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint3
 	sw::redis::ConnectionOptions options;
 	options.host = in_options.host;
 	options.port = in_options.port;
+	options.connect_timeout = std::chrono::milliseconds(connect_timeout_ms);
+	options.socket_timeout = std::chrono::milliseconds(socket_timeout_ms);
 
 	sw::redis::ConnectionPoolOptions pool;
 	pool.size = 5;
@@ -132,11 +136,13 @@ std::shared_ptr<RedisConnection> Redis::Connect(const Options& in_options, uint3
 
 std::shared_ptr<RedisConnection> Redis::ConnectNonCluster(const std::string& address, int32_t port,
 														  uint32_t max_retries,
-														  uint32_t retry_interval_ms)
+														  uint32_t retry_interval_ms,
+														  uint32_t connect_timeout_ms,
+														  uint32_t socket_timeout_ms)
 {
 	Options op;
 	op.host = address;
 	op.port = port;
 	op.IsCluster = false;
-	return Connect(op, max_retries, retry_interval_ms);
+	return Connect(op, max_retries, retry_interval_ms, connect_timeout_ms, socket_timeout_ms);
 }
