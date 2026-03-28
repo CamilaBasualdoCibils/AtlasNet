@@ -13,6 +13,8 @@
 {{- $llmApiFormat := default "openai" .Values.llm.apiFormat -}}
 {{- $llmModelId := default "huggingface.co/dannys0n/qwen3-1.7b-seed_gen_voronoi:Q4_K_M" .Values.llm.modelId -}}
 {{- $llmModelFileName := default "model.gguf" .Values.llm.modelFileName -}}
+{{- $llmOfflineEnabled := default false .Values.llm.offline.enabled -}}
+{{- $llmModelSeedImage := default "" .Values.llm.offline.modelSeedImage -}}
 {{- $llmPvcSize := default "8Gi" .Values.llm.pvcSize -}}
 {{- $llmContextSize := int (default 4096 .Values.llm.contextSize) -}}
 {{- $llmThreads := int (default 4 .Values.llm.threads) -}}
@@ -691,6 +693,23 @@ spec:
           operator: Exists
           effect: NoSchedule
       initContainers:
+        {{- if $llmOfflineEnabled }}
+        - name: model-seed
+          image: {{ required "values.llm.offline.modelSeedImage is required when llm.offline.enabled=true" $llmModelSeedImage | quote }}
+          imagePullPolicy: {{ $imagePullPolicy | quote }}
+          command:
+            - sh
+            - -c
+            - |
+              set -eu
+              mkdir -p /models
+              if [ ! -s "/models/{{ $llmModelFileName }}" ]; then
+                cp /seed/model.gguf "/models/{{ $llmModelFileName }}"
+              fi
+          volumeMounts:
+            - name: model-cache
+              mountPath: /models
+        {{- else }}
         - name: model-download
           image: curlimages/curl:8.12.1
           imagePullPolicy: IfNotPresent
@@ -706,6 +725,7 @@ spec:
           volumeMounts:
             - name: model-cache
               mountPath: /models
+        {{- end }}
       containers:
         - name: llm
           image: {{ $llmImage | quote }}

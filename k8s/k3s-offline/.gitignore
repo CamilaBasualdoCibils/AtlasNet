@@ -1,0 +1,25 @@
+# Local environment / secrets
+.env
+!.env.example
+config/cluster.env
+config/kubeconfig
+config/*.pem
+config/*.key
+config/*.crt
+config/*.kubeconfig
+config/*.log
+
+# Generated offline bundle
+offline-bundle/
+registry-data/
+models/*
+!models/.gitkeep
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Bash
+*.swp

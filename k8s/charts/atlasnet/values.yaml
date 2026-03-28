@@ -29,3 +29,6 @@ llm:
   pvcSize: 8Gi
   contextSize: 4096
   threads: 4
+  offline:
+    enabled: false
+    modelSeedImage: ""
