@@ -175,35 +175,35 @@ void EntityLedger::_EraseEntity(AtlasEntityID ID, bool preserveEntityRecord, boo
 void EntityLedger::OnEntityHandleFetchRequest(const EntityHandleFetchRequestPacket& packet,
 											  const PacketManager::PacketInfo& info)
 {
-	logger.DebugFormatted(
-		"Received EntityHandleFetchRequestPacket from {} in state {}", info.sender.ToString(),
-		packet.currentState == EntityHandleFetchRequestPacket::State::eRequest ? "Request"
-																			   : "Response");
+	// logger.DebugFormatted(
+	// 	"Received EntityHandleFetchRequestPacket from {} in state {}", info.sender.ToString(),
+	// 	packet.currentState == EntityHandleFetchRequestPacket::State::eRequest ? "Request"
+	// 																			   : "Response");
 	if (packet.currentState == EntityHandleFetchRequestPacket::State::eRequest)
 	{
 		// logger.DebugFormatted("Received EntityHandleFetchRequestPacket from {}",
 		//					  info.sender.ToString());
 		const auto& requestData = packet.GetRequestData();
 		AtlasEntityID requestedID = requestData.entityID;
-		logger.DebugFormatted("Getting Data for Entity {} ", UUIDGen::ToString(requestedID));
+		// logger.DebugFormatted("Getting Data for Entity {} ", UUIDGen::ToString(requestedID));
 		_ReadLock(
 			[&]()
 			{
 				if (ExistsEntity(requestedID))
 				{
-					logger.DebugFormatted("Entity {} exists", UUIDGen::ToString(requestedID));
+					// logger.DebugFormatted("Entity {} exists", UUIDGen::ToString(requestedID));
 					EntityHandleFetchRequestPacket responsePacket;
 					responsePacket.currentState = EntityHandleFetchRequestPacket::State::eResponse;
 					EntityHandleFetchRequestPacket::ResponseData responseData;
 					responseData.entityData = GetEntity(requestedID);
 					responsePacket.data = responseData;
-					logger.DebugFormatted("Responding with data for entity {}",
-										  UUIDGen::ToString(requestedID));
+					// logger.DebugFormatted("Responding with data for entity {}",
+					// 					  UUIDGen::ToString(requestedID));
 					Interlink::Get().SendMessage(info.sender, responsePacket,
 												 NetworkMessageSendFlag::eReliableBatched);
 				}
 				else {
-					logger.DebugFormatted("Entity {} Does not exist", UUIDGen::ToString(requestedID));
+					// logger.DebugFormatted("Entity {} Does not exist", UUIDGen::ToString(requestedID));
 				
 				}
 			});
