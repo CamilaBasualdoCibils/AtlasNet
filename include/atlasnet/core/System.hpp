@@ -45,7 +45,7 @@ public:
     }
     std::shared_lock lock(Mutex);
 
-    return *systems.at(typeid(Type));
+   return static_cast<Type&>(*systems.at(typeid(Type)));
   }
 
   [[nodiscard]] static Type &Get() {
@@ -56,7 +56,7 @@ public:
       assert(false && "System not constructed. Call Init(...) first.");
     }
 
-    return *systems.at(typeid(Type));
+   return static_cast<Type&>(*systems.at(typeid(Type)));
   }
   static bool Exists() {
     std::shared_lock lock(Mutex);

@@ -7,7 +7,6 @@ Distributed Spatial Networking Framework
 
 - [About](#about)
 - [Features](#features)
-- [Installation](#installation)
 - [Usage](#usage)
 - [Configuration](#configuration)
 - [Contributing](#contributing)
@@ -22,7 +21,13 @@ Explain why it exists, what problems it solves, and who it’s for.
 
 ---
 ## Features
-- 
+---
+## Usage
+AtlasNet has enviroment variables that control how it functions
+
+| Variable | Description | Default | Example |
+|----------|-------------|---------|---------|
+| 
 
 ---
 ## 🏗 Architecture Overview
@@ -61,21 +66,6 @@ flowchart LR
     Watchdog .-> InternalDB
 ```
 
-
-## Repository layout
-
-Matches the [Development tree](https://github.com/CamilaBasualdoCibils/AtlasNet/tree/Development):
-
-| Path | Description |
-|------|--------------|
-| `AtlasNet/` | Core AtlasNet library and runtimes |
-| `AtlasNet/lib/` | Libraries: Interlink, Database, Entity, Heuristic, InternalDB, Web, etc. (use only non-`exc` code) |
-| `AtlasNet/runtime/` | Services: **watchdog**, **shard**, **proxy** (from `src/` only), **cartograph** (web) |
-| `AtlasNet/API/` | Client and Server APIs (C++, Unity, Java optional) |
-| `Examples/` | Sandbox client + server and other samples |
-| `.devcontainer/` | Dev container (vcpkg, Docker-in-Docker, Node) |
-| `.vscode/` | Editor config and tasks |
-| `CMakeLists.txt` | Root CMake; adds AtlasNet and Examples |
 
 ## Requirements
 

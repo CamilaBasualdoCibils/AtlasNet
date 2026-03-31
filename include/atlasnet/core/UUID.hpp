@@ -42,11 +42,11 @@ public:
 };
 
 template <typename Tag>
-struct StrongUUID {
-  UUID value{};
+struct StrongUUID : public UUID {
+
 
   StrongUUID() = default;
-  explicit StrongUUID(UUID v) : value(std::move(v)) {}
+  explicit StrongUUID(UUID v) : UUID(std::move(v)) {}
 
   friend bool operator==(const StrongUUID&, const StrongUUID&) = default;
 };

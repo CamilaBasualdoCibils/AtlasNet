@@ -163,6 +163,15 @@ class EndPointAddress : public IEndPointAddress {
   std::variant<IPv4Address, IPv6Address, SteamIDAddress> address;
 
 public:
+EndPointAddress(const IPv4Address &ipv4, PortType port):address(ipv4) {
+    set_port(port);
+  }
+  EndPointAddress(const IPv6Address &ipv6, PortType port):address(ipv6) {
+    set_port(port);
+  }
+  EndPointAddress(const SteamIDAddress &steamID, PortType port):address(steamID) {
+    set_port(port);
+  }
   bool IsIpv4() const { return std::holds_alternative<IPv4Address>(address); }
   bool IsIpv6() const { return std::holds_alternative<IPv6Address>(address); }
   bool IsSteamID() const {

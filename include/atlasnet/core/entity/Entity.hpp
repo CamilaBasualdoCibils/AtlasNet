@@ -20,6 +20,7 @@ struct Entity {
 
   explicit Entity(EntityID id) : id(std::move(id)) {}
 };
+
 struct Client : Entity {
   ClientID clientId;
   explicit Client(EntityID id, ClientID clientId)

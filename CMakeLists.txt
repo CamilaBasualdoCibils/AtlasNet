@@ -30,10 +30,6 @@ if (ATLASNET_DEV)
 endif()
 
 
-
-
-
-
 # Recursively collect sources under ./src
 file(GLOB_RECURSE _core_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/core/*.cpp"
