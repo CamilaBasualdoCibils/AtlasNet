@@ -61,25 +61,25 @@ export class MapService {
   }
 
   private loadAssetTopology(): Observable<CartographMapResponse> {
-    return this.rawHttp.get<CartographTopology>('/cartograph-map/map.json').pipe(
+    return this.rawHttp.get<CartographTopology>('/assets/cartograph-map/map.json').pipe(
       map((topology: CartographTopology) => ({
         status: 'ok' as const,
         topologyAvailable: true,
         topology,
         source: {
-          directory: 'cartograph-map',
+          directory: 'web/src/assets/cartograph-map',
           topologyFile: 'map.json',
           transport: 'asset' as const
         }
       })),
       catchError(() => {
-        return this.rawHttp.get<CartographTopology>('/cartograph-map/topology.json').pipe(
+        return this.rawHttp.get<CartographTopology>('/assets/cartograph-map/topology.json').pipe(
           map((topology: CartographTopology) => ({
             status: 'ok' as const,
             topologyAvailable: true,
             topology,
             source: {
-              directory: 'cartograph-map',
+              directory: 'web/src/assets/cartograph-map',
               topologyFile: 'topology.json',
               transport: 'asset' as const
             }

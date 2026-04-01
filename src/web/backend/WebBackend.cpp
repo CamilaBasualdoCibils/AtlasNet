@@ -19,10 +19,17 @@ fs::path findCartographDirectory(fs::path startPath)
 
     while (true)
     {
-        const auto candidate = startPath / "cartograph-map";
-        if (fs::exists(candidate) && fs::is_directory(candidate))
+        const std::vector<fs::path> candidates = {
+            startPath / "web" / "src" / "assets" / "cartograph-map",
+            startPath / "cartograph-map",
+        };
+
+        for (const auto &candidate : candidates)
         {
-            return candidate;
+            if (fs::exists(candidate) && fs::is_directory(candidate))
+            {
+                return candidate;
+            }
         }
 
         if (startPath == startPath.root_path())
@@ -114,11 +121,11 @@ Json::Value buildMissingTopologyPayload(const fs::path &directory, const std::op
 {
     Json::Value payload;
     payload["status"] = "missing_topology";
-    payload["message"] = "No topology JSON file was found in cartograph-map";
+    payload["message"] = "No topology JSON file was found in web/src/assets/cartograph-map";
     payload["topologyAvailable"] = false;
     payload["expectedTopologyFiles"].append("map.json");
     payload["expectedTopologyFiles"].append("topology.json");
-    payload["source"]["directory"] = directory.filename().string();
+    payload["source"]["directory"] = directory.string();
 
     if (textureFile)
     {
@@ -143,7 +150,7 @@ int main()
             {
                 Json::Value payload;
                 payload["status"] = "error";
-                payload["message"] = "cartograph-map directory could not be located";
+                payload["message"] = "web/src/assets/cartograph-map directory could not be located";
                 auto response = drogon::HttpResponse::newHttpJsonResponse(payload);
                 response->setStatusCode(drogon::k500InternalServerError);
                 callback(response);
@@ -166,7 +173,7 @@ int main()
                 payload["status"] = "error";
                 payload["message"] = "Failed to parse topology JSON";
                 payload["details"] = parseError;
-                payload["source"]["directory"] = cartographDirectory.filename().string();
+                payload["source"]["directory"] = cartographDirectory.string();
                 payload["source"]["topologyFile"] = topologyFile->filename().string();
 
                 auto response = drogon::HttpResponse::newHttpJsonResponse(payload);
@@ -181,7 +188,7 @@ int main()
             payload["status"] = "ok";
             payload["topologyAvailable"] = true;
             payload["topology"] = *topology;
-            payload["source"]["directory"] = cartographDirectory.filename().string();
+            payload["source"]["directory"] = cartographDirectory.string();
             payload["source"]["topologyFile"] = topologyFile->filename().string();
 
             if (textureFile)

@@ -76,7 +76,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
           this.isLoading = false;
 
           if (!response.topologyAvailable || !response.topology) {
-            this.errorMessage = response.message || 'Topology JSON not found in cartograph-map';
+            this.errorMessage = response.message || 'Topology JSON not found in web/src/assets/cartograph-map';
             this.changeDetectorRef.markForCheck();
             return;
           }
@@ -87,7 +87,7 @@ export class MapComponent implements AfterViewInit, OnDestroy {
         },
         error: () => {
           this.isLoading = false;
-          this.errorMessage = 'Map data could not be loaded from the backend or the local cartograph-map assets.';
+          this.errorMessage = 'Map data could not be loaded from the backend or web/src/assets/cartograph-map.';
           this.changeDetectorRef.markForCheck();
         }
       });

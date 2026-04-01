@@ -6,7 +6,7 @@
       [collapseControl]="false" [closeControl]="false">
       <h5 *widgsterTitle>World View <span class="fw-semi-bold">Height Map Renderer</span></h5>
       <p class="map-dashboard__copy">
-        This panel loads topology from the repo-level <code>cartograph-map</code> directory and renders it as a voxel
+        This panel loads topology from <code>web/src/assets/cartograph-map</code> and renders it as a voxel
         height map for the control plane.
       </p>
       <div *ngIf="!errorMessage" #canvasHost class="map-dashboard__stage"></div>
@@ -23,7 +23,7 @@
       <h5 *widgsterTitle>Source <span class="fw-semi-bold">Contract</span></h5>
       <div class="map-dashboard__meta" *ngIf="mapResponse as response">
         <p><strong>Status:</strong> {{ response.status }}</p>
-        <p><strong>Directory:</strong> {{ response.source?.directory || 'cartograph-map' }}</p>
+        <p><strong>Directory:</strong> {{ response.source?.directory || 'web/src/assets/cartograph-map' }}</p>
         <p><strong>Topology:</strong> {{ response.source?.topologyFile || 'map.json or topology.json' }}</p>
         <p><strong>Source:</strong> {{ response.source?.transport || 'backend' }}</p>
       </div>
@@ -65,7 +65,7 @@
         </label>
       </div>
       <p class="map-dashboard__hint">
-        Drop a <code>map.json</code> file into <code>cartograph-map/</code>. The renderer builds the voxel terrain
+        Drop a <code>map.json</code> file into <code>web/src/assets/cartograph-map/</code>. The renderer builds the voxel terrain
         directly from the tiled JSON topology during local UI development or through the web backend.
       </p>
       <p class="map-dashboard__hint">
