@@ -104,6 +104,24 @@ struct AABB {
     max += v;
   }
 
+  float square_distance(vectype p) const
+  {
+    float sqDist = 0.0f;
+    for (uint8_t i = 0; i < Dim; ++i)
+    {
+      float v = 0.0f;
+      if (p[i] < min[i])
+        v = min[i] - p[i];
+      else if (p[i] > max[i])
+        v = p[i] - max[i];
+      sqDist += v * v;
+    }
+    return sqDist;
+  }
+  float distance(vectype p) const
+  {
+    return std::sqrt(square_distance(p));
+  }
   // -------------------------------------------------
   // Containment
   // -------------------------------------------------

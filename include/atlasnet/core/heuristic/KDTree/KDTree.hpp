@@ -2,8 +2,8 @@
 
 #include "atlasnet/core/geometry/AABB.hpp"
 #include "atlasnet/core/geometry/Vec.hpp"
-
 #include "atlasnet/core/heuristic/IHeuristic.hpp"
+
 #include <algorithm>
 #include <array>
 #include <cassert>
@@ -16,6 +16,7 @@
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
 namespace AtlasNet
 {
 
@@ -24,13 +25,82 @@ template <std::size_t Dim, typename T>
 class KDTreeHeuristic;
 
 template <std::size_t Dim, typename T = float>
-requires SupportedPartitionDimension<Dim, T>
+  requires SupportedPartitionDimension<Dim, T>
+class KDTreeRegion final : public IRegionT<Dim, T>
+{
+public:
+  using VecType = vec<Dim, T>;
+  using BoxType = AABB<Dim, T>;
+
+  // Replace Mesh with your actual mesh type.
+  KDTreeRegion(RegionID id, VecType centroid, BoxType bounds,
+               std::vector<std::size_t> pointIndices, Mesh mesh = {})
+      : id_(id),
+        centroid_(std::move(centroid)),
+        bounds_(std::move(bounds)),
+        pointIndices_(std::move(pointIndices)),
+        mesh_(std::move(mesh))
+  {
+  }
+
+  [[nodiscard]] RegionID GetID() const override
+  {
+    return id_;
+  }
+
+  [[nodiscard]] const VecType& GetCentroid() const override
+  {
+    return centroid_;
+  }
+
+  [[nodiscard]] const BoxType& GetAABB() const override
+  {
+    return bounds_;
+  }
+
+  [[nodiscard]] const Mesh& GetMesh() const override
+  {
+    return mesh_;
+  }
+
+  [[nodiscard]] bool IsInside(const VecType& point) const override
+  {
+    for (std::size_t axis = 0; axis < Dim; ++axis)
+    {
+      if (point[axis] < bounds_.min[axis] || point[axis] > bounds_.max[axis])
+        return false;
+    }
+    return true;
+  }
+
+  void SetID(RegionID id)
+  {
+    id_ = id;
+  }
+
+  [[nodiscard]] const std::vector<std::size_t>& GetPointIndices() const
+  {
+    return pointIndices_;
+  }
+
+private:
+  RegionID id_ = 0;
+  VecType centroid_{};
+  BoxType bounds_{};
+  std::vector<std::size_t> pointIndices_;
+  Mesh mesh_{};
+};
+
+template <std::size_t Dim, typename T = float>
+  requires SupportedPartitionDimension<Dim, T>
 class KDTreePartition final : public IPartitionT<Dim, T>
 {
 public:
   using VecType = vec<Dim, T>;
   using BoxType = AABB<Dim, T>;
-  using RegionType = RegionT<Dim, T>;
+  using RegionBase = IRegionT<Dim, T>;
+  using RegionImpl = KDTreeRegion<Dim, T>;
+  using RegionPtr = std::shared_ptr<const RegionBase>;
 
 private:
   struct Node
@@ -58,15 +128,15 @@ public:
     return regions_.size();
   }
 
-  [[nodiscard]] const RegionType* FindRegion(RegionID id) const override
+  [[nodiscard]] const RegionBase* FindRegion(RegionID id) const override
   {
     auto it = regionLookup_.find(id);
     if (it == regionLookup_.end())
       return nullptr;
-    return &regions_[it->second];
+    return regions_[it->second].get();
   }
 
-  [[nodiscard]] std::span<const RegionType> Regions() const override
+  [[nodiscard]] std::span<const RegionPtr> Regions() const override
   {
     return regions_;
   }
@@ -83,15 +153,18 @@ public:
     const Node* node = root_.get();
     while (node && !node->isLeaf)
     {
-      node = (point[node->splitAxis] <= node->splitValue)
-                 ? node->left.get()
-                 : node->right.get();
+      node = (point[node->splitAxis] <= node->splitValue) ? node->left.get()
+                                                          : node->right.get();
     }
 
     if (!node || node->regionIndex == InvalidRegionIndex)
       return std::nullopt;
 
-    return regions_[node->regionIndex].id;
+    const RegionBase* region = regions_[node->regionIndex].get();
+    if (!region->IsInside(point))
+      return std::nullopt;
+
+    return region->GetID();
   }
 
   [[nodiscard]] RegionID QueryClosestRegion(const VecType& point) const override
@@ -99,11 +172,11 @@ public:
     assert(!regions_.empty() && "QueryClosestRegion called on empty partition");
 
     std::size_t bestIndex = 0;
-    T bestDist2 = DistanceSquared(point, regions_[0].centroid);
+    T bestDist2 = regions_[0]->GetAABB().square_distance(point);
 
     for (std::size_t i = 1; i < regions_.size(); ++i)
     {
-      const T d2 = DistanceSquared(point, regions_[i].centroid);
+      const T d2 = regions_[i]->GetAABB().square_distance(point);
       if (d2 < bestDist2)
       {
         bestDist2 = d2;
@@ -111,7 +184,7 @@ public:
       }
     }
 
-    return regions_[bestIndex].id;
+    return regions_[bestIndex]->GetID();
   }
 
 private:
@@ -198,21 +271,23 @@ private:
     return child;
   }
 
-  std::vector<RegionType> regions_;
+  std::vector<RegionPtr> regions_;
   std::unordered_map<RegionID, std::size_t> regionLookup_;
   std::unique_ptr<Node> root_;
 };
 
 template <std::size_t Dim, typename T>
-requires SupportedPartitionDimension<Dim, T>
+  requires SupportedPartitionDimension<Dim, T>
 class KDTreeHeuristic final : public IHeuristicT<Dim, T>
 {
 public:
   using VecType = vec<Dim, T>;
   using BoxType = AABB<Dim, T>;
   using PartitionBase = IPartitionT<Dim, T>;
-  using RegionType = RegionT<Dim, T>;
+  using RegionBase = IRegionT<Dim, T>;
+  using RegionImpl = KDTreeRegion<Dim, T>;
   using PartitionImpl = KDTreePartition<Dim, T>;
+  using RegionPtr = std::shared_ptr<const RegionBase>;
   using Node = typename PartitionImpl::Node;
 
   [[nodiscard]] std::unique_ptr<PartitionBase>
@@ -266,9 +341,9 @@ public:
 
     std::size_t reuseCursor = 0;
 
-    result->root_ = BuildRecursive(points, indices, actualRegionCount,
-                                   rootBounds, ids, result->regions_,
-                                   &reusableIds, &reuseCursor);
+    result->root_ =
+        BuildRecursive(points, indices, actualRegionCount, rootBounds, ids,
+                       result->regions_, &reusableIds, &reuseCursor);
 
     ApplyStableIdRemap(previous, options, *result, ids);
     BuildRegionLookup(*result);
@@ -282,7 +357,7 @@ private:
     partition.regionLookup_.reserve(partition.regions_.size());
 
     for (std::size_t i = 0; i < partition.regions_.size(); ++i)
-      partition.regionLookup_[partition.regions_[i].id] = i;
+      partition.regionLookup_[partition.regions_[i]->GetID()] = i;
   }
 
   static std::vector<RegionID>
@@ -297,14 +372,14 @@ private:
     {
       ids.reserve(oldRegions.size());
       for (const auto& r : oldRegions)
-        ids.push_back(r.id);
+        ids.push_back(r->GetID());
     }
     else
     {
       const std::size_t keepCount = std::min(desiredCount, oldRegions.size());
       ids.reserve(keepCount);
       for (std::size_t i = 0; i < keepCount; ++i)
-        ids.push_back(oldRegions[i].id);
+        ids.push_back(oldRegions[i]->GetID());
     }
 
     if (!options.allowNewRegions && ids.size() > desiredCount)
@@ -334,13 +409,17 @@ private:
       T bestScore = std::numeric_limits<T>::max();
       std::size_t bestOld = std::numeric_limits<std::size_t>::max();
 
+      const auto* currentRegion =
+          dynamic_cast<const RegionImpl*>(current.regions_[i].get());
+      assert(currentRegion && "KDTreePartition contains non-KDTreeRegion");
+
       for (std::size_t j = 0; j < oldRegions.size(); ++j)
       {
         if (oldUsed[j])
           continue;
 
-        const T d2 = PartitionImpl::DistanceSquared(current.regions_[i].centroid,
-                                                    oldRegions[j].centroid);
+        const T d2 = PartitionImpl::DistanceSquared(
+            currentRegion->GetCentroid(), oldRegions[j]->GetCentroid());
 
         const T score = d2 / static_cast<T>(stabilityWeight);
         if (score < bestScore)
@@ -352,27 +431,30 @@ private:
 
       if (bestOld != std::numeric_limits<std::size_t>::max())
       {
-        remapped[i] = oldRegions[bestOld].id;
+        remapped[i] = oldRegions[bestOld]->GetID();
         oldUsed[bestOld] = true;
       }
     }
 
     for (std::size_t i = 0; i < current.regions_.size(); ++i)
     {
+      auto* currentRegion =
+          const_cast<RegionImpl*>(dynamic_cast<const RegionImpl*>(
+              current.regions_[i].get()));
+      assert(currentRegion && "KDTreePartition contains non-KDTreeRegion");
+
       if (remapped[i] == 0)
         remapped[i] = ids.Next();
 
-      current.regions_[i].id = remapped[i];
+      currentRegion->SetID(remapped[i]);
     }
   }
 
   static std::unique_ptr<Node>
   BuildRecursive(std::span<const VecType> points,
-                 std::vector<std::size_t>& indices,
-                 std::size_t regionCount,
-                 const BoxType& cellBounds,
-                 IRegionIdGenerator& ids,
-                 std::vector<RegionType>& outRegions,
+                 std::vector<std::size_t>& indices, std::size_t regionCount,
+                 const BoxType& cellBounds, IRegionIdGenerator& ids,
+                 std::vector<RegionPtr>& outRegions,
                  std::vector<RegionID>* reusableIds = nullptr,
                  std::size_t* reusableCursor = nullptr)
   {
@@ -383,26 +465,26 @@ private:
     {
       node->isLeaf = true;
 
-      RegionType region;
-      if (reusableIds && reusableCursor && *reusableCursor < reusableIds->size())
-        region.id = (*reusableIds)[(*reusableCursor)++];
+      RegionID regionId = 0;
+      if (reusableIds && reusableCursor &&
+          *reusableCursor < reusableIds->size())
+        regionId = (*reusableIds)[(*reusableCursor)++];
       else
-        region.id = ids.Next();
+        regionId = ids.Next();
 
-      region.pointIndices = std::move(indices);
-      region.centroid =
-          PartitionImpl::ComputeCentroid(points, region.pointIndices);
+      VecType centroid = PartitionImpl::ComputeCentroid(points, indices);
 
-      // This is the important change:
-      // bounds are the full allotted kd-cell, not the tight point bounds.
-      region.bounds = cellBounds;
+      auto region = std::make_shared<RegionImpl>(
+          regionId,
+          centroid,
+          cellBounds,
+          std::move(indices));
 
       node->regionIndex = outRegions.size();
       outRegions.push_back(std::move(region));
       return node;
     }
 
-    // Use tight point bounds only to choose a good split axis.
     const BoxType tightBounds =
         PartitionImpl::ComputeTightBounds(points, indices);
 
@@ -436,20 +518,18 @@ private:
     const T rightMin = points[rightIndices.front()][node->splitAxis];
     node->splitValue = (leftMax + rightMin) / static_cast<T>(2);
 
-    const BoxType leftBounds =
-        PartitionImpl::MakeChildBounds(cellBounds, node->splitAxis,
-                                       node->splitValue, true);
-    const BoxType rightBounds =
-        PartitionImpl::MakeChildBounds(cellBounds, node->splitAxis,
-                                       node->splitValue, false);
+    const BoxType leftBounds = PartitionImpl::MakeChildBounds(
+        cellBounds, node->splitAxis, node->splitValue, true);
+    const BoxType rightBounds = PartitionImpl::MakeChildBounds(
+        cellBounds, node->splitAxis, node->splitValue, false);
 
-    node->left = BuildRecursive(points, leftIndices, leftRegionCount,
-                                leftBounds, ids, outRegions,
-                                reusableIds, reusableCursor);
+    node->left =
+        BuildRecursive(points, leftIndices, leftRegionCount, leftBounds, ids,
+                       outRegions, reusableIds, reusableCursor);
 
-    node->right = BuildRecursive(points, rightIndices, rightRegionCount,
-                                 rightBounds, ids, outRegions,
-                                 reusableIds, reusableCursor);
+    node->right =
+        BuildRecursive(points, rightIndices, rightRegionCount, rightBounds, ids,
+                       outRegions, reusableIds, reusableCursor);
 
     return node;
   }

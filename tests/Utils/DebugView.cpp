@@ -90,7 +90,7 @@ void DebugView::_run_2d_scene()
 
   camera.target = {0.0f, 0.0f};
   camera.offset = {screenWidth * 0.5f, screenHeight * 0.5f};
-  camera.zoom = screenWidth / (2.0f * settings.SceneScale);
+  camera.zoom = screenWidth / ( settings.SceneScale);
   camera.rotation = 0.0f;
 
   float dt = 1.0f / 60.0f;
@@ -260,7 +260,7 @@ void DebugView::_run_3d_scene()
               Vector3(axis_width, settings.SceneScale, axis_width), GREEN);
     DrawCubeV(Vector3(0, 0, mid_scale),
               Vector3(axis_width, axis_width, settings.SceneScale), BLUE);
-    DrawGrid(10, 1.0f);
+    DrawGrid(settings.SceneScale, 1.0f);
     if (updateFunc)
     {
       Context ctx(*this, dt, totalTime_,camera);
