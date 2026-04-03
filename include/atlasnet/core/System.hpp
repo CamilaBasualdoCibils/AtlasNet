@@ -13,7 +13,7 @@ namespace AtlasNet
 class ISystem
 {
 protected:
-  static inline std::shared_mutex Mutex;
+  static inline std::shared_mutex systems_mutex;
   static inline boost::container::flat_map<std::type_index,
                                            std::unique_ptr<ISystem>>
       systems;
@@ -23,7 +23,7 @@ protected:
 public:
   static void ShutdownAll()
   {
-    std::unique_lock lock(Mutex);
+    std::unique_lock lock(systems_mutex);
     for (auto& [type, system] : systems)
     {
       system->Shutdown();
@@ -54,7 +54,7 @@ public:
     Type* data = reinterpret_cast<Type*>(new std::byte[sizeof(Type)]);
     std::unique_ptr<Type> instance = std::unique_ptr<Type>(data);
     {
-      std::unique_lock lock(Mutex);
+      std::unique_lock lock(systems_mutex);
 
       if (systems.contains(typeid(Type)))
       {
@@ -70,7 +70,7 @@ public:
 
   [[nodiscard]] static Type& Get()
   {
-    std::shared_lock lock(Mutex);
+    std::shared_lock lock(systems_mutex);
 
     if (!systems.contains(typeid(Type)))
     {
@@ -82,7 +82,7 @@ public:
   }
   static bool Exists()
   {
-    std::shared_lock lock(Mutex);
+    std::shared_lock lock(systems_mutex);
     return static_cast<bool>(systems.contains(typeid(Type)));
   }
 };

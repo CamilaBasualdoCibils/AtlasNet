@@ -1,6 +1,6 @@
 #pragma once
 
-#include "DebugView.hpp"
+#include "SceneView.hpp"
 #include "atlasnet/core/geometry/Vec.hpp"
 #include "atlasnet/core/heuristic/IHeuristic.hpp"
 #include "raylib.h"
@@ -101,22 +101,22 @@ inline void HeuristicUtils::MotionTest(uint32_t regionCount,
 
   partitionFunc(1);
 
-  DebugView view = [&]()
+  SceneView view = [&]()
   {
     if constexpr (Is2D::value)
     {
-      return DebugView(
-          DebugView::Scene2DSettings{.SceneScale = SceneScale * 2.0f});
+      return SceneView(
+          SceneView::Scene2DSettings{.SceneScale = SceneScale * 2.0f});
     }
     else
     {
-      return DebugView(
-          DebugView::Scene3DSettings{.SceneScale = SceneScale * 2.0f});
+      return SceneView(
+          SceneView::Scene3DSettings{.SceneScale = SceneScale * 2.0f});
     }
   }();
 
   view.on_update(
-      [&](DebugView::Context& ctx)
+      [&](SceneView::Context& ctx)
       {
         const float TimePerSplit = 0.01f;
 
@@ -242,7 +242,7 @@ inline void HeuristicUtils::MotionTest(uint32_t regionCount,
             }
           }
 
-          ctx.DrawAABB(bounds, DebugView::DrawMode::Wireframe, BLUE);
+          ctx.DrawAABB(bounds, SceneView::DrawMode::Wireframe, BLUE);
         }
       });
 
@@ -317,22 +317,22 @@ inline void HeuristicUtils::SequentialTest(
 
   partitionFunc(1);
 
-  DebugView view = [&]()
+  SceneView view = [&]()
   {
     if constexpr (Is2D::value)
     {
-      return DebugView(
-          DebugView::Scene2DSettings{.SceneScale = SceneScale * 2.0f});
+      return SceneView(
+          SceneView::Scene2DSettings{.SceneScale = SceneScale * 2.0f});
     }
     else
     {
-      return DebugView(
-          DebugView::Scene3DSettings{.SceneScale = SceneScale * 2.0f});
+      return SceneView(
+          SceneView::Scene3DSettings{.SceneScale = SceneScale * 2.0f});
     }
   }();
 
   view.on_update(
-      [&](DebugView::Context& ctx)
+      [&](SceneView::Context& ctx)
       {
         const float TimePerSplit = 0.01f;
 
@@ -462,7 +462,7 @@ inline void HeuristicUtils::SequentialTest(
             }
           }
 
-          ctx.DrawAABB(bounds, DebugView::DrawMode::Wireframe, BLUE);
+          ctx.DrawAABB(bounds, SceneView::DrawMode::Wireframe, BLUE);
         }
       });
 

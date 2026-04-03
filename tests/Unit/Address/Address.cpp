@@ -1,8 +1,10 @@
 
 #include "atlasnet/core/Address.hpp"
+#include "atlasnet/core/EndPoint.hpp"
 #include <gtest/gtest.h>
+#include <unordered_set>
 
-TEST(ADDRESS, IPV4)
+TEST(Address, IPV4)
 {
   IPv4Address addr("127.0.0.1");
   EXPECT_EQ(addr.to_string(), "127.0.0.1");
@@ -11,7 +13,7 @@ TEST(ADDRESS, IPV4)
   EXPECT_EQ(addr[2], 0);
   EXPECT_EQ(addr[3], 1);
 }
-TEST(ADDRESS, IPV6)
+TEST(Address, IPV6)
 {
   IPv6Address addr("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
   EXPECT_EQ(addr.to_string(), "2001:0db8:85a3:0000:0000:8a2e:0370:7334");
@@ -32,12 +34,12 @@ TEST(ADDRESS, IPV6)
   EXPECT_EQ(addr[14], 0x73);
   EXPECT_EQ(addr[15], 0x34);
 }
-TEST(ADDRESS, DNS)
+TEST(Address, DNS)
 {
   DNSAddress addr("localhost");
   EXPECT_EQ(addr.to_string(), "localhost");
 }
-TEST(ADDRESS, DNS_RESOLVE)
+TEST(Address, DNSResolve)
 {
   DNSAddress addr("localhost");
   auto resolved = addr.resolve();
@@ -61,8 +63,146 @@ TEST(ADDRESS, DNS_RESOLVE)
     EXPECT_EQ(ipv6, localHost);
   }
 }
+TEST(Address, DeduceIpv4)
+{
+  EndPointAddress endpoint("192.25.126.245:8080");
 
+  EXPECT_TRUE(endpoint.IsIpv4());
+  EXPECT_EQ(endpoint.get_port(), 8080);
+}
+TEST(Address, DeduceIpv6)
+{
+  EndPointAddress endpoint("[2001:0db8:85a3:0000:0000:8a2e:0370:7334]:8080");
 
+  EXPECT_TRUE(endpoint.IsIpv6());
+  EXPECT_EQ(endpoint.get_port(), 8080);
+}
+TEST(Address, DeduceDns)
+{
+  EndPointAddress endpoint("localhost:8080");
+  endpoint.parse_string("localhost:8080");
+  EXPECT_TRUE(endpoint.IsDNS());
+  EXPECT_EQ(endpoint.get_port(), 8080);
+}
+TEST(Address, DeduceInvalid)
+{
+
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr("invalid_address"); // not an address
+      }());
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr("256.256.256.256"); // invalid IPv4
+      }());
+
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr(
+            "[2001:0db8:85a3:0000:0000:8a2e:0370:7334g]:8080"); // invalid ipv6
+      }());
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr(
+            "2001:0db8:85a3:0000:0000:8a2e:0370:7334:8080"); // missing brackets
+                                                             // for IPv6
+      }());
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr("localhost"); // missing port
+      }());
+  EXPECT_ANY_THROW(
+      []()
+      {
+        EndPointAddress addr("localhost:notaport"); // invalid port
+      }());
+}
+TEST(Address, AddrHashing)
+{
+  std::unordered_set<IPv4Address> ip4addressSet;
+  std::unordered_set<IPv6Address> ip6addressSet;
+  std::unordered_set<DNSAddress> dnsAddressSet;
+  IPv4Address addr1(192, 125, 6, 21);
+  IPv6Address addr2("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  DNSAddress addr3("localhost");
+
+  ip4addressSet.insert(addr1);
+  ip6addressSet.insert(addr2);
+  dnsAddressSet.insert(addr3);
+
+  EXPECT_TRUE(ip4addressSet.contains(addr1));
+  EXPECT_TRUE(ip6addressSet.contains(addr2));
+  EXPECT_TRUE(dnsAddressSet.contains(addr3));
+}
+TEST(Address, EndPointHashing)
+{
+  std::unordered_set<EndPointAddress> addressSet;
+  EndPointAddress addr1("192.125.6.21:8080");
+  EndPointAddress addr2(IPv6Address("2001:0db8:85a3:0000:0000:8a2e:0370:7334"),
+                        8080);
+  EndPointAddress addr3("localhost:8080");
+
+  EndPointAddress addr4("1.1.1.1:8080");
+  addressSet.insert(addr1);
+  addressSet.insert(addr2);
+  addressSet.insert(addr3);
+
+  EXPECT_TRUE(addressSet.contains(addr1));
+  EXPECT_TRUE(addressSet.contains(addr2));
+  EXPECT_TRUE(addressSet.contains(addr3));
+  EXPECT_FALSE(addressSet.contains(addr4));
+}
+
+TEST(Address, AddrEquality)
+{
+  IPv4Address addr1(192, 125, 6, 21);
+  IPv4Address addr2(192, 125, 6, 21);
+  IPv4Address addr3(192, 125, 6, 22);
+
+  IPv6Address addr4("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  IPv6Address addr5("2001:0db8:85a3:0000:0000:8a2e:0370:7334");
+  IPv6Address addr6("2001:0db8:85a3:0000:0000:8a2e:0370:7335");
+
+  DNSAddress addr7("localhost");
+  DNSAddress addr8("localhost");
+  DNSAddress addr9("localsuperhost");
+
+  EXPECT_EQ(addr1, addr2);
+  EXPECT_NE(addr1, addr3);
+  EXPECT_EQ(addr4, addr5);
+  EXPECT_NE(addr4, addr6);
+  EXPECT_EQ(addr7, addr8);
+  EXPECT_NE(addr7, addr9);
+}
+TEST(Address, EndPointEquality)
+{
+  EndPointAddress addr1(IPv4Address(192, 125, 6, 21), 8080);
+  EndPointAddress addr2(IPv4Address(192, 125, 6, 21), 8080);
+  EndPointAddress addr3(IPv4Address(192, 125, 6, 22), 8080);
+
+  EndPointAddress addr4(IPv6Address("2001:0db8:85a3:0000:0000:8a2e:0370:7334"),
+                        8080);
+  EndPointAddress addr5(IPv6Address("2001:0db8:85a3:0000:0000:8a2e:0370:7334"),
+                        8080);
+  EndPointAddress addr6(IPv6Address("2001:0db8:85a3:0000:0000:8a2e:0370:7335"),
+                        8080);
+
+  EndPointAddress addr7("localhost:8080");
+  EndPointAddress addr8("localhost:8080");
+  EndPointAddress addr9("localhost:8081");
+
+  EXPECT_EQ(addr1, addr2);
+  EXPECT_NE(addr1, addr3);
+  EXPECT_EQ(addr4, addr5);
+  EXPECT_NE(addr4, addr6);
+  EXPECT_EQ(addr7, addr8);
+  EXPECT_NE(addr7, addr9);
+}
 int main(int argc, char** argv)
 {
   ::testing::InitGoogleTest(&argc, argv);

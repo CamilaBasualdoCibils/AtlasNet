@@ -1,24 +1,94 @@
 #pragma once
 
-
-#include "atlasnet/core/job/Job.hpp"
-#include "atlasnet/core/job/JobEnums.hpp"
+#include "JobEnums.hpp"
+#include <atomic>
+#include <chrono>
 #include <condition_variable>
+#include <exception>
+#include <functional>
+#include <memory>
 #include <mutex>
-namespace AtlasNet {
+#include <optional>
+#include <queue>
+#include <string>
+#include <vector>
 
-
-struct job_runtime
+namespace AtlasNet
 {
-  Job job;
-  job_runtime(const Job& job) : job(job), state(JobState::ePending) {}
-  std::atomic<JobState> state{JobState::ePending};
-    mutable std::mutex mutex;
-  mutable std::condition_variable cv;
 
-  bool operator<(const job_runtime& other) const
+class JobContext;
+
+namespace Detail
+{
+
+struct JobRuntime;
+
+struct JobContinuationFactory
+{
+  std::function<std::shared_ptr<JobRuntime>()> create;
+};
+
+struct JobRuntime
+{
+  using InvokeFn = std::function<void(JobContext&)>;
+
+  mutable std::mutex mutex;
+  std::condition_variable cv;
+
+  std::atomic<JobState> state{JobState::ePending};
+
+  JobPriority priority = JobPriority::eMedium;
+  JobNotifyLevel notify = JobNotifyLevel::eNone;
+  std::optional<std::string> name;
+
+  bool repeat_requested = false;
+  std::chrono::milliseconds repeat_delay{0};
+
+  bool cancelled = false;
+  std::exception_ptr exception;
+
+  std::vector<JobContinuationFactory> continuations;
+
+  InvokeFn invoke;
+};
+
+struct ReadyJob
+{
+  std::shared_ptr<JobRuntime> runtime;
+  std::uint64_t sequence = 0;
+};
+
+struct ReadyJobCompare
+{
+  bool operator()(const ReadyJob& a, const ReadyJob& b) const noexcept
   {
-    return job.get_priority() < other.job.get_priority();
+    const auto pa = static_cast<int>(a.runtime->priority);
+    const auto pb = static_cast<int>(b.runtime->priority);
+
+    if (pa != pb)
+      return pa < pb;
+
+    return a.sequence > b.sequence;
   }
 };
-}
+
+struct DelayedJob
+{
+  std::chrono::steady_clock::time_point due;
+  std::shared_ptr<JobRuntime> runtime;
+  std::uint64_t sequence = 0;
+};
+
+struct DelayedJobCompare
+{
+  bool operator()(const DelayedJob& a, const DelayedJob& b) const noexcept
+  {
+    if (a.due != b.due)
+      return a.due > b.due;
+
+    return a.sequence > b.sequence;
+  }
+};
+
+} // namespace Detail
+} // namespace AtlasNet

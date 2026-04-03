@@ -1,73 +1,138 @@
 #pragma once
 
-#include "atlasnet/core/job/JobEnums.hpp"
-#include "atlasnet/core/job/JobRuntime.hpp"
-
+#include "JobContext.hpp"
+#include "JobOptions.hpp"
+#include "JobRuntime.hpp"
+#include <chrono>
+#include <concepts>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <type_traits>
+#include <utility>
 
 namespace AtlasNet
 {
+
+class JobSystem;
+
 class JobHandle
 {
-  std::shared_ptr<job_runtime> runtime;
-
 public:
-  JobHandle(std::shared_ptr<job_runtime> runtime) : runtime(std::move(runtime))
+  JobHandle() = default;
+
+  JobHandle(JobSystem& system, std::shared_ptr<Detail::JobRuntime> runtime)
+      : system_(&system), runtime_(std::move(runtime))
   {
   }
 
-  JobState get_state() const
+  [[nodiscard]] bool valid() const noexcept
   {
-    return runtime->state.load(std::memory_order_acquire);
+    return static_cast<bool>(runtime_);
   }
 
-  bool is_completed() const
+  [[nodiscard]] JobState state() const noexcept
   {
-    return get_state() == JobState::eCompleted;
+    if (!runtime_)
+      return JobState::eCompleted;
+    return runtime_->state.load(std::memory_order_acquire);
   }
-  bool is_running() const
+
+  [[nodiscard]] bool is_completed() const noexcept
   {
-    return get_state() == JobState::eRunning;
+    return state() == JobState::eCompleted;
   }
-  bool is_pending() const
+
+  [[nodiscard]] bool is_failed() const noexcept
   {
-    return get_state() == JobState::ePending;
+    return state() == JobState::eFailed;
+  }
+
+  [[nodiscard]] bool is_running() const noexcept
+  {
+    return state() == JobState::eRunning;
+  }
+
+  [[nodiscard]] bool is_pending() const noexcept
+  {
+    const auto s = state();
+    return s == JobState::ePending || s == JobState::eQueued;
   }
 
   void wait() const
   {
-    if (!runtime)
+    if (!runtime_)
       return;
 
-    if (is_completed())
-      return;
-
-    std::unique_lock lock(runtime->mutex);
-    runtime->cv.wait(lock,
-                     [this]
-                     {
-                       return runtime->state.load(std::memory_order_acquire) ==
-                              JobState::eCompleted;
-                     });
+    std::unique_lock lock(runtime_->mutex);
+    runtime_->cv.wait(lock,
+                      [&]
+                      {
+                        const auto s =
+                            runtime_->state.load(std::memory_order_acquire);
+                        return s == JobState::eCompleted ||
+                               s == JobState::eFailed ||
+                               s == JobState::eCancelled;
+                      });
   }
 
-  bool wait_for(std::chrono::milliseconds timeout) const
+  void rethrow_if_failed() const
   {
-    if (!runtime)
-      return true;
+    if (!runtime_)
+      return;
 
-    if (is_completed())
-      return true;
-
-    std::unique_lock lock(runtime->mutex);
-    return runtime->cv.wait_for(lock, timeout,
-                                [this]
-                                {
-                                  return runtime->state.load(
-                                             std::memory_order_acquire) ==
-                                         JobState::eCompleted;
-                                });
+    std::exception_ptr ex;
+    {
+      std::lock_guard lock(runtime_->mutex);
+      ex = runtime_->exception;
+    }
+    if (ex)
+      std::rethrow_exception(ex);
   }
 
-  void on_complete(Job onCompleteJob) const;
+  [[nodiscard]] std::optional<std::string> name() const
+  {
+    if (!runtime_)
+      return std::nullopt;
+
+    std::lock_guard lock(runtime_->mutex);
+    return runtime_->name;
+  }
+
+  [[nodiscard]] JobPriority priority() const noexcept
+  {
+    if (!runtime_)
+      return JobPriority::eMedium;
+    return runtime_->priority;
+  }
+
+  void request_repeat(
+      std::chrono::milliseconds delay = std::chrono::milliseconds::zero()) const;
+
+  void cancel() const noexcept
+  {
+    if (!runtime_)
+      return;
+
+    std::lock_guard lock(runtime_->mutex);
+    const auto s = runtime_->state.load(std::memory_order_acquire);
+    if (s == JobState::ePending || s == JobState::eQueued)
+    {
+      runtime_->cancelled = true;
+      runtime_->state.store(JobState::eCancelled, std::memory_order_release);
+      runtime_->cv.notify_all();
+    }
+  }
+
+  template <typename F, typename... Opts>
+    requires(std::invocable<F&, JobContext&> &&
+             (JobOpts::IsSupportedJobOptionV<Opts> && ...))
+  [[nodiscard]] JobHandle on_complete(F&& f, Opts&&... opts) const;
+
+private:
+  JobSystem* system_ = nullptr;
+  std::shared_ptr<Detail::JobRuntime> runtime_;
 };
+
 } // namespace AtlasNet

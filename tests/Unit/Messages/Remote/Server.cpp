@@ -1,11 +1,13 @@
 
+#include "CrashStack.hpp"
 #include "Messages.hpp"
-#include "TestUtils.hpp"
 #include "atlasnet/core/job/JobSystem.hpp"
 #include "atlasnet/core/messages/MessageSystem.hpp"
+#include <chrono>
 #include <condition_variable>
 #include <future>
 #include <mutex>
+#include <thread>
 #include <unordered_map>
 int test0()
 {
@@ -37,21 +39,24 @@ int test1()
   std::mutex msgMutex;
   std::condition_variable msgCv;
   AtlasNet::JobSystem::Init();
-  AtlasNet::MessageSystem::Init()
-      .OpenListenSocket(12345)
-      .On<SimpleMessage>(
-          [&](const SimpleMessage& _msg)
-          {
-            msg = _msg;
-            std::cerr << std::format("Received message: aNumber={}, str={}",
-                                _msg.aNumber, _msg.str)
-                        << std::endl;
+  AtlasNet::MessageSystem::Init();
+  std::this_thread::sleep_for(std::chrono::seconds(2));
+  std::cout << "Opening listen socket on port 12345..." << std::endl;
+  AtlasNet::MessageSystem::Get().OpenListenSocket(12345);
+  std::cout << "Subscribing to SimpleMessage..." << std::endl;
+  AtlasNet::MessageSystem::Get().On<SimpleMessage>(
+      [&](const SimpleMessage& _msg, const EndPointAddress& address)
+      {
+        msg = _msg;
+        std::cerr << std::format("Received message: aNumber={}, str={}",
+                                 _msg.aNumber, _msg.str)
+                  << std::endl;
 
-            msgCv.notify_one();
-          });
+        msgCv.notify_one();
+      });
 
   std::unique_lock<std::mutex> lock(msgMutex);
-  if (msgCv.wait_for(lock, std::chrono::seconds(50)) == std::cv_status::timeout)
+  if (msgCv.wait_for(lock, std::chrono::seconds(1)) == std::cv_status::timeout)
   {
     std::cerr << std::format("Timed out waiting for message") << std::endl;
     throw std::runtime_error("Test failed: did not receive message in time");
@@ -66,15 +71,16 @@ int test1()
     throw std::runtime_error("Test failed: received incorrect message");
   }
 
-  std::cerr << std::format("Test passed: received correct message") << std::endl;
+  std::cerr << std::format("Test passed: received correct message")
+            << std::endl;
 
   return 0;
 }
 const static inline std::unordered_map<int, std::function<int()>> tests = {
-    {0, test0}};
+    {0, test0}, {1, test1}};
 int main(int argc, char** argv)
 {
-TestUtils::Init();
+  CrashStack::Init();
 
   // Look for --server-addr and --test-num in args
 

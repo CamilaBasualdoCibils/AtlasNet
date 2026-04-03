@@ -1,7 +1,7 @@
-#include "DebugView.hpp"
+#include "SceneView.hpp"
 #include "raylib.h" /* 
 #include <variant>
-int DebugView::run()
+int SceneView::run()
 {
 
   const int screenWidth = 800;
@@ -63,7 +63,7 @@ int DebugView::run()
   return 0;
 }
  */
-int DebugView::run()
+int SceneView::run()
 {
 
 
@@ -83,7 +83,7 @@ int DebugView::run()
 
   return 0;
 }
-void DebugView::_run_2d_scene()
+void SceneView::_run_2d_scene()
 {
   Camera2D camera = {0};
   Scene2DSettings settings = std::get<Scene2DSettings>(settings_);
@@ -178,7 +178,7 @@ void DebugView::_run_2d_scene()
 
   CloseWindow();
 }
-void DebugView::_run_3d_scene()
+void SceneView::_run_3d_scene()
 {
   Camera3D camera = {0};
   Scene3DSettings settings = std::get<Scene3DSettings>(settings_);

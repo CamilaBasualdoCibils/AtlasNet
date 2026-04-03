@@ -2,6 +2,7 @@
 
 #include "Address.hpp"
 #include <cstdint>
+#include <stdexcept>
 #include <string>
 using PortType = uint16_t;
 
@@ -38,8 +39,55 @@ public:
 
   void parse_string(const std::string& str) override
   {
-    address.parse_string(str);
-    // now parse port
+    // Try parsing as IPv4 first, then IPv6, then SteamID.
+    try
+    {
+      IPv4Address ipv4(str);
+      address = ipv4;
+    }
+    catch (const std::exception&)
+    {
+      try
+      {
+        std::string ipv6_candidate = str;
+
+        // Support bracketed IPv6 endpoint format: [IPv6]:port
+        const size_t lbracket = str.find('[');
+        const size_t rbracket = str.find(']');
+        if (lbracket != std::string::npos && rbracket != std::string::npos &&
+            rbracket > lbracket)
+        {
+          ipv6_candidate = str.substr(lbracket + 1, rbracket - lbracket - 1);
+        }
+
+        IPv6Address ipv6(ipv6_candidate);
+        address = ipv6;
+      }
+      catch (const std::exception&)
+      {
+        try
+        {
+          DNSAddress dns(str);
+          address = dns;
+        }
+        catch (const std::exception&)
+        {
+          try
+          {
+            std::runtime_error(
+                "Parsing SteamIDAddress from string not implemented");
+          }
+          catch (const std::exception&)
+          {
+            throw std::invalid_argument("Invalid EndPointAddress: " + str);
+          }
+        }
+      }
+    }
+
+    // then after whichever succedded, parse port from end of string (after last
+    // colon)
+
     size_t colon = str.rfind(':');
     if (colon == std::string::npos)
       throw std::invalid_argument("Invalid EndPointAddress: " + str);
@@ -150,7 +198,35 @@ public:
   {
     return std::holds_alternative<SteamIDAddress>(address);
   }
+  bool IsValid() const
+  {
+    return !std::holds_alternative<std::monostate>(address);
+  }
 
+  const IPv4Address& get_ipv4() const
+  {
+    if (!IsIpv4())
+      throw std::bad_variant_access();
+    return std::get<IPv4Address>(address);
+  }
+  const IPv6Address& get_ipv6() const
+  {
+    if (!IsIpv6())
+      throw std::bad_variant_access();
+    return std::get<IPv6Address>(address);
+  }
+  const DNSAddress& get_dns() const
+  {
+    if (!IsDNS())
+      throw std::bad_variant_access();
+    return std::get<DNSAddress>(address);
+  }
+  const SteamIDAddress& get_steam_id() const
+  {
+    if (!IsSteamID())
+      throw std::bad_variant_access();
+    return std::get<SteamIDAddress>(address);
+  }
   SteamNetworkingIPAddr ToSteamAddr() const
   {
     SteamNetworkingIPAddr steamAddr;
@@ -251,24 +327,60 @@ public:
   }
   void parse_string(const std::string& str) override
   {
+    std::string addrPart = str;
+    size_t colon = str.rfind(':');
+    if (colon != std::string::npos)
+    {
+      addrPart = str.substr(0, colon);
+    }
+    else
+    {
+      throw std::invalid_argument("Invalid EndPointAddress: missing port");
+    }
+    PortType port = 0;
+    try
+    {
+      port = static_cast<PortType>(std::stoul(str.substr(colon + 1)));
+    }
+    catch (const std::exception&)
+    {
+      throw std::invalid_argument("Invalid EndPointAddress: invalid port");
+    }
+    set_port(port);
     // Try parsing as IPv4 first, then IPv6, then SteamID.
     try
     {
-      IPv4Address ipv4(str);
+      IPv4Address ipv4(addrPart);
       address = ipv4;
     }
     catch (const std::exception&)
     {
       try
       {
-        IPv6Address ipv6(str);
+        std::string ipv6_candidate;
+
+        // Support bracketed IPv6 endpoint format: [IPv6]:port
+        const size_t lbracket = str.find('[');
+        const size_t rbracket = str.find(']');
+        if (lbracket != std::string::npos && rbracket != std::string::npos &&
+            rbracket > lbracket)
+        {
+          ipv6_candidate = str.substr(lbracket + 1, rbracket - lbracket - 1);
+        }
+        else
+        {
+          throw std::invalid_argument(
+              "Invalid EndPointAddress: missing brackets for IPv6");
+        }
+
+        IPv6Address ipv6(ipv6_candidate);
         address = ipv6;
       }
       catch (const std::exception&)
       {
         try
         {
-          DNSAddress dns(str);
+          DNSAddress dns(addrPart);
           address = dns;
         }
         catch (const std::exception&)
@@ -285,16 +397,13 @@ public:
         }
       }
     }
+    if (!IsValid())
+    {
+      throw std::invalid_argument("Invalid EndPointAddress: " + str);
+    }
 
     // then after whichever succedded, parse port from end of string (after last
     // colon)
-
-    size_t colon = str.rfind(':');
-    if (colon == std::string::npos)
-      throw std::invalid_argument("Invalid EndPointAddress: " + str);
-    std::string port_str = str.substr(colon + 1);
-    PortType port = static_cast<PortType>(std::stoul(port_str));
-    set_port(port);
   }
 
   template <typename T>
@@ -312,7 +421,7 @@ public:
   {
     address = addr;
   }
-  bool operator==(EndPointAddress other) const
+  bool operator==(const EndPointAddress& other) const
   {
     if (get_port() != other.get_port())
       return false;
@@ -321,34 +430,19 @@ public:
       return false;
 
     if (const auto* a = std::get_if<IPv4Address>(&address))
-    {
-      const auto& b = std::get<IPv4Address>(other.address);
-      for (size_t i = 0; i < 4; ++i)
-      {
-        if ((*a)[i] != b[i])
-          return false;
-      }
-      return true;
-    }
+      return *a == std::get<IPv4Address>(other.address);
 
     if (const auto* a = std::get_if<IPv6Address>(&address))
-    {
-      const auto& b = std::get<IPv6Address>(other.address);
-      for (size_t i = 0; i < 16; ++i)
-      {
-        if ((*a)[i] != b[i])
-          return false;
-      }
-      return true;
-    }
+      return *a == std::get<IPv6Address>(other.address);
+
+    if (const auto* a = std::get_if<DNSAddress>(&address))
+      return *a == std::get<DNSAddress>(other.address);
 
     if (const auto* a = std::get_if<SteamIDAddress>(&address))
-    {
-      const auto& b = std::get<SteamIDAddress>(other.address);
-      return a->get_steam_id64() == b.get_steam_id64();
-    }
+      return *a == std::get<SteamIDAddress>(other.address);
 
-    return false;
+    return std::holds_alternative<std::monostate>(address) &&
+           std::holds_alternative<std::monostate>(other.address);
   }
   // Declared here, defined out-of-line AFTER std::hash specializations below
   std::size_t hash() const noexcept override;

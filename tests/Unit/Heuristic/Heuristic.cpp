@@ -1,5 +1,5 @@
 
-#include "DebugView.hpp"
+#include "SceneView.hpp"
 #include "atlasnet/core/geometry/AABB.hpp"
 #include <gtest/gtest.h>
 #include "KDTree.hpp"

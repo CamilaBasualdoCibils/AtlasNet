@@ -6,13 +6,13 @@
 #include <format>
 #include <iostream>
 #include <boost/stacktrace.hpp>
-class TestUtils : public AtlasNet::System<TestUtils>
+class CrashStack : public AtlasNet::System<CrashStack>
 {
 public:
-  TestUtils()
+  CrashStack()
   {
     programName = get_executable_path();
-    auto HandleLambda = [](int sig) { TestUtils::Get().HandleSignal(sig); };
+    auto HandleLambda = [](int sig) { CrashStack::Get().HandleSignal(sig); };
     std::signal(SIGSEGV, HandleLambda);
     std::signal(SIGABRT, HandleLambda);
     std::signal(SIGFPE, HandleLambda);

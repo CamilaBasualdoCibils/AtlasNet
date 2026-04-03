@@ -1,4 +1,4 @@
-#include "TestUtils.hpp"
+#include "CrashStack.hpp"
 
 #if defined(_WIN32)
   #define NOMINMAX
@@ -10,7 +10,7 @@
   #include <unistd.h>
   #include <vector>
 #endif
-std::filesystem::path TestUtils::get_executable_path()
+std::filesystem::path CrashStack::get_executable_path()
 {
     #if defined(_WIN32)
     std::wstring buf;

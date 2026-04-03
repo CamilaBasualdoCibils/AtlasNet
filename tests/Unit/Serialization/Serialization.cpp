@@ -1,4 +1,4 @@
-#include "TestUtils.hpp"
+
 #include "atlasnet/core/serialize/ByteReader.hpp"
 #include "atlasnet/core/serialize/ByteWriter.hpp"
 #include "glm/ext/quaternion_relational.hpp"

@@ -1,5 +1,5 @@
 #pragma once
-#include "DebugView.hpp"
+#include "SceneView.hpp"
 #include "HeuristicUtils.hpp"
 #include "atlasnet/core/geometry/Vec.hpp"
 #include "atlasnet/core/heuristic/IHeuristic.hpp"

@@ -10,7 +10,8 @@ add_executable(HeuristicTests ${_Heuristic_Sources})
 # Optional, but common: local includes
 
 target_link_libraries(HeuristicTests
-AtlasNetTestUtils
+AtlasNetTestCrashUtils
+AtlasNetTestSceneView
 gtest
 )
 

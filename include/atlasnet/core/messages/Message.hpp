@@ -3,8 +3,17 @@
 #include "atlasnet/core/serialize/ByteWriter.hpp"
 namespace AtlasNet
 {
+using MessageIDHash = std::size_t;
+
 class IMessage
 {
+  public:
+  static MessageIDHash DeserializeTypeIdHash(ByteReader& archive)
+  {
+    MessageIDHash typeIdHash;
+    archive(typeIdHash);
+    return typeIdHash;
+  }
 };
 } // namespace AtlasNet
 // user-facing field syntax
@@ -41,25 +50,45 @@ class IMessage
 // unwrap (Type, Name)
 #define ATLASNET_DECLARE_FIELD(Field) ATLASNET_DECLARE_FIELD_I Field
 #define ATLASNET_DECLARE_FIELD_I(Type, Name) Type Name;
-
 #define ATLASNET_SERIALIZE_FIELD(Field) ATLASNET_SERIALIZE_FIELD_I Field
 #define ATLASNET_SERIALIZE_FIELD_I(Type, Name) archive(Name);
-
+#define ATLASNET_HASH_NAME(Field)                                              \
+  const static inline AtlasNet::MessageIDHash TypeIdHash =                               \
+      std::hash<std::string_view>{}(#Field);
 // final message macro
 #define ATLASNET_MESSAGE(Name, ...)                                            \
   struct Name : AtlasNet::IMessage                                             \
   {                                                                            \
     ATLASNET_FOR_EACH(ATLASNET_DECLARE_FIELD, __VA_ARGS__)                     \
+    ATLASNET_HASH_NAME(Name)                                                   \
                                                                                \
-    void Serialize(AtlasNet::ByteWriter& archive) const                                  \
+    void Serialize(AtlasNet::ByteWriter& archive) const                        \
     {                                                                          \
+      archive(TypeIdHash);                                                     \
       ATLASNET_FOR_EACH(ATLASNET_SERIALIZE_FIELD, __VA_ARGS__)                 \
     }                                                                          \
-    void Deserialize(AtlasNet::ByteReader& archive)                                      \
+                                                                               \
+    void Deserialize(AtlasNet::ByteReader& archive)                            \
     {                                                                          \
+      AtlasNet::MessageIDHash typeIdHash =                                     \
+          AtlasNet::IMessage::DeserializeTypeIdHash(archive);                  \
       ATLASNET_FOR_EACH(ATLASNET_SERIALIZE_FIELD, __VA_ARGS__)                 \
     }                                                                          \
   };
 
 ATLASNET_MESSAGE(testmessage, ATLASNET_MESSAGE_DATA(int, test),
                  ATLASNET_MESSAGE_DATA(float, test2));
+static void test_message_serialization() {
+  testmessage msg;
+  AtlasNet::ByteWriter writer;
+  msg.Serialize(writer);
+
+
+  AtlasNet::ByteReader reader(writer.bytes());
+  AtlasNet::MessageIDHash typeIdHash = AtlasNet::IMessage::DeserializeTypeIdHash(reader);
+  testmessage deserializedMsg;
+  deserializedMsg.Deserialize(reader);
+
+  assert(msg.test == deserializedMsg.test);
+  assert(msg.test2 == deserializedMsg.test2);
+}

@@ -7,7 +7,7 @@ add_executable(AddressTests ${CMAKE_CURRENT_SOURCE_DIR}/Address.cpp)
 # Optional, but common: local includes
 
 target_link_libraries(AddressTests
-AtlasNetTestUtils
+AtlasNetTestCrashUtils
 gtest
 )
 

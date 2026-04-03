@@ -9,7 +9,7 @@
 #include <utility>
 #include <variant>
 
-class DebugView
+class SceneView
 {
 
   struct TimerState
@@ -54,12 +54,12 @@ public:
   };
   class TimerHandle
   {
-    DebugView& view;
+    SceneView& view;
     TimerState& state;
     bool active;
 
   public:
-    TimerHandle(DebugView& v, TimerState& s, bool isActive)
+    TimerHandle(SceneView& v, TimerState& s, bool isActive)
         : view(v), state(s), active(isActive)
     {
     }
@@ -100,14 +100,14 @@ public:
   class Context
   {
     std::variant<Camera3D, Camera2D> camera;
-    DebugView& view;
+    SceneView& view;
     bool _ShouldShutdown = false;
 
   public:
     float deltaTime = 0.0f;
     float totalTime = 0.0f;
 
-    Context(DebugView& v, float dt, float tt,
+    Context(SceneView& v, float dt, float tt,
             std::variant<Camera3D, Camera2D> cam)
         : view(v), deltaTime(dt), totalTime(tt), camera(cam)
     {
@@ -191,19 +191,19 @@ public:
     }
   };
 
-  DebugView& on_update(std::function<void(Context&)> func)
+  SceneView& on_update(std::function<void(Context&)> func)
   {
     updateFunc = std::move(func);
     return *this;
   }
-  DebugView& on_update_post_3d(std::function<void(Context&)> func)
+  SceneView& on_update_post_3d(std::function<void(Context&)> func)
   {
     UpdatePost3DFunc = std::move(func);
     return *this;
   }
 
-  DebugView(Scene2DSettings settings) : settings_(std::move(settings)) {}
-  DebugView(Scene3DSettings settings) : settings_(std::move(settings)) {}
+  SceneView(Scene2DSettings settings) : settings_(std::move(settings)) {}
+  SceneView(Scene3DSettings settings) : settings_(std::move(settings)) {}
   int run();
 
 private:

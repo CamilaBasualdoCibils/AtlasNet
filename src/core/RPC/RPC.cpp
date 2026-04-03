@@ -30,3 +30,11 @@ void AtlasNet::RPC::OnRPCRequest(
 {
 }
 void AtlasNet::RPC::Shutdown() {}
+void AtlasNet::RPC::OnRPCError(const RpcErrorMessage& msg,
+                               const EndPointAddress& address)
+{
+}
+void AtlasNet::RPC::OnRPCResponse(const RpcResponseMessage& msg,
+                                  const EndPointAddress& address)
+{
+}

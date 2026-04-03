@@ -14,6 +14,7 @@
 #include <stdexcept>
 #include <steam/steam_api_common.h>
 #include <string>
+#include <sys/types.h>
 #include <variant>
 
 class IAddress
@@ -30,6 +31,13 @@ class IPv4Address : public IAddress
   uint8_t octets[4];
 
 public:
+  IPv4Address(uint32_t packed)
+  {
+    octets[0] = (packed >> 24) & 0xFF;
+    octets[1] = (packed >> 16) & 0xFF;
+    octets[2] = (packed >> 8) & 0xFF;
+    octets[3] = packed & 0xFF;
+  }
   IPv4Address(uint8_t o1, uint8_t o2, uint8_t o3, uint8_t o4)
   {
     octets[0] = o1;
@@ -43,14 +51,7 @@ public:
   }
   void parse_string(const std::string& str) override
   {
-    if ("localhost" == str)
-    {
-      octets[0] = 127;
-      octets[1] = 0;
-      octets[2] = 0;
-      octets[3] = 1;
-      return;
-    }
+
     size_t start = 0;
     for (int i = 0; i < 4; ++i)
     {
@@ -120,7 +121,42 @@ public:
     set_segment(6, s7);
     set_segment(7, s8);
   }
-
+  IPv6Address(uint8 s1_0, uint8 s1_1, uint8 s2_0, uint8 s2_1, uint8 s3_0,
+              uint8 s3_1, uint8 s4_0, uint8 s4_1, uint8 s5_0, uint8 s5_1,
+              uint8 s6_0, uint8 s6_1, uint8 s7_0, uint8 s7_1, uint8 s8_0,
+              uint8 s8_1)
+  {
+    bytes[0] = s1_0;
+    bytes[1] = s1_1;
+    bytes[2] = s2_0;
+    bytes[3] = s2_1;
+    bytes[4] = s3_0;
+    bytes[5] = s3_1;
+    bytes[6] = s4_0;
+    bytes[7] = s4_1;
+    bytes[8] = s5_0;
+    bytes[9] = s5_1;
+    bytes[10] = s6_0;
+    bytes[11] = s6_1;
+    bytes[12] = s7_0;
+    bytes[13] = s7_1;
+    bytes[14] = s8_0;
+    bytes[15] = s8_1;
+  }
+  IPv6Address(const uint8_t bytes_[16])
+  {
+    for (size_t i = 0; i < 16; ++i)
+    {
+      bytes[i] = bytes_[i];
+    }
+  }
+  IPv6Address(const uint16_t segments[8])
+  {
+    for (size_t i = 0; i < 8; ++i)
+    {
+      set_segment(i, segments[i]);
+    }
+  }
   explicit IPv6Address(const std::string& str)
   {
     parse_string(str);
@@ -146,7 +182,12 @@ public:
       if (segment_str.empty())
         throw std::invalid_argument("Invalid IPv6 address: " + str);
 
-      unsigned long value = std::stoul(segment_str, nullptr, 16);
+      size_t parsed_chars = 0;
+      unsigned long value = std::stoul(segment_str, &parsed_chars, 16);
+
+      if (parsed_chars != segment_str.size())
+        throw std::invalid_argument("Invalid IPv6 segment: " + segment_str);
+
       if (value > 0xFFFF)
         throw std::invalid_argument("IPv6 segment out of range: " +
                                     segment_str);
@@ -155,7 +196,7 @@ public:
       start = colon + 1;
     }
 
-    if (start < str.size() + 1)
+    if (start != str.size() + 1)
       throw std::invalid_argument("Invalid IPv6 address: " + str);
   }
 
@@ -279,6 +320,10 @@ public:
   std::size_t hash() const noexcept override
   {
     return std::hash<uint64_t>{}(identity.GetSteamID64());
+  }
+  bool operator==(const SteamIDAddress& other) const
+  {
+    return identity.GetSteamID64() == other.identity.GetSteamID64();
   }
 };
 class DNSAddress : public IAddress
