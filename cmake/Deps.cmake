@@ -17,6 +17,7 @@ find_package(OpenSSL REQUIRED)
 message(STATUS "Fetching Redis-Plus-Plus")
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build Hiredis as static" FORCE)
 set(ENABLE_SSL ON CACHE BOOL "Enable SSL support in hiredis" FORCE)
+set(DISABLE_TESTS ON CACHE BOOL "Disable building hiredis tests" FORCE)
 FetchContent_Declare(
   hiredis
   URL https://github.com/redis/hiredis/archive/refs/tags/v1.3.0.tar.gz
@@ -99,3 +100,10 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(kokkos)
+
+
+FetchContent_Declare(
+    ENTT
+    URL https://github.com/skypjack/entt/archive/refs/tags/v3.16.0.tar.gz
+)
+FetchContent_MakeAvailable(ENTT)

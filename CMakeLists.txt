@@ -14,7 +14,7 @@ include(cmake/Deps.cmake)
 set(ATLASNET_EXAMPLES ON CACHE BOOL "Build AtlasNet examples")
 set(ATLASNET_TESTS ON CACHE BOOL "Build AtlasNet tests")
 set(ATLASNET_DEV ON CACHE BOOL "Build AtlasNet dev")
-set(ATLASNET_WEB OFF CACHE BOOL "Build AtlasNet web interface")
+set(ATLASNET_WEB ON CACHE BOOL "Build AtlasNet web interface")
 
 if (ATLASNET_EXAMPLES)
     add_subdirectory(examples)
@@ -44,11 +44,13 @@ target_include_directories(AtlasNetCore
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
 )
 target_link_libraries(AtlasNetCore
+PUBLIC
 GameNetworkingSockets::GameNetworkingSockets_s
 OpenSSL::SSL
 OpenSSL::Crypto
 redis++::redis++_static
 hiredis::hiredis
+
 Boost::headers
 Boost::beast
 Boost::bimap
@@ -57,11 +59,12 @@ Boost::dynamic_bitset
 Boost::flyweight
 Boost::multi_array
 Boost::multi_index
+Boost::stacktrace_addr2line 
 Boost::static_string
 Boost::uuid
 glm::glm
-Taskflow::Taskflow
-
+#Taskflow::Taskflow
+EnTT
 )
 
 
@@ -76,7 +79,8 @@ target_include_directories(AtlasNetProxy
       PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/proxy"
 )
-add_dependencies(AtlasNetProxy AtlasNetCore)
+target_link_libraries(AtlasNetProxy AtlasNetCore)
+
 
 
 
@@ -90,7 +94,7 @@ target_include_directories(AtlasNetWatchdog
       PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src/watchdog"
 )
-add_dependencies(AtlasNetWatchdog AtlasNetCore)
+target_link_libraries(AtlasNetWatchdog AtlasNetCore)
 
 
 if (ATLASNET_WEB)
