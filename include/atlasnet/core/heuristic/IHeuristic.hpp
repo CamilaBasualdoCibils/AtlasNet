@@ -30,7 +30,7 @@ public:
 
   [[nodiscard]] virtual RegionID GetID() const = 0;
   [[nodiscard]] virtual const VecType& GetCentroid() const = 0;
-  [[nodiscard]] virtual const AABB<Dim, T>& GetAABB() const = 0;
+  [[nodiscard]] virtual const AABB_old<Dim, T>& GetAABB() const = 0;
 
   // Replace Mesh with your actual mesh type/include.
   [[nodiscard]] virtual const Mesh& GetMesh() const = 0;

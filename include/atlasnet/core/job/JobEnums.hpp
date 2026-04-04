@@ -1,7 +1,7 @@
 #pragma once
 
 #include <cstdint>
-
+#include <boost/describe.hpp>
 namespace AtlasNet
 {
 
@@ -54,5 +54,6 @@ enum class JobState : std::uint8_t
   eFailed,
   eCancelled
 };
+BOOST_DESCRIBE_ENUM(JobState, ePending, eQueued, eRunning, eCompleted, eFailed, eCancelled)
 
 } // namespace AtlasNet

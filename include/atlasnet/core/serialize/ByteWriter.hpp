@@ -309,7 +309,7 @@ public:
         write_any(elem);
       }
     }
-    else if constexpr (std::is_same_v<T, std::string>)
+    else if constexpr (std::is_same_v<T, std::string> || std::is_convertible_v<T, std::string_view>)
       str(v);
     else if constexpr (std::is_same_v<T, UUID>)
       uuid(v);

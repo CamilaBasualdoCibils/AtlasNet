@@ -24,9 +24,9 @@
 #include <span>
 #include <vector>
 
-AtlasNet::MessageSystem::MessageSystem()
+AtlasNet::MessageSystem::MessageSystem(const Config& config) : config_(config)
 {
-
+  AN_ASSERT(config_.jobSystem, "JobSystem must be provided");
   SteamNetworkingErrMsg errMsg;
   const bool result = GameNetworkingSockets_Init(nullptr, errMsg);
   if (!result)
@@ -48,11 +48,13 @@ AtlasNet::MessageSystem::MessageSystem()
     GameNetworkingSockets_Kill();
     throw std::runtime_error("Failed to create SteamNetworking poll group");
   }
-  _pollJobHandle = JobSystem::Get().Submit(
+  _pollJobHandle = config_.jobSystem->Submit(
       [this](JobContext& handle)
       {
         if (shutdown.load(std::memory_order_acquire))
         {
+          std::cerr << "MessageSystem poll job exiting due to shutdown signal."
+                    << std::endl;
           return;
         }
         else
@@ -62,13 +64,12 @@ AtlasNet::MessageSystem::MessageSystem()
         }
 
         GNS().RunCallbacks();
-
         _Parse_Incoming_Messages();
       },
 
       JobOpts::Name("MessageSystem::Poll"),
       JobOpts::Notify<JobNotifyLevel::eNone>(),
-      JobOpts::Priority<JobPriority::eHigh>{});
+      JobOpts::TPriority<JobPriority::eHigh>{});
 }
 
 AtlasNet::MessageSystem::ListenSocketHandle&
@@ -85,12 +86,13 @@ AtlasNet::MessageSystem::OpenListenSocket(PortType port)
   localAddr.Clear();
   localAddr.m_port = port;
 
-  SteamNetworkingConfigValue_t opt;
-  opt.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
-             (void*)&OnSteamNetConnectionStatusChanged);
+  SteamNetworkingConfigValue_t opts[2];
+  opts[0].SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
+                 (void*)&OnSteamNetConnectionStatusChanged);
+  opts[1].SetInt64(k_ESteamNetworkingConfig_ConnectionUserData, (int64_t)this);
 
   const HSteamListenSocket listenSocket =
-      GNS().CreateListenSocketIP(localAddr, 1, &opt);
+      GNS().CreateListenSocketIP(localAddr, 2, opts);
 
   if (listenSocket == k_HSteamListenSocket_Invalid)
   {
@@ -101,7 +103,7 @@ AtlasNet::MessageSystem::OpenListenSocket(PortType port)
   std::cerr << "Opened listen socket on port " << port << std::endl;
 
   auto inserted = _listenSockets.emplace(
-      port, std::make_unique<ListenSocketHandle>(*this, listenSocket));
+      port, std::make_unique<ListenSocketHandle>(*this, listenSocket, port));
 
   return *inserted.first->second;
 }
@@ -137,6 +139,7 @@ void AtlasNet::MessageSystem::SteamNetConnectionStatusChanged(
 
     if (isIncoming)
     {
+      GNS().SetConnectionUserData(pInfo->m_hConn, (int64)this);
       const EResult r = GNS().AcceptConnection(pInfo->m_hConn);
       if (r != k_EResultOK)
       {
@@ -282,19 +285,79 @@ AtlasNet::JobHandle
 AtlasNet::MessageSystem::Connect(const EndPointAddress& address)
 {
 
-  JobHandle handle = JobSystem::Get().Submit(
-      [address = address, this](JobContext& handle)
-      { _Connect_to_job(handle, address); },
-      JobOpts::Priority<JobPriority::eHigh>{},
+  {
+    std::shared_lock lock(_mutex);
+
+    // Reuse an existing connect job if one is already tracked.
+    auto existingJobIt = _connectJobs.find(address);
+    if (existingJobIt != _connectJobs.end())
+    {
+      return existingJobIt->second;
+    }
+
+    // If already connected, return a completed no-op job so callers can
+    // still safely chain on_complete() if they want.
+    auto connIt = _connections.find(address);
+    if (connIt != _connections.end() &&
+        connIt->second.GetState() == ConnectionState::eConnected)
+    {
+      return config_.jobSystem->Submit(
+          [](JobContext&) {},
+          JobOpts::Name(std::format("MessageSystem::AlreadyConnected {}",
+                                    address.to_string())),
+          JobOpts::Notify<JobNotifyLevel::eNone>(),
+          JobOpts::TPriority<JobPriority::eHigh>{});
+    }
+  }
+
+  // Submit outside any long-lived write logic? Normally yes.
+  // But to avoid duplicate jobs for the same address, we still need to
+  // serialize the "check + insert" with a unique lock before returning.
+  std::unique_lock lock(_mutex);
+
+  // Double-check after upgrading.
+  auto existingJobIt = _connectJobs.find(address);
+  if (existingJobIt != _connectJobs.end())
+  {
+    return existingJobIt->second;
+  }
+
+  auto connIt = _connections.find(address);
+  if (connIt != _connections.end() &&
+      connIt->second.GetState() == ConnectionState::eConnected)
+  {
+    lock.unlock();
+    return config_.jobSystem->Submit(
+        [](JobContext&) {},
+        JobOpts::Name(std::format("MessageSystem::AlreadyConnected {}",
+                                  address.to_string())),
+        JobOpts::Notify<JobNotifyLevel::eNone>(),
+        JobOpts::TPriority<JobPriority::eHigh>{});
+  }
+
+  JobHandle handle = config_.jobSystem->Submit(
+      [this, address](JobContext& ctx)
+      {
+        _Connect_to_job(ctx, address);
+
+        // Clean up tracked connect jobs once the connection reaches
+        // a terminal or ready state.
+        const ConnectionState state = GetConnectionState(address);
+        if (state == ConnectionState::eConnected ||
+            state == ConnectionState::eClosedByPeer ||
+            state == ConnectionState::eProblemDetectedLocally ||
+            state == ConnectionState::eNone)
+        {
+          std::unique_lock cleanupLock(_mutex);
+          _connectJobs.erase(address);
+        }
+      },
+      JobOpts::TPriority<JobPriority::eHigh>{},
       JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{},
       JobOpts::Name(
           std::format("MessageSystem::ConnectTo {}", address.to_string())));
 
-  {
-    std::unique_lock lock(_mutex);
-    _connectJobs.emplace(address, handle);
-  }
-
+  _connectJobs[address] = handle;
   return handle;
 }
 
@@ -304,7 +367,7 @@ void AtlasNet::MessageSystem::Shutdown()
   {
     return;
   }
-
+  _pollJobHandle->wait();
   std::cerr << "Shutting down MessageSystem..." << std::endl;
 
   // If your JobSystem supports cancellation, do it here.
@@ -382,13 +445,13 @@ void AtlasNet::MessageSystem::ListenSocketHandle::DispatchCallbacks(
     const IMessage& message, MessageIDHash typeIdHash,
     const EndPointAddress& caller_address)
 {
-  DispatchFunc dispatcher;
+  HandlerFunc dispatcher;
   bool found = false;
 
   {
     std::shared_lock lock(socket_mutex);
-    auto it = _dispatchTable.find(typeIdHash);
-    if (it != _dispatchTable.end())
+    auto it = _handlers.find(typeIdHash);
+    if (it != _handlers.end())
     {
       dispatcher = it->second;
       found = true;
@@ -397,12 +460,16 @@ void AtlasNet::MessageSystem::ListenSocketHandle::DispatchCallbacks(
 
   if (found)
   {
-    dispatcher(message, typeIdHash, caller_address);
+    std::cerr << std::format(
+        "Dispatching message of type hash {} received on listen socket port {} to socket dispatcher\n",
+        typeIdHash, port)
+              << std::endl;
+    dispatcher(message, caller_address);
   }
   else
   {
     std::cerr << std::format(
-        "No dispatcher registered for message type with hash {}", typeIdHash);
+        "No dispatcher registered for message type with hash {}\n", typeIdHash);
   }
 }
 void AtlasNet::MessageSystem::MessageSystem::_Parse_Incoming_Messages()
@@ -433,8 +500,17 @@ void AtlasNet::MessageSystem::MessageSystem::_Parse_Incoming_Messages()
       msg->Release();
       continue;
     }
-    SteamNetworkingIPAddr listenAddr;
-    GNS().GetListenSocketAddress(info.m_hListenSocket, &listenAddr);
+
+    std::optional<PortType> ListenSocketPortReceivedOn = std::nullopt;
+    if (info.m_hListenSocket != k_HSteamListenSocket_Invalid)
+    {
+      SteamNetworkingIPAddr listenAddr;
+      if (GNS().GetListenSocketAddress(info.m_hListenSocket, &listenAddr))
+      {
+        ListenSocketPortReceivedOn = listenAddr.m_port;
+      }
+    }
+
     std::optional<EndPointAddress> addressRemote;
     if (info.m_addrRemote.IsIPv4())
     {
@@ -458,7 +534,11 @@ void AtlasNet::MessageSystem::MessageSystem::_Parse_Incoming_Messages()
                                   static_cast<std::size_t>(msg->m_cbSize)));
 
     const MessageIDHash typeIdHash = IMessage::DeserializeTypeIdHash(readerID);
-    std::cout << std::format("Message of type hash: {}", typeIdHash)
+    std::cout << std::format("Message of type hash: {} {}", typeIdHash,
+                             ListenSocketPortReceivedOn.has_value()
+                                 ? std::format("on listen socket port {}",
+                                               *ListenSocketPortReceivedOn)
+                                 : "on client port")
               << std::endl;
 
     // Copy dispatcher out while holding the lock, then invoke
@@ -481,18 +561,22 @@ void AtlasNet::MessageSystem::MessageSystem::_Parse_Incoming_Messages()
       bytes.assign(static_cast<const uint8_t*>(msg->m_pData),
                    static_cast<const uint8_t*>(msg->m_pData) +
                        static_cast<std::size_t>(msg->m_cbSize));
-      PortType port_received_on = listenAddr.m_port;
-      JobSystem::Get().Submit(
-          [this, dispatcher, bytes = std::move(bytes),
-           addressRemote = *addressRemote, port_received_on](JobContext&)
+
+      config_.jobSystem->Submit(
+          [this, dispatcher = dispatcher, bytes = std::move(bytes),
+           addressRemote = *addressRemote,
+           port_received_on = ListenSocketPortReceivedOn](JobContext&)
           {
             ByteReader readerFull(bytes);
+            AN_ASSERT(dispatcher != nullptr,
+                      "Dispatcher should not be null here");
             dispatcher(readerFull, addressRemote, port_received_on);
           },
           JobOpts::Name(
-              std::format("MessageSystem::HandleMessage typeHash {} from {}",
+              std::format("MessageSystem::DispatchMessage typeHash {} from {}",
                           typeIdHash, addressRemote->to_string())),
-          JobOpts::Priority<JobPriority::eHigh>{});
+          JobOpts::TPriority<JobPriority::eHigh>{},
+          JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{});
     }
 
     msg->Release();
@@ -530,13 +614,15 @@ void AtlasNet::MessageSystem::_Connect_to_job(JobContext& handle,
   if (state != ConnectionState::eConnected &&
       state != ConnectionState::eConnecting)
   {
-    SteamNetworkingConfigValue_t opt;
-    opt.SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
-               (void*)&OnSteamNetConnectionStatusChanged);
+    SteamNetworkingConfigValue_t opts[2];
+    opts[0].SetPtr(k_ESteamNetworkingConfig_Callback_ConnectionStatusChanged,
+                   (void*)&OnSteamNetConnectionStatusChanged);
+    opts[1].SetInt64(k_ESteamNetworkingConfig_ConnectionUserData,
+                     (int64_t)this);
 
     SteamNetworkingIPAddr steamAddr = address.ToSteamAddr();
     const HSteamNetConnection con =
-        GNS().ConnectByIPAddress(steamAddr, 1, &opt);
+        GNS().ConnectByIPAddress(steamAddr, 2, opts);
 
     if (con == k_HSteamNetConnection_Invalid)
     {
@@ -603,8 +689,8 @@ size_t AtlasNet::MessageSystem::GetNumConnections() const
   return _connections.size();
 }
 AtlasNet::MessageSystem::ListenSocketHandle::ListenSocketHandle(
-    MessageSystem& system, HSteamListenSocket handle)
-    : system(system), handle(handle)
+    MessageSystem& system, HSteamListenSocket handle,PortType port)
+    : system(system), handle(handle), port(port)
 {
 }
 void AtlasNet::MessageSystem::Connection::SendMessage(

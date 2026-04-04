@@ -30,7 +30,7 @@ class KDTreeRegion final : public IRegionT<Dim, T>
 {
 public:
   using VecType = vec<Dim, T>;
-  using BoxType = AABB<Dim, T>;
+  using BoxType = AABB_old<Dim, T>;
 
   // Replace Mesh with your actual mesh type.
   KDTreeRegion(RegionID id, VecType centroid, BoxType bounds,
@@ -97,7 +97,7 @@ class KDTreePartition final : public IPartitionT<Dim, T>
 {
 public:
   using VecType = vec<Dim, T>;
-  using BoxType = AABB<Dim, T>;
+  using BoxType = AABB_old<Dim, T>;
   using RegionBase = IRegionT<Dim, T>;
   using RegionImpl = KDTreeRegion<Dim, T>;
   using RegionPtr = std::shared_ptr<const RegionBase>;
@@ -282,7 +282,7 @@ class KDTreeHeuristic final : public IHeuristicT<Dim, T>
 {
 public:
   using VecType = vec<Dim, T>;
-  using BoxType = AABB<Dim, T>;
+  using BoxType = AABB_old<Dim, T>;
   using PartitionBase = IPartitionT<Dim, T>;
   using RegionBase = IRegionT<Dim, T>;
   using RegionImpl = KDTreeRegion<Dim, T>;
@@ -346,6 +346,7 @@ public:
                        result->regions_, &reusableIds, &reuseCursor);
 
     ApplyStableIdRemap(previous, options, *result, ids);
+    ReleaseUnusedIds(previous, *result, ids);
     BuildRegionLookup(*result);
     return result;
   }
@@ -386,6 +387,28 @@ private:
       ids.resize(desiredCount);
 
     return ids;
+  }
+
+  static void ReleaseUnusedIds(const PartitionBase& previous,
+                               const PartitionImpl& current,
+                               IRegionIdGenerator& ids)
+  {
+    const auto oldRegions = previous.Regions();
+    if (oldRegions.empty())
+      return;
+
+    std::unordered_map<RegionID, bool> currentIds;
+    currentIds.reserve(current.regions_.size());
+
+    for (const auto& region : current.regions_)
+      currentIds.emplace(region->GetID(), true);
+
+    for (const auto& region : oldRegions)
+    {
+      const RegionID oldId = region->GetID();
+      if (currentIds.find(oldId) == currentIds.end())
+        ids.Release(oldId);
+    }
   }
 
   static void ApplyStableIdRemap(const PartitionBase& previous,

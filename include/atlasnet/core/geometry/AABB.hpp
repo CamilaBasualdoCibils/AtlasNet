@@ -13,7 +13,7 @@
 namespace AtlasNet {
 
 template <uint8_t Dim, typename Type, glm::qualifier Q = glm::defaultp>
-struct AABB {
+struct AABB_old {
   static_assert(Dim > 0, "AABB dimension must be > 0");
 
   using value_type = Type;
@@ -27,9 +27,9 @@ struct AABB {
   // -------------------------------------------------
 
   // Invalid / empty box
-  AABB() : min(vectype(0)), max(vectype(0)) {}
+  AABB_old() : min(vectype(0)), max(vectype(0)) {}
 
-  AABB(const vectype &min_, const vectype &max_)
+  AABB_old(const vectype &min_, const vectype &max_)
       : min(glm::min(min_, max_)), max(glm::max(min_, max_)) {}
 
   std::string ToString() const {
@@ -37,9 +37,9 @@ struct AABB {
                        glm::to_string(max));
   }
   // From center + half extents
-  static AABB FromCenterExtents(const vectype &center,
+  static AABB_old FromCenterExtents(const vectype &center,
                                 const vectype &halfExtents) {
-    return AABB(center - halfExtents, center + halfExtents);
+    return AABB_old(center - halfExtents, center + halfExtents);
   }
   void SetCenterExtents(const vectype &center, const vectype &halfExtents) {
     *this = FromCenterExtents(center, halfExtents);
@@ -93,7 +93,7 @@ struct AABB {
     max = glm::max(max, p);
   }
 
-  void expand(const AABB &other) {
+  void expand(const AABB_old &other) {
     min = glm::min(min, other.min);
     max = glm::max(max, other.max);
   }
@@ -134,7 +134,7 @@ struct AABB {
     return true;
   }
 
-  bool contains(const AABB &other) const {
+  bool contains(const AABB_old &other) const {
     return contains(other.min) && contains(other.max);
   }
 
@@ -142,7 +142,7 @@ struct AABB {
   // Intersection
   // -------------------------------------------------
 
-  bool intersects(const AABB &other) const {
+  bool intersects(const AABB_old &other) const {
     for (uint8_t i = 0; i < Dim; ++i) {
       if (other.min[i] > max[i] || other.max[i] < min[i])
         return false;
@@ -150,11 +150,11 @@ struct AABB {
     return true;
   }
 
-  AABB intersection(const AABB &other) const {
-    AABB result(glm::max(min, other.min), glm::min(max, other.max));
+  AABB_old intersection(const AABB_old &other) const {
+    AABB_old result(glm::max(min, other.min), glm::min(max, other.max));
 
     if (!result.valid())
-      return AABB();
+      return AABB_old();
 
     return result;
   }
@@ -194,9 +194,9 @@ struct AABB {
     return true;
   }
 };
-using AABB2i = AABB<2, int32_t>;
-using AABB3i = AABB<3, int32_t>;
-using AABB2f = AABB<2, float>;
-using AABB3f = AABB<3, float>;
+using AABB2i = AABB_old<2, int32_t>;
+using AABB3i = AABB_old<3, int32_t>;
+using AABB2f = AABB_old<2, float>;
+using AABB3f = AABB_old<3, float>;
 
 } // namespace AtlasNet

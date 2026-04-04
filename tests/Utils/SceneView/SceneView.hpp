@@ -146,7 +146,7 @@ public:
       DrawAABB<2, float>(box, mode, color);
     }
     template <size_t Dim, typename Type>
-    void DrawAABB(AtlasNet::AABB<Dim, Type> box,
+    void DrawAABB(AtlasNet::AABB_old<Dim, Type> box,
                   DrawMode mode = DrawMode::Solid, Color color = RED)
     {
       if constexpr (Dim == 3)

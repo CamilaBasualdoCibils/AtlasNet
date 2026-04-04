@@ -2,8 +2,7 @@
 
 #include "JobHandle.hpp"
 #include "JobOptions.hpp"
-#include "atlasnet/core/System.hpp"
-#include "atlasnet/core/system/isystem.hpp"
+#include "atlasnet/core/job/JobContext.hpp"
 
 #include <atomic>
 #include <chrono>
@@ -24,11 +23,14 @@
 namespace AtlasNet
 {
 
-class JobSystem final : public System<JobSystem>
+class JobSystem final
 {
-  friend class System<JobSystem>;
 
 public:
+  struct Config
+  {
+    std::size_t threadCount = std::thread::hardware_concurrency();
+  };
   using Clock = std::chrono::steady_clock;
 
   JobSystem(const JobSystem&) = delete;
@@ -36,7 +38,7 @@ public:
   JobSystem(JobSystem&&) = delete;
   JobSystem& operator=(JobSystem&&) = delete;
 
-  ~JobSystem() override
+  ~JobSystem()
   {
     Shutdown();
   }
@@ -76,51 +78,56 @@ public:
     EnqueueReady(runtime);
   }
 
-  void EnqueueRepeatFromHandle(
-      const std::shared_ptr<Detail::JobRuntime>& runtime,
-      std::chrono::milliseconds delay)
+  void
+  EnqueueRepeatFromHandle(const std::shared_ptr<Detail::JobRuntime>& runtime,
+                          std::chrono::milliseconds delay)
   {
     EnqueueDelayed(runtime, delay);
   }
 
-  void Shutdown() override
+  void Shutdown()
+{
   {
-    {
-      std::lock_guard lock(mutex_);
-      if (!started_)
-        return;
+    std::lock_guard lock(mutex_);
+    if (!started_)
+      return;
 
-      stopRequested_ = true;
-    }
-
-    cv_.notify_all();
-
-    for (auto& worker : workers_)
-    {
-      if (worker.joinable())
-        worker.join();
-    }
-
-    workers_.clear();
-
-    {
-      std::lock_guard lock(mutex_);
-      started_ = false;
-
-      while (!ready_.empty())
-        ready_.pop();
-
-      while (!delayed_.empty())
-        delayed_.pop();
-    }
+    stopRequested_ = true;
   }
 
-public:
- JobSystem()
+  cv_.notify_all();
+std::cerr << "Shutdown requested, waiting for worker threads to finish..."
+            << std::endl;
+  for (auto& worker : workers_)
   {
-    const std::size_t threadCount =
-        std::thread::hardware_concurrency();
-  
+    if (worker.joinable())
+    {
+      if (worker.get_id() == std::this_thread::get_id())
+        continue; // or std::terminate/assert, depending on your design
+      worker.join();
+    }
+  }
+  std::cerr << "All worker threads have finished." << std::endl;
+
+  workers_.clear();
+
+  {
+    std::lock_guard lock(mutex_);
+    started_ = false;
+
+    while (!ready_.empty())
+      ready_.pop();
+
+    while (!delayed_.empty())
+      delayed_.pop();
+  }
+}
+
+public:
+  JobSystem(const Config& config) : _config(config)
+  {
+    const std::size_t threadCount = _config.threadCount;
+
     started_ = true;
     stopRequested_ = false;
 
@@ -215,9 +222,13 @@ private:
   }
 
   template <JobPriority P>
-  void ApplyOption(Detail::JobRuntime& runtime, JobOpts::Priority<P>)
+  void ApplyOption(Detail::JobRuntime& runtime, JobOpts::TPriority<P>)
   {
     runtime.priority = P;
+  }
+  void ApplyOption(Detail::JobRuntime& runtime, JobOpts::Priority priority)
+  {
+    runtime.priority = priority.value;
   }
 
   template <JobNotifyLevel N>
@@ -416,6 +427,7 @@ private:
   }
 
 private:
+  const Config _config;
   std::mutex mutex_;
   std::condition_variable cv_;
 
@@ -435,8 +447,7 @@ private:
   bool stopRequested_ = false;
 };
 
-inline void JobHandle::request_repeat(
-    std::chrono::milliseconds delay) const
+inline void JobHandle::request_repeat(std::chrono::milliseconds delay) const
 {
   if (!runtime_ || !system_)
     return;
@@ -478,7 +489,8 @@ JobHandle JobHandle::on_complete(F&& f, Opts&&... opts) const
       std::forward<F>(f), std::forward<Opts>(opts)...);
 
   JobSystem* system = system_;
-  auto makeRuntime = [system, factoryData]() -> std::shared_ptr<Detail::JobRuntime>
+  auto makeRuntime = [system,
+                      factoryData]() -> std::shared_ptr<Detail::JobRuntime>
   {
     return std::apply([&](auto& fn, auto&... options)
                       { return system->MakeRuntime(fn, options...); },

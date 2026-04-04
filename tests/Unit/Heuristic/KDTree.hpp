@@ -1,6 +1,6 @@
 #pragma once
-#include "SceneView.hpp"
 #include "HeuristicUtils.hpp"
+#include "SceneView.hpp"
 #include "atlasnet/core/geometry/Vec.hpp"
 #include "atlasnet/core/heuristic/IHeuristic.hpp"
 #include "atlasnet/core/heuristic/KDTree/KDTree.hpp"
@@ -59,10 +59,10 @@ TEST(KDTree3D, Line)
       TestUtils::HeuristicTestDim::e3D>(1000, {-100.f, 0.0f, 0.0f},
                                         {100.0f, 0.0f, 0.0f});
 
-                                        points.push_back({0,100.0f,0.0f});
-                                        points.push_back({0,-100.0f,0.0f});
-                                        points.push_back({0.0f,0.0f,100.0f});
-                                        points.push_back({0.0f,0.0f,-100.0f});
+  points.push_back({0, 100.0f, 0.0f});
+  points.push_back({0, -100.0f, 0.0f});
+  points.push_back({0.0f, 0.0f, 100.0f});
+  points.push_back({0.0f, 0.0f, -100.0f});
   TestUtils::HeuristicUtils::SequentialTest<TestUtils::HeuristicTestDim::e3D,
                                             KDTreeHeuristic<3, float>,
                                             KDTreePartition<3, float>>(points);
@@ -83,26 +83,45 @@ TEST(KDTree2D, Motion)
 {
   TestUtils::HeuristicUtils::MotionTest<TestUtils::HeuristicTestDim::e2D,
                                         KDTreeHeuristic<2, float>,
-                                        KDTreePartition<2, float>>(3, 10, 1000);
+                                        KDTreePartition<2, float>>(3, 10);
 }
 TEST(KDTree2D, MotionHeavy)
 {
   TestUtils::HeuristicUtils::MotionTest<TestUtils::HeuristicTestDim::e2D,
                                         KDTreeHeuristic<2, float>,
-                                        KDTreePartition<2, float>>(10, 1000,
-                                                                   1000);
+                                        KDTreePartition<2, float>>(10, 1000);
 }
 TEST(KDTree3D, Motion)
 {
   TestUtils::HeuristicUtils::MotionTest<TestUtils::HeuristicTestDim::e3D,
                                         KDTreeHeuristic<3, float>,
-                                        KDTreePartition<3, float>>(3, 10, 1000);
+                                        KDTreePartition<3, float>>(3, 10);
 }
 TEST(KDTree3D, MotionHeavy)
 {
   TestUtils::HeuristicUtils::MotionTest<TestUtils::HeuristicTestDim::e3D,
                                         KDTreeHeuristic<3, float>,
-                                        KDTreePartition<3, float>>(10, 1000,
-                                                                   1000);
+                                        KDTreePartition<3, float>>(10, 1000);
+}
+TEST(KDTree2D, StableIDs)
+{
+  std::vector<vec2> points = TestUtils::HeuristicUtils::GeneratePolarPoints<
+      TestUtils::HeuristicTestDim::e2D>(1000, 100.0f);
+
+  TestUtils::HeuristicUtils::StableIdTest<TestUtils::HeuristicTestDim::e2D,
+                                          KDTreeHeuristic<2, float>,
+                                          KDTreePartition<2, float>>(points,
+                                                                     10);
+} // namespace AtlasNet::KDTree
+
+TEST(KDTree3D, StableIDs)
+{
+  std::vector<vec3> points = TestUtils::HeuristicUtils::GeneratePolarPoints<
+      TestUtils::HeuristicTestDim::e3D>(1000, 100.0f);
+
+  TestUtils::HeuristicUtils::StableIdTest<TestUtils::HeuristicTestDim::e3D,
+                                          KDTreeHeuristic<3, float>,
+                                          KDTreePartition<3, float>>(points,
+                                                                     10);
 }
 } // namespace AtlasNet::KDTree

@@ -21,9 +21,14 @@ struct RepeatOnce
 };
 
 template <JobPriority P>
-struct Priority
+struct TPriority
 {
   static constexpr JobPriority value = P;
+};
+struct Priority
+{
+const JobPriority value;
+Priority(const JobPriority v) : value(v) {}
 };
 
 template <JobNotifyLevel N>
@@ -80,10 +85,13 @@ struct IsPriority : std::false_type
 };
 
 template <JobPriority P>
-struct IsPriority<Priority<P>> : std::true_type
+struct IsPriority<TPriority<P>> : std::true_type
 {
 };
-
+template <>
+struct IsPriority<Priority> : std::true_type
+{
+};
 template <typename T>
 inline constexpr bool IsPriorityV =
     IsPriority<std::remove_cvref_t<T>>::value;

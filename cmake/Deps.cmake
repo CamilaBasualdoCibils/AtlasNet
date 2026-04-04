@@ -100,3 +100,10 @@ FetchContent_Declare(
 )
 
 FetchContent_MakeAvailable(kokkos)
+
+
+FetchContent_Declare(
+    ENTT
+    URL https://github.com/skypjack/entt/archive/refs/tags/v3.16.0.tar.gz
+)
+FetchContent_MakeAvailable(ENTT)

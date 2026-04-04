@@ -220,15 +220,26 @@ public:
   // ---------------- Strings / blobs -----------------------------
 
   ByteReader& str(std::string& s)
-  {
-    uint32_t len;
-    var_u32(len);
-    if (remaining() < len)
-      throw ByteError("string overflow");
-    s.assign(reinterpret_cast<const char*>(p + i), len);
-    i += len;
-    return *this;
-  }
+{
+  uint32_t len;
+  var_u32(len);
+  if (remaining() < len)
+    throw ByteError("string overflow");
+  s.assign(reinterpret_cast<const char*>(p + i), len);
+  i += len;
+  return *this;
+}
+
+ByteReader& str(std::string_view& s)
+{
+  uint32_t len;
+  var_u32(len);
+  if (remaining() < len)
+    throw ByteError("string_view overflow");
+  s = std::string_view(reinterpret_cast<const char*>(p + i), len);
+  i += len;
+  return *this;
+}
   ByteReader& uuid(UUID& id)
   {
     if (remaining() < 16)
@@ -345,63 +356,63 @@ public:
 
 private:
   template <typename T> void read_any(T& v)
+{
+  if constexpr (requires { v.Deserialize(*this); })
   {
-    // if T has a function Serialize(ByteReader&), call it
-    if constexpr (requires { v.Deserialize(*this); })
-    {
-      v.Deserialize(*this);
-    }
-    else if constexpr (ResizableIterable<T>)
-    {
-      uint32_t count{};
-      read_scalar(count);
+    v.Deserialize(*this);
+  }
+  else if constexpr (ResizableIterable<T>)
+  {
+    uint32_t count{};
+    read_scalar(count);
 
-      v.resize(count);
-      for (auto& elem : v)
-      {
-        read_any(elem);
-      }
-    }
-    else if constexpr (std::is_same_v<T, std::string>)
+    v.resize(count);
+    for (auto& elem : v)
     {
-      str(v);
-    }
-    else if constexpr (std::is_same_v<T, UUID>)
-    {
-      uuid(v);
-    }
-    else if constexpr (std::is_same_v<
-                           T, std::span<const uint8_t>>) // or if can be
-                                                         // converted to span
-    {
-      blob(v);
-    }
-
-    else if constexpr (std::is_arithmetic_v<T>)
-    {
-      read_scalar(v);
-    }
-    else if constexpr (std::is_enum_v<T>)
-    {
-      read_scalar(v);
-    }
-    else if constexpr (std::is_same_v<T, glm::quat>)
-    {
-      quat(v);
-    }
-    else if constexpr (std::is_same_v<T, glm::mat4>)
-    {
-      mat4(v);
-    }
-    else if constexpr (is_glm_vec<T>::value)
-    {
-      read_vector<T::length()>(v); // Assume its glm vec
-    }
-    else
-    {
-      static_assert(!sizeof(T*), "Unsupported type for ByteReader");
+      read_any(elem);
     }
   }
+  else if constexpr (std::is_same_v<T, std::string>)
+  {
+    str(v);
+  }
+  else if constexpr (std::is_same_v<T, std::string_view>)
+  {
+    str(v);
+  }
+  else if constexpr (std::is_same_v<T, UUID>)
+  {
+    uuid(v);
+  }
+  else if constexpr (std::is_same_v<T, std::span<const uint8_t>>)
+  {
+    blob(v);
+  }
+  else if constexpr (std::is_arithmetic_v<T>)
+  {
+    read_scalar(v);
+  }
+  else if constexpr (std::is_enum_v<T>)
+  {
+    read_scalar(v);
+  }
+  else if constexpr (std::is_same_v<T, glm::quat>)
+  {
+    quat(v);
+  }
+  else if constexpr (std::is_same_v<T, glm::mat4>)
+  {
+    mat4(v);
+  }
+  else if constexpr (is_glm_vec<T>::value)
+  {
+    read_vector<T::length()>(v);
+  }
+  else
+  {
+    static_assert(!sizeof(T*), "Unsupported type for ByteReader");
+  }
+}
   template <typename T> T read_int()
   {
     if (i + sizeof(T) > n)

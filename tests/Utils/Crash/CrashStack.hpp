@@ -1,12 +1,12 @@
 #pragma once
-#include "atlasnet/core/System.hpp"
+#include "atlasnet/core/Singleton.hpp"
 #include <csignal>
 #include <execinfo.h>
 #include <filesystem>
 #include <format>
 #include <iostream>
 #include <boost/stacktrace.hpp>
-class CrashStack : public AtlasNet::System<CrashStack>
+class CrashStack : public Singleton<CrashStack>
 {
 public:
   CrashStack()
@@ -41,7 +41,7 @@ private:
     _exit(1); // exit immediately
   }
 
-  void Shutdown() override {}
+  
 };
 
 

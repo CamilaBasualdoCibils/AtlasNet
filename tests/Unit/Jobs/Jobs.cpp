@@ -1,4 +1,5 @@
 #include "atlasnet/core/job/JobContext.hpp"
+#include "atlasnet/core/job/JobEnums.hpp"
 #include "atlasnet/core/job/JobOptions.hpp"
 #include "atlasnet/core/job/JobSystem.hpp"
 #include <gtest/gtest.h>
@@ -14,7 +15,8 @@ using namespace std::chrono_literals;
 
 TEST(Jobs, SubmitRunsCallable)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::atomic<int> calls{0};
 
@@ -30,8 +32,9 @@ TEST(Jobs, SubmitRunsCallable)
 TEST(jobs, RepeatingTask)
 {
   std::atomic_uint16_t val;
+  using namespace AtlasNet;
 
-  AtlasNet::JobSystem system;
+  JobSystem system(JobSystem::Config{});
   std::mutex mtx;
   std::condition_variable cv;
   auto handle = system.Submit(
@@ -55,44 +58,105 @@ TEST(jobs, RepeatingTask)
   EXPECT_GE(val.load(), 5);
 };
 
-TEST(Jobs, HigherPriorityRunsFirstWithSingleWorker)
+TEST(Jobs, HigherPriorityRunsFirst)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{1}); // single worker
 
-  std::mutex mtx;
-  std::vector<int> order;
+  constexpr int Runs = 20;
+
+  enum class JobType
+  {
+    eNone,
+    eLow,
+    eHigh
+  };
+
+  std::array<JobType, Runs> order;
+  order.fill(JobType::eNone);
+
+  std::atomic<int> lowRun{0};
+  std::atomic<int> highRun{0};
 
   auto low = system.Submit(
-      [&](AtlasNet::JobContext&)
+      [&](AtlasNet::JobContext& ctx)
       {
-        std::lock_guard lock(mtx);
-        order.push_back(1);
+        int run = lowRun.fetch_add(1);
+        if (run >= Runs)
+        {
+          return;
+        }
+
+        if (run < Runs - 1)
+        {
+          ctx.repeat_once();
+        }
+
+        // Try to claim this slot as Low only if nobody claimed it yet.
+        JobType expected = JobType::eNone;
+        std::atomic_ref<JobType> slot(order[run]);
+        slot.compare_exchange_strong(expected, JobType::eLow);
       },
       AtlasNet::JobOpts::Name{"Low"},
-      AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eLow>{});
+      AtlasNet::JobOpts::TPriority<AtlasNet::JobPriority::eLow>{});
 
   auto high = system.Submit(
-      [&](AtlasNet::JobContext&)
+      [&](AtlasNet::JobContext& ctx)
       {
-        std::lock_guard lock(mtx);
-        order.push_back(2);
+        int run = highRun.fetch_add(1);
+        if (run >= Runs)
+        {
+          return;
+        }
+
+        if (run < Runs - 1)
+        {
+          ctx.repeat_once();
+        }
+
+        // Try to claim this slot as High only if nobody claimed it yet.
+        JobType expected = JobType::eNone;
+        std::atomic_ref<JobType> slot(order[run]);
+        slot.compare_exchange_strong(expected, JobType::eHigh);
       },
       AtlasNet::JobOpts::Name{"High"},
-      AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eHigh>{});
+      AtlasNet::JobOpts::TPriority<AtlasNet::JobPriority::eHigh>{});
 
   low.wait();
   high.wait();
 
-  ASSERT_EQ(order.size(), 2u);
-  EXPECT_EQ(order[0], 2);
-  EXPECT_EQ(order[1], 1);
+  int lowWins = 0;
+  int highWins = 0;
+  int noneWins = 0;
+
+  for (JobType v : order)
+  {
+    switch (v)
+    {
+    case JobType::eLow:
+      ++lowWins;
+      break;
+    case JobType::eHigh:
+      ++highWins;
+      break;
+    case JobType::eNone:
+      ++noneWins;
+      break;
+    }
+  }
+
+  EXPECT_EQ(noneWins, 0);
+  EXPECT_EQ(lowWins + highWins, Runs);
+
+  // Main property we care about:
+  EXPECT_GT(highWins, lowWins);
 
   system.Shutdown();
 }
-
 TEST(Jobs, HandleCanRequestRepeat)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::atomic<int> calls{0};
   std::promise<void> done;
@@ -121,8 +185,9 @@ TEST(Jobs, HandleCanRequestRepeat)
 TEST(Jobs, RepeatFromContextRunsMoreThanOnce)
 {
   using namespace std::chrono_literals;
+  using namespace AtlasNet;
 
-  AtlasNet::JobSystem system;
+  JobSystem system(JobSystem::Config{});
 
   std::atomic<int> calls{0};
   std::promise<void> done;
@@ -159,7 +224,8 @@ TEST(Jobs, RepeatFromContextRunsMoreThanOnce)
 
 TEST(Jobs, RepeatOptionRequestsAnotherRun)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::atomic<int> calls{0};
   std::promise<void> done;
@@ -186,7 +252,8 @@ TEST(Jobs, RepeatOptionRequestsAnotherRun)
 
 TEST(Jobs, ManyJobsAllExecute)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   constexpr int kJobCount = 20000;
   std::atomic<int> completed{0};
@@ -195,7 +262,7 @@ TEST(Jobs, ManyJobsAllExecute)
   std::promise<void> done;
   auto doneFuture = done.get_future();
 
-  std::vector<AtlasNet::JobHandle> handles;
+  std::vector<JobHandle> handles;
   handles.reserve(kJobCount);
 
   for (int i = 0; i < kJobCount; ++i)
@@ -211,7 +278,7 @@ TEST(Jobs, ManyJobsAllExecute)
               done.set_value();
             }
           },
-          AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eHigh>{}));
+          AtlasNet::JobOpts::TPriority<AtlasNet::JobPriority::eHigh>{}));
     }
     else if ((i % 3) == 1)
     {
@@ -224,7 +291,7 @@ TEST(Jobs, ManyJobsAllExecute)
               done.set_value();
             }
           },
-          AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eMedium>{}));
+          AtlasNet::JobOpts::TPriority<AtlasNet::JobPriority::eMedium>{}));
     }
     else
     {
@@ -237,7 +304,7 @@ TEST(Jobs, ManyJobsAllExecute)
               done.set_value();
             }
           },
-          AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eLow>{}));
+          AtlasNet::JobOpts::TPriority<AtlasNet::JobPriority::eLow>{}));
     }
   }
 
@@ -249,7 +316,8 @@ TEST(Jobs, ManyJobsAllExecute)
 
 TEST(Jobs, CompletionCascade)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::mutex mtx;
   std::condition_variable cv;
@@ -291,13 +359,13 @@ TEST(Jobs, CompletionCascade)
 
 TEST(Jobs, HandleWaitObservesCompletion)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::atomic<bool> ran{false};
 
-  auto handle =
-      system.Submit([&](AtlasNet::JobContext&) { ran = true; },
-                    AtlasNet::JobOpts::Name{"HandleWaitObservesCompletion"});
+  auto handle = system.Submit([&](JobContext&) { ran = true; },
+                              JobOpts::Name{"HandleWaitObservesCompletion"});
 
   handle.wait();
 
@@ -310,11 +378,13 @@ TEST(Jobs, HandleWaitObservesCompletion)
 
 TEST(Jobs, FailureIsCapturedInHandle)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
 
-  auto handle = system.Submit(
-      [&](AtlasNet::JobContext&) { throw std::runtime_error("boom"); },
-      AtlasNet::JobOpts::Name{"FailureIsCapturedInHandle"});
+  JobSystem system(JobSystem::Config{});
+
+  auto handle =
+      system.Submit([&](JobContext&) { throw std::runtime_error("boom"); },
+                    JobOpts::Name{"FailureIsCapturedInHandle"});
 
   handle.wait();
 
@@ -327,7 +397,8 @@ TEST(Jobs, FailureIsCapturedInHandle)
 
 TEST(Jobs, CancelPendingJob)
 {
-  AtlasNet::JobSystem system;
+  using namespace AtlasNet;
+  JobSystem system(JobSystem::Config{});
 
   std::promise<void> blockerStarted;
   auto blockerStartedFuture = blockerStarted.get_future();
@@ -343,15 +414,13 @@ TEST(Jobs, CancelPendingJob)
         blockerStarted.set_value();
         releaseBlockerFuture.wait();
       },
-      AtlasNet::JobOpts::Name{"Blocker"},
-      AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eHigh>{});
+      JobOpts::Name{"Blocker"}, JobOpts::TPriority<JobPriority::eHigh>{});
 
   EXPECT_EQ(blockerStartedFuture.wait_for(1s), std::future_status::ready);
 
-  auto victim =
-      system.Submit([&](AtlasNet::JobContext&) { cancelledJobRan = true; },
-                    AtlasNet::JobOpts::Name{"Victim"},
-                    AtlasNet::JobOpts::Priority<AtlasNet::JobPriority::eLow>{});
+  auto victim = system.Submit([&](JobContext&) { cancelledJobRan = true; },
+                              JobOpts::Name{"Victim"},
+                              JobOpts::TPriority<JobPriority::eLow>{});
 
   victim.cancel();
 

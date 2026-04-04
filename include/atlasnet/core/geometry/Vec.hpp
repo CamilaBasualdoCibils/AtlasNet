@@ -16,5 +16,11 @@ using ivec4 = glm::ivec4;
 using vec2 = glm::vec2;
 using vec3 = glm::vec3;
 using vec4 = glm::vec4;
+using dvec2 = glm::dvec2;
+using dvec3 = glm::dvec3;
+using dvec4 = glm::dvec4;
 using quat = glm::quat;
+
 template <glm::length_t L, typename T> using vec = glm::vec<L, T>;
+
+

@@ -44,11 +44,13 @@ target_include_directories(AtlasNetCore
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
 )
 target_link_libraries(AtlasNetCore
+PUBLIC
 GameNetworkingSockets::GameNetworkingSockets_s
 OpenSSL::SSL
 OpenSSL::Crypto
 redis++::redis++_static
 hiredis::hiredis
+
 Boost::headers
 Boost::beast
 Boost::bimap
@@ -61,7 +63,8 @@ Boost::stacktrace_addr2line
 Boost::static_string
 Boost::uuid
 glm::glm
-Taskflow::Taskflow
+#Taskflow::Taskflow
+EnTT
 )
 
 

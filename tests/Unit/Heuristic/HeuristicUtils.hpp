@@ -50,6 +50,107 @@ public:
             typename TreePartitionType>
   static void MotionTest(uint32_t regionCount = 10, uint32_t pointCount = 1000,
                          uint32_t stepCount = 100);
+                         template <HeuristicTestDim mode, typename TreeHeuristicType,
+          typename TreePartitionType>
+
+  static void StableIdTest(
+    std::span<std::conditional_t<mode == HeuristicTestDim::e2D, vec2, vec3>>
+        pointsSource,
+    uint32_t RegionCount)
+{
+  using Is2D = std::bool_constant<mode == HeuristicTestDim::e2D>;
+  constexpr size_t Dim = Is2D::value ? 2u : 3u;
+  using VecType = std::conditional_t<mode == HeuristicTestDim::e2D, vec2, vec3>;
+
+  using PartitionBase = AtlasNet::IPartitionT<Dim, float>;
+
+  auto DistSq = [](const VecType& a, const VecType& b) -> float
+  {
+    float sum = 0.0f;
+    for (size_t i = 0; i < Dim; ++i)
+    {
+      const float d = a[i] - b[i];
+      sum += d * d;
+    }
+    return sum;
+  };
+
+  TreeHeuristicType tree;
+  AtlasNet::SafeRegionIDGenerator idGen;
+
+  std::unique_ptr<PartitionBase> partition =
+      tree.Partition(pointsSource, RegionCount, idGen);
+  auto* oldPartition = dynamic_cast<TreePartitionType*>(partition.get());
+  ASSERT_NE(oldPartition, nullptr);
+  ASSERT_EQ(oldPartition->RegionCount(), RegionCount);
+
+  struct RegionSnapshot
+  {
+    AtlasNet::RegionID id;
+    VecType centroid;
+  };
+
+  std::vector<RegionSnapshot> oldRegions;
+  oldRegions.reserve(oldPartition->Regions().size());
+
+  for (const auto& region : oldPartition->Regions())
+  {
+    oldRegions.push_back(
+        RegionSnapshot{.id = region->GetID(), .centroid = region->GetCentroid()});
+  }
+
+  // Slightly perturb the points so repartition has a reason to run,
+  // but the spatial layout remains roughly the same.
+  std::vector<VecType> movedPoints(pointsSource.begin(), pointsSource.end());
+  for (size_t i = 0; i < movedPoints.size(); ++i)
+  {
+    for (size_t axis = 0; axis < Dim; ++axis)
+    {
+      const float offset =
+          static_cast<float>((static_cast<int>((i + axis * 17) % 3) - 1)) * 0.25f;
+      movedPoints[i][axis] += offset;
+    }
+  }
+
+  AtlasNet::RepartitionOptions opts{};
+  opts.stabilityWeight = 1.0f;
+
+  partition =
+      tree.Repartition(movedPoints, RegionCount, *oldPartition, idGen, opts);
+  auto* newPartition = dynamic_cast<TreePartitionType*>(partition.get());
+  ASSERT_NE(newPartition, nullptr);
+  ASSERT_EQ(newPartition->RegionCount(), RegionCount);
+
+  for (const RegionSnapshot& oldRegion : oldRegions)
+  {
+    const auto* newRegion = newPartition->FindRegion(oldRegion.id);
+    ASSERT_NE(newRegion, nullptr)
+        << "Expected region id " << oldRegion.id
+        << " to still exist after repartition";
+
+    const VecType& newCentroid = newRegion->GetCentroid();
+
+    const float ownDistance = DistSq(newCentroid, oldRegion.centroid);
+
+    float bestDistance = std::numeric_limits<float>::max();
+    AtlasNet::RegionID bestOldId = AtlasNet::RegionID{};
+
+    for (const RegionSnapshot& candidate : oldRegions)
+    {
+      const float d = DistSq(newCentroid, candidate.centroid);
+      if (d < bestDistance)
+      {
+        bestDistance = d;
+        bestOldId = candidate.id;
+      }
+    }
+
+    EXPECT_EQ(bestOldId, oldRegion.id)
+        << "Region id " << oldRegion.id
+        << " did not remain closest to its previous location";
+    EXPECT_LE(ownDistance, bestDistance + 0.0001f);
+  }
+}
 };
 
 template <HeuristicTestDim mode, typename TreeHeuristicType,
@@ -67,15 +168,15 @@ inline void HeuristicUtils::MotionTest(uint32_t regionCount,
   using KDRegionType = typename TreePartitionType::RegionImpl;
 
   float SceneScale = 100.0f;
-  AABB<Dim, float> SceneBounds(VecType(-SceneScale), VecType(SceneScale));
+  AABB_old<Dim, float> SceneBounds(VecType(-SceneScale), VecType(SceneScale));
 
   std::vector<VecType> pointsSource(pointCount, VecType(0));
-  std::vector<VecType> motionVectors = GeneratePolarPoints<mode>(pointCount, 30.0f);
+  std::vector<VecType> motionVectors = GeneratePolarPoints<mode>(pointCount, 160.0f);
 
   std::unordered_map<AtlasNet::RegionID, VecType> previousCentroids;
 
   TreeHeuristicType tree;
-  AtlasNet::SimpleRegionIdGenerator idGen;
+  AtlasNet::SafeRegionIDGenerator idGen;
 
   std::unique_ptr<PartitionBase> partition;
   TreePartitionType* kdPartition = nullptr;
@@ -144,7 +245,7 @@ inline void HeuristicUtils::MotionTest(uint32_t regionCount,
 
                     repartitionFunc(regionCount);
 
-                    EXPECT_EQ(kdPartition->RegionCount(), i);
+                    EXPECT_EQ(kdPartition->RegionCount(), regionCount);
 
                     std::atomic_uint64_t MaximumPointsTotal = 0;
                     std::atomic_uint64_t MinimumPointsTotal =
@@ -291,7 +392,7 @@ inline void HeuristicUtils::SequentialTest(
   std::unordered_map<AtlasNet::RegionID, VecType> previousCentroids;
 
   TreeHeuristicType tree;
-  AtlasNet::SimpleRegionIdGenerator idGen;
+  AtlasNet::SafeRegionIDGenerator idGen;
 
   std::unique_ptr<PartitionBase> partition;
   TreePartitionType* kdPartition = nullptr;

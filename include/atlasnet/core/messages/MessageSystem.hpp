@@ -1,9 +1,9 @@
 #pragma once
 #include "Message.hpp"
 #include "atlasnet/core/EndPoint.hpp"
-#include "atlasnet/core/System.hpp"
 #include "atlasnet/core/assert.hpp"
 #include "atlasnet/core/job/JobEnums.hpp"
+#include "atlasnet/core/job/JobHandle.hpp"
 #include "atlasnet/core/job/JobOptions.hpp"
 #include "atlasnet/core/job/JobSystem.hpp"
 #include "atlasnet/core/serialize/ByteReader.hpp"
@@ -11,6 +11,7 @@
 #include "steam/isteamnetworkingsockets.h"
 #include "steam/steamnetworkingtypes.h"
 #include <atomic>
+#include <cstdint>
 #include <format>
 #include <iostream>
 #include <mutex>
@@ -37,7 +38,7 @@ enum class ConnectionState
       k_ESteamNetworkingConnectionState_ProblemDetectedLocally
 };
 using MessagePriority = JobPriority;
-class MessageSystem : public System<MessageSystem>
+class MessageSystem
 {
 public:
   class Connection
@@ -70,12 +71,13 @@ public:
     MessageSystem& system;
     HSteamListenSocket handle;
     std::shared_mutex socket_mutex;
+    PortType port;
     using HandlerFunc =
         std::function<void(const IMessage&, const EndPointAddress&)>;
     std::unordered_map<MessageIDHash, HandlerFunc> _handlers;
-    using DispatchFunc = std::function<void(const IMessage&, MessageIDHash,
-                                            const EndPointAddress&)>;
-    std::unordered_map<MessageIDHash, DispatchFunc> _dispatchTable;
+    // using DispatchFunc = std::function<void(const IMessage&, MessageIDHash,
+    //                                         const EndPointAddress&)>;
+    // std::unordered_map<MessageIDHash, DispatchFunc> _dispatchTable;
     friend class MessageSystem;
 
   protected:
@@ -83,31 +85,36 @@ public:
                            const EndPointAddress& caller_address);
 
   public:
-    ListenSocketHandle(MessageSystem& system, HSteamListenSocket handle);
+    ListenSocketHandle(MessageSystem& system, HSteamListenSocket handle,
+                       PortType port);
     template <typename MessageType>
       requires std::is_base_of_v<IMessage, MessageType>
     ListenSocketHandle&
     On(std::function<void(const MessageType&, const EndPointAddress&)> func);
 
   private:
-    template <typename MsgType>
-      requires std::is_base_of_v<IMessage, MsgType>
-    void _ensure_socket_message_dispatcher();
+    /*  template <typename MsgType>
+       requires std::is_base_of_v<IMessage, MsgType>
+     void _ensure_socket_message_dispatcher(); */
   };
-
-  MessageSystem();
+  struct Config
+  {
+    JobSystem* jobSystem = nullptr;
+  };
+  MessageSystem(const Config& config);
 
   void SetIdentity(const SteamNetworkingIdentity& identity);
 
   ~MessageSystem();
-  void Shutdown() override;
+  void Shutdown();
 
   JobHandle Connect(const EndPointAddress& address);
   template <typename MessageType>
     requires std::is_base_of_v<IMessage, MessageType>
-  void SendMessage(const MessageType& message, const EndPointAddress& address,
-                   MessageSendMode mode,
-                   MessagePriority priority = MessagePriority::eMedium);
+  [[nodiscard]] JobHandle
+  SendMessage(const MessageType& message, const EndPointAddress& address,
+              MessageSendMode mode,
+              MessagePriority priority = MessagePriority::eMedium);
 
   template <typename MessageType>
     requires std::is_base_of_v<IMessage, MessageType>
@@ -143,6 +150,7 @@ private:
     requires std::is_base_of_v<IMessage, MsgType>
   void _ensure_message_dispatcher();
 
+  const Config config_;
   ISteamNetworkingSockets* _GNS;
   HSteamNetPollGroup _pollGroup;
   mutable std::shared_mutex _mutex;
@@ -152,11 +160,10 @@ private:
   std::unordered_map<EndPointAddress, JobHandle> _connectJobs;
   using HandlerFunc =
       std::function<void(const IMessage&, const EndPointAddress&)>;
-  std::unordered_map<MessageIDHash, HandlerFunc>
-      _handlers;
-      using DispatchFunc = std::function<void(ByteReader&, const EndPointAddress&, PortType)>;
-  std::unordered_map<MessageIDHash, DispatchFunc>
-      _dispatchTable;
+  std::unordered_map<MessageIDHash, HandlerFunc> _handlers;
+  using DispatchFunc = std::function<void(ByteReader&, const EndPointAddress&,
+                                          std::optional<PortType>)>;
+  std::unordered_map<MessageIDHash, DispatchFunc> _dispatchTable;
   std::optional<JobHandle> _pollJobHandle;
   std::atomic_bool shutdown = false;
 };
@@ -166,7 +173,11 @@ inline MessageSystem::ListenSocketHandle& MessageSystem::ListenSocketHandle::On(
     std::function<void(const MessageType&, const EndPointAddress&)> func)
 {
   system._ensure_message_dispatcher<MessageType>();
-  _ensure_socket_message_dispatcher<MessageType>();
+  //_ensure_socket_message_dispatcher<MessageType>();
+  std::cout << std::format("Registered handler for message type with hash {} "
+                           "on listen socket port {}\n",
+                           MessageType::TypeIdHash, port)
+            << std::endl;
   std::unique_lock lock(socket_mutex);
   MessageIDHash typeIdHash = MessageType::TypeIdHash;
   AN_ASSERT(
@@ -179,7 +190,7 @@ inline MessageSystem::ListenSocketHandle& MessageSystem::ListenSocketHandle::On(
 
   return *this;
 }
-
+/*
 template <typename MsgType>
   requires std::is_base_of_v<IMessage, MsgType>
 inline void
@@ -188,18 +199,19 @@ MessageSystem::ListenSocketHandle::_ensure_socket_message_dispatcher()
   MessageIDHash typeIdHash = MsgType::TypeIdHash;
   {
     std::shared_lock lock(socket_mutex);
-    if (_dispatchTable.contains(typeIdHash))
+    if (_handlers.contains(typeIdHash))
       return;
   }
 
   std::unique_lock lock(socket_mutex);
 
-  if (!_dispatchTable.contains(typeIdHash))
+  if (!_handlers.contains(typeIdHash))
   {
-    _dispatchTable[typeIdHash] = [&](const IMessage& message,
-                                     MessageIDHash typeIdHash,
+    _handlers[typeIdHash] = [&](const IMessage& message,
+
                                      const EndPointAddress& caller_address)
     {
+
       if (_handlers.contains(typeIdHash))
       {
 
@@ -214,13 +226,17 @@ MessageSystem::ListenSocketHandle::_ensure_socket_message_dispatcher()
     };
   };
 }
-
+ */
 template <typename MessageType>
   requires std::is_base_of_v<IMessage, MessageType>
 inline MessageSystem& MessageSystem::On(
     std::function<void(const MessageType&, const EndPointAddress&)> handler)
 {
   _ensure_message_dispatcher<MessageType>();
+  std::cout << std::format("Registered handler for message type with hash {} "
+                           "on global message system\n",
+                           MessageType::TypeIdHash)
+            << std::endl;
   std::unique_lock lock(_mutex);
   MessageIDHash typeIdHash = MessageType::TypeIdHash;
   AN_ASSERT(
@@ -251,11 +267,13 @@ inline void MessageSystem::_ensure_message_dispatcher()
   if (!_dispatchTable.contains(typeIdHash))
   {
     _dispatchTable[typeIdHash] =
-        [this](ByteReader& reader, const EndPointAddress& address, PortType port_received_on)
+        [this](ByteReader& reader, const EndPointAddress& address,
+               std::optional<PortType> port_received_on)
     {
       MessageIDHash typeIdHash = MsgType::TypeIdHash;
       MsgType msg;
       msg.Deserialize(reader);
+      std::shared_lock lock(_mutex);
       if (_handlers.contains(typeIdHash))
       {
 
@@ -266,104 +284,148 @@ inline void MessageSystem::_ensure_message_dispatcher()
         for (const auto& handler : _handlers)
         {
           std::cerr << std::format(
-              "Registered handler for message type with hash {}, but no ",
-              handler.first);
+              "Registered handler for message type with hash {} does not match "
+              "incoming message of type hash {}\n",
+              handler.first, typeIdHash);
         }
       }
-
-      if (_listenSockets.contains(port_received_on))
+      if (port_received_on.has_value())
       {
-        _listenSockets.at(port_received_on)
-            ->DispatchCallbacks(msg, typeIdHash, address);
+        if (_listenSockets.contains(*port_received_on))
+        {
+          std::cerr
+              << std::format(
+                     "Dispatching message of type hash {} received on listen "
+                     "socket port {} to listen socket dispatcher\n",
+                     typeIdHash, *port_received_on)
+              << std::endl;
+          _listenSockets.at(*port_received_on)
+              ->DispatchCallbacks(msg, typeIdHash, address);
+        }
+        else
+        {
+          std::cerr << std::format(
+              "No listen socket found for incoming message of type hash {} "
+              "received on listen socket port {}\n",
+              typeIdHash, *port_received_on);
+        }
       }
     };
   };
 }
-
 template <typename MessageType>
   requires std::is_base_of_v<IMessage, MessageType>
-inline void MessageSystem::SendMessage(const MessageType& message,
-                                       const EndPointAddress& address,
-                                       MessageSendMode mode,
-                                       MessagePriority priority)
-
+inline JobHandle MessageSystem::SendMessage(const MessageType& message,
+                                            const EndPointAddress& address,
+                                            MessageSendMode mode,
+                                            MessagePriority priority)
 {
-  auto SendMessageFunc =
-      [this, message = message, address, mode](JobContext& handle)
+  auto sendFunc = [this, message, address, mode](JobContext&)
   {
-    HSteamNetConnection con;
-    {
-      std::shared_lock lock(_mutex);
-      con = GetConnectionHandle(address);
-    }
+    // Do not hold _mutex before calling GetConnectionHandle,
+    // because GetConnectionHandle already locks internally.
+    const HSteamNetConnection con = GetConnectionHandle(address);
+
     ByteWriter bw;
     message.Serialize(bw);
-    const auto data_span = bw.bytes();
+    const auto data = bw.bytes();
 
-    GNS().SendMessageToConnection(con, data_span.data(),
-                                  static_cast<uint32_t>(data_span.size()),
-                                  static_cast<int>(mode), nullptr);
-  };
-  JobSystem::Get().Submit(
-      [this, message = message, address, mode](JobContext& handle)
-      {
-        HSteamNetConnection con;
-        {
-          std::shared_lock lock(_mutex);
-          con = GetConnectionHandle(address);
-        }
-        ByteWriter bw;
-        message.Serialize(bw);
-        const auto data_span = bw.bytes();
+    const EResult result = GNS().SendMessageToConnection(
+        con, data.data(), static_cast<uint32_t>(data.size()),
+        static_cast<int>(mode), nullptr);
 
-        GNS().SendMessageToConnection(con, data_span.data(),
-                                      static_cast<uint32_t>(data_span.size()),
-                                      static_cast<int>(mode), nullptr);
-      },
-      JobOpts::Notify<JobNotifyLevel::eOnStart>(),
-      JobOpts::Name(std::format("MessageSystem::SendMessage to {}",
-                                address.to_string())));
-
-  if (_connections.contains(address))
-  {
-    std::cerr << "Connection exists, Pushing Send Job\n";
+    if (result != k_EResultOK)
     {
+      std::cerr << std::format(
+                       "SendMessageToConnection failed for {} with code {}",
+                       address.to_string(), static_cast<int>(result))
+                << std::endl;
+    }
+  };
 
-      std::unique_lock lock(_mutex);
-      if (_connectJobs.contains(address))
+  enum class SendPlan
+  {
+    eSendNow,
+    eChainToExistingConnect,
+    eStartConnectThenChain
+  };
+
+  SendPlan plan = SendPlan::eStartConnectThenChain;
+  std::optional<JobHandle> existingConnectHandle;
+
+  {
+    std::shared_lock lock(_mutex);
+
+    auto connIt = _connections.find(address);
+    const bool connected =
+        (connIt != _connections.end() &&
+         connIt->second.GetState() == ConnectionState::eConnected);
+
+    if (connected)
+    {
+      plan = SendPlan::eSendNow;
+    }
+    else
+    {
+      auto connectIt = _connectJobs.find(address);
+      if (connectIt != _connectJobs.end())
       {
-        std::cerr << "Connect job exists, chaining Send Job on completion\n";
-        _connectJobs.at(address).on_complete(
-            SendMessageFunc,
-            AtlasNet::JobOpts::Name(
-                std::format("MessageSystem::SendMessage to {} after connect",
-                            address.to_string())));
-        return;
+        existingConnectHandle = connectIt->second;
+        plan = SendPlan::eChainToExistingConnect;
+      }
+      else
+      {
+        plan = SendPlan::eStartConnectThenChain;
       }
     }
-    JobSystem::Get().Submit(
-        SendMessageFunc,
-        AtlasNet::JobOpts::Name(std::format("MessageSystem::SendMessage to {}",
-                                            address.to_string())),
-        AtlasNet::JobOpts::Priority<MessagePriority::eMedium>{},
-        AtlasNet::JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{});
   }
-  else
+
+  if (plan == SendPlan::eSendNow)
   {
-    std::cerr << "Connection does not exist, Pushing Connect Job\n";
-    JobHandle connectHandle = Connect(address);
-    JobHandle SendMessageHandle = connectHandle.on_complete(
-        SendMessageFunc,
-        AtlasNet::JobOpts::Name(std::format("MessageSystem::SendMessage to {}",
-                                            address.to_string())),
-        AtlasNet::JobOpts::Priority<MessagePriority::eMedium>{},
+    auto jobHandle = config_.jobSystem->Submit(
+        sendFunc,
+        JobOpts::Name(std::format("MessageSystem::SendMessage to {}",
+                                  address.to_string())),
+        AtlasNet::JobOpts::Priority(priority),
         AtlasNet::JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{});
+    return jobHandle;
   }
+
+  if (plan == SendPlan::eChainToExistingConnect)
+  {
+    auto jobhandle = existingConnectHandle->on_complete(
+        sendFunc,
+        JobOpts::Name(
+            std::format("MessageSystem::SendMessage to {} after connect",
+                        address.to_string())),
+        AtlasNet::JobOpts::Priority(priority),
+        AtlasNet::JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{});
+    return jobhandle;
+  }
+
+  JobHandle connectHandle = Connect(address);
+  JobHandle SendHandle = connectHandle.on_complete(
+      sendFunc,
+      JobOpts::Name(
+          std::format("MessageSystem::SendMessage to {} after connect",
+                      address.to_string())),
+      AtlasNet::JobOpts::Priority(priority),
+      AtlasNet::JobOpts::Notify<JobNotifyLevel::eOnStartAndComplete>{});
+  return SendHandle;
 }
 
 static void OnSteamNetConnectionStatusChanged(
     SteamNetConnectionStatusChangedCallback_t* info)
 {
-  AtlasNet::MessageSystem::Get().SteamNetConnectionStatusChanged(info);
+  int64_t ptr_value = (info->m_info.m_nUserData);
+  AN_ASSERT(
+      ptr_value != 0 && ptr_value != ~0ll,
+      std::format(
+          "Invalid pointer value in OnSteamNetConnectionStatusChanged: {}",
+          ptr_value));
+  MessageSystem* system =
+      reinterpret_cast<MessageSystem*>(info->m_info.m_nUserData);
+
+  system->SteamNetConnectionStatusChanged(info);
 }
 }; // namespace AtlasNet
