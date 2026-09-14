@@ -1,0 +1,62 @@
+{
+  "name": "atlasnet",
+  "version-string": "0.1.0",
+
+  "dependencies": [
+    "glm",
+    "nlohmann-json",
+    "boost-type-traits",
+    "boost-uuid",
+    "boost-geometry",
+    "boost-graph",
+    "boost-multi-index",
+    "boost-container",
+    "boost-describe",
+    "boost-stacktrace",
+    "boost-static-string",
+    "boost-beast",
+    "boost-program-options",
+    "boost-static-string",
+    "bitsery",
+    
+    {
+      "name" : "spdlog",
+      "features" : [ "fmt" ]
+    },
+    "gamenetworkingsockets",
+    {
+      "name": "redis-plus-plus",
+      "features": [
+        "tls",
+        "cxx17",
+        "async",
+        "async-std"
+      ]
+    },
+    "libuv",
+    {
+      "name": "hiredis",
+      "features": [
+        "ssl"
+      ]
+    }
+  ],
+
+  "features": {
+    "cartograph": {
+      "description": "AtlasNet Cartograph dashboard dependencies",
+      "dependencies": [
+        "drogon"
+      ]
+    },
+
+    "testing": {
+      "description": "AtlasNet testing dependencies",
+      "dependencies": [
+        "gtest",
+        "glfw3",
+        "raylib"
+      ]
+    }
+  }
+}

@@ -2,7 +2,7 @@
 
 #include "Time.hpp"
 
-#include "atlasnet/core/entity/Entity.hpp"
+#include "AtlasNet/Core/Core.hpp"
 #include "glm/glm.hpp"
 #include "glm/gtc/quaternion.hpp"
 #include <type_traits>

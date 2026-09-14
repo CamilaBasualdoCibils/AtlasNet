@@ -7,7 +7,7 @@ add_executable(AtlasNet_tests_Snowflake ${CMAKE_CURRENT_SOURCE_DIR}/SnowflakeTes
 # Optional, but common: local includes
 
 target_link_libraries(AtlasNet_tests_Snowflake
-AtlasNetTestCrashUtils
+AtlasNetCore
 gtest
 )
 

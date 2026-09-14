@@ -11,7 +11,7 @@ target_include_directories(TankBattleCore
       PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/core"
 )
-
+target_link_libraries(TankBattleCore AtlasNetCore)
 
 # Recursively collect sources under ./src
 file(GLOB_RECURSE _shard_sources CONFIGURE_DEPENDS
@@ -25,7 +25,7 @@ target_include_directories(TankBattleShard
     "${CMAKE_CURRENT_SOURCE_DIR}/src/shard"
 )
 
-target_link_libraries(TankBattleShard TankBattleCore AtlasNetShardAPI)
+target_link_libraries(TankBattleShard TankBattleCore AtlasNetServerAPI)
 file(GLOB_RECURSE _client_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/client/*.cpp"
 )
@@ -34,7 +34,7 @@ target_include_directories(TankBattleClient
       PUBLIC
     "${CMAKE_CURRENT_SOURCE_DIR}/src/client"
 )
-target_link_libraries(TankBattleClient TankBattleCore AtlasNetClientAPI raylib)
+target_link_libraries(TankBattleClient TankBattleCore AtlasNetClientAPI raylib glfw)
 
 
 add_custom_target(TankBattleStage

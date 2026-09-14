@@ -5,31 +5,27 @@ set(DEV_STAGE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.stage")
 add_custom_target(AtlasNetDevDockerBuildStage
     COMMAND ${CMAKE_COMMAND} -E make_directory "${DEV_STAGE_DIR}"
 
-    COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:AtlasNetController>
-        "${DEV_STAGE_DIR}/"
 
     COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:AtlasNetGateway>
+        $<TARGET_FILE:AtlasNetNode>
+        "${DEV_STAGE_DIR}/"
+    COMMAND ${CMAKE_COMMAND} -E copy
+        $<TARGET_FILE:AtlasNetDB>
         "${DEV_STAGE_DIR}/"
 
     COMMAND ${CMAKE_COMMAND} -E copy
         $<TARGET_FILE:AtlasNetCartographBackend>
         "${DEV_STAGE_DIR}/"
-
-    #COMMAND ${CMAKE_COMMAND} -E copy
-    #    $<TARGET_FILE:AtlasNetDummy>
-    #    "${DEV_STAGE_DIR}/"
 
     DEPENDS
         $<TARGET_FILE:AtlasNetCartographBackend>
-        $<TARGET_FILE:AtlasNetController>
-        $<TARGET_FILE:AtlasNetGateway>
-        #$<TARGET_FILE:AtlasNetDummy>
+        $<TARGET_FILE:AtlasNetNode>
+        $<TARGET_FILE:AtlasNetDB>
+
     USES_TERMINAL
     VERBATIM
 )
-
+set_target_properties(AtlasNetDevDockerBuildStage PROPERTIES FOLDER "AtlasNet/Docker")
 add_custom_target(AtlasNetDevDockerBuild
     COMMAND ./dev/BuildDevImages.sh
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -37,6 +33,7 @@ add_custom_target(AtlasNetDevDockerBuild
     USES_TERMINAL
     VERBATIM
 )
+set_target_properties(AtlasNetDevDockerBuild PROPERTIES FOLDER "AtlasNet/Docker")
 add_custom_target(AtlasNetDevDockerBuild_Valgrind
     COMMAND ./dev/BuildDevImages.sh "valgrind {EXE}"
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
@@ -44,6 +41,7 @@ add_custom_target(AtlasNetDevDockerBuild_Valgrind
     USES_TERMINAL
     VERBATIM
 )
+set_target_properties(AtlasNetDevDockerBuild_Valgrind PROPERTIES FOLDER "AtlasNet/Docker")
 
 
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "x86_64|AMD64")
@@ -63,3 +61,17 @@ add_custom_target(AtlasNetProductionDockerBuild
     WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}"
     USES_TERMINAL
     VERBATIM)
+set_target_properties(AtlasNetProductionDockerBuild PROPERTIES FOLDER "AtlasNet/Docker")
+
+
+
+add_custom_target(AtlasNetDockerDeploy_Dev
+    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+    # If the stack exists, kill it and wait 1 second
+    COMMAND docker stack rm atlasnet || true
+    COMMAND sleep 1
+    COMMAND docker stack deploy -c DevDocker.yml atlasnet
+    USES_TERMINAL
+DEPENDS AtlasNetDevDockerBuild AtlasNetDevDockerBuild
+)
+set_target_properties(AtlasNetDockerDeploy_Dev PROPERTIES FOLDER "AtlasNet/Docker")

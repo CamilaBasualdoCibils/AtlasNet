@@ -2,31 +2,22 @@
   "group": {
     "default": {
       "targets": [
-        "atlasnet-controller",
-        "atlasnet-gateway",
+
         "atlasnet-cartograph",
-        "atlasnet-dummy"
+        "atlasnet-node",
+        "atlasnet-db"
       ]
     }
   },
   "target": {
-    
-    "atlasnet-controller": {
+
+    "atlasnet-node": {
       "context": ".",
       "dockerfile": "dev/docker/Production.Dockerfile",
-      "target": "atlasnet-controller",
+      "target": "atlasnet-node",
       "load": true,
       "tags": [
-        "atlasnet-controller:latest"
-      ]
-    },
-    "atlasnet-gateway": {
-      "context": ".",
-      "dockerfile": "dev/docker/Production.Dockerfile",
-      "target": "atlasnet-gateway",
-      "load": true,
-      "tags": [
-        "atlasnet-gateway:latest"
+        "atlasnet-node"
       ]
     },
     "atlasnet-cartograph": {
@@ -35,17 +26,19 @@
       "target": "atlasnet-cartograph",
       "load": true,
       "tags": [
-        "atlasnet-cartograph:latest"
+        "atlasnet-cartograph"
       ]
     },
-    "atlasnet-dummy": {
+    "atlasnet-db": {
       "context": ".",
       "dockerfile": "dev/docker/Production.Dockerfile",
-      "target": "atlasnet-dummy",
+      "target": "atlasnet-db",
       "load": true,
       "tags": [
-        "atlasnet-dummy:latest"
+        "atlasnet-db"
       ]
     }
+
+
   }
 }

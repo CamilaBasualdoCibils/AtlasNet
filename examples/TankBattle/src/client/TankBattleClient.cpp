@@ -1,16 +1,16 @@
 
-#include "TankBattleClient.hpp"
+/* #include "TankBattleClient.hpp"
 #include "Commands.hpp"
 #include "atlasnet/core/CmdSig/command/CommandEnums.hpp"
 #include "atlasnet/core/messages/MessageSystem.hpp"
-#include "boost/describe/enum_to_string.hpp"
+#include "boost/describe/enum_to_string.hpp" */
 int main()
 {
-  TankBattle::TankBattleClient client;
-  client.Run();
+  /* TankBattle::TankBattleClient client;
+  client.Run(); */
   return 0;
 }
-void TankBattle::TankBattleClient::Run()
+/* void TankBattle::TankBattleClient::Run()
 {
   InitWindow(800, 600, "Tank Battle");
   SetTargetFPS(120);
@@ -48,4 +48,4 @@ void TankBattle::TankBattleClient::Run()
 
     EndDrawing();
   }
-}
+} */

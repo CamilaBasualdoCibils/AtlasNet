@@ -1,0 +1,30 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "(gdb) Valkey",
+            "type": "cppdbg",
+            "request": "launch",
+
+            "program": "${workspaceFolder}/external/valkey/src/valkey-server",
+            "args": ["--loadmodule","./libAtlasNetDB.so"],
+
+            "cwd": "${workspaceFolder}/build",
+
+            "stopAtEntry": false,
+
+            "externalConsole": false,
+            "MIMode": "gdb",
+            "miDebuggerPath": "/usr/bin/gdb",
+
+            "setupCommands": [
+                {
+                    "description": "Enable pretty-printing for gdb",
+                    "text": "-enable-pretty-printing",
+                    "ignoreFailures": true
+                }
+            ],
+            "preLaunchTask": "Build Valkey-Server + AtlasNetDB"
+        }
+    ]
+}

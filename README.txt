@@ -24,8 +24,10 @@ Explain why it exists, what problems it solves, and who it’s for.
 ## Features
 ---
 ## Build
+Dependencies
 Ubuntu: 
-Arch: 
+Arch: sudo pacman -S boost python3 libuv 
+
 requires build packages
 - libssl-dev
 - python3.13-venv

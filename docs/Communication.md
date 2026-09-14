@@ -1,4 +1,3 @@
-<!-- @page entity_commands_system AtlasNet Entity Commands -->
 
 @tableofcontents
 

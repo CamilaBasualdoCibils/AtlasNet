@@ -1,9 +1,9 @@
 #pragma once
 
-#include "IAtlasNetClient.hpp"
+//#include "IAtlasNetClient.hpp"
 #include "raylib.h"
 #include <iostream>
-namespace TankBattle
+/* namespace TankBattle
 {
 class TankBattleClient : public AtlasNet::IAtlasNetClient
 {
@@ -13,4 +13,4 @@ public:
   ~TankBattleClient() = default;
   void Run();
 };
-} // namespace TankBattle
+} // namespace TankBattle */

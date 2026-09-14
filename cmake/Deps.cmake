@@ -10,7 +10,20 @@ FetchContent_Declare(
   DOWNLOAD_NO_EXTRACT FALSE
 )
 FetchContent_MakeAvailable(glm)
-
+message(STATUS "Fetching Boost")
+set(Boost_USE_STATIC_LIBS ON CACHE BOOL "Use static Boost libraries" FORCE)
+set(BOOST_INCLUDE_LIBRARIES beast bimap describe graph dynamic_bitset flyweight math multi_array multi_index lockfree stacktrace serialization static_string uuid program_options)
+set(BOOST_ENABLE_MPI ON)
+set(BOOST_ENABLE_CMAKE ON)
+FetchContent_Declare(
+        Boost
+        URL https://github.com/boostorg/boost/releases/download/boost-1.91.0-1/boost-1.91.0-1-cmake.tar.gz
+        #GIT_REPOSITORY https://github.com/boostorg/boost.git
+        #GIT_TAG boost-1.91.0-1
+        USES_TERMINAL_DOWNLOAD TRUE
+        DOWNLOAD_NO_EXTRACT FALSE
+      )
+FetchContent_MakeAvailable(Boost)
 # --- Fetch Libuv ---
 message(STATUS "Fetching libuv")
 
@@ -52,7 +65,11 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(redis-plus-plus)
 
-
+FetchContent_Declare(
+  etcd-cpp-apiv3
+  GIT_REPOSITORY https://github.com/etcd-cpp-apiv3/etcd-cpp-apiv3.git
+)
+FetchContent_MakeAvailable(etcd-cpp-apiv3)
 # Only populate if not already done
 set(protobuf_BUILD_TESTS OFF CACHE BOOL "" FORCE)
 
@@ -83,20 +100,7 @@ FetchContent_Declare(
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "Build GameNetworkingSockets as static" FORCE)
 FetchContent_MakeAvailable(GameNetworkingSockets)
 
-message(STATUS "Fetching Boost")
-set(Boost_USE_STATIC_LIBS ON CACHE BOOL "Use static Boost libraries" FORCE)
-set(BOOST_INCLUDE_LIBRARIES beast bimap describe graph dynamic_bitset flyweight math multi_array multi_index lockfree stacktrace serialization static_string uuid)
-set(BOOST_ENABLE_MPI ON)
-set(BOOST_ENABLE_CMAKE ON)
-FetchContent_Declare(
-        Boost
-        URL https://github.com/boostorg/boost/releases/download/boost-1.91.0-1/boost-1.91.0-1-cmake.tar.gz
-        #GIT_REPOSITORY https://github.com/boostorg/boost.git
-        #GIT_TAG boost-1.91.0-1
-        USES_TERMINAL_DOWNLOAD TRUE
-        DOWNLOAD_NO_EXTRACT FALSE
-      )
-FetchContent_MakeAvailable(Boost)
+
 
 message(STATUS "TaskFlow")
 set(TF_BUILD_TESTS OFF CACHE BOOL "" FORCE)

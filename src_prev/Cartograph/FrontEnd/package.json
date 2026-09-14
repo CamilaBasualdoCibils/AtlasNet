@@ -1,0 +1,36 @@
+{
+  "name": "cartograph",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "clean": "rm -rf dist node_modules package-lock.json"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tabler/tabler.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/tabler/tabler/issues"
+  },
+  "homepage": "https://github.com/tabler/tabler#readme",
+  "devDependencies": {
+    "@types/react": "^19.2.15",
+    "@vitejs/plugin-react": "^6.0.2",
+    "vite": "^8.0.13"
+  },
+  "dependencies": {
+    "@tabler/core": "^1.4.0",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6",
+    "react-router-dom": "^7.15.1",
+    "three": "^0.184.0"
+  }
+}

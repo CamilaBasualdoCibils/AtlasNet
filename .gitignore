@@ -1,4 +1,3 @@
-.vscode
 build
 .cache
 .pytest_cache

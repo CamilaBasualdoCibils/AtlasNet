@@ -1,0 +1,248 @@
+#pragma once
+
+#include "AtlasNet/Core/Core.hpp"
+#include "AtlasNet/Core/Network/Intent/ClusterIntentChannel.hpp"
+#include "AtlasNet/Core/Network/Intent/IntentRecepient.hpp"
+#include "AtlasNet/Core/Serialization/NetBinarySerializer.hpp"
+#include "RPCCommons.hpp"
+#include <cstddef>
+#include <future>
+#include <mutex>
+#include <shared_mutex>
+#include <vector>
+namespace AtlasNet::Network::RPC
+{
+class RPC
+{
+public:
+  struct Config
+  {
+    std::shared_ptr<Network::Intent::ClusterIntentChannel> intentChannel;
+    std::chrono::milliseconds timeout = std::chrono::seconds(5);
+  };
+
+private:
+  Config config_;
+  std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("RPC");
+  std::shared_mutex mutex;
+  std::unordered_map<RPCID, RPC_BindCallFunction_Raw> bindings;
+  std::atomic<RPCCallID> nextCallID{0};
+  struct pendingCall
+  {
+    // std::promise<RPCResult> promise;
+    std::chrono::steady_clock::time_point timestamp;
+    std::move_only_function<void(const pendingCall&, const RPCResult&)>
+        onComplete;
+  };
+  std::unordered_map<RPCCallID, pendingCall> pendingCalls;
+
+public:
+  RPC(const Config& config) : config_(config) {}
+  void Bind(std::string_view name, RPC_BindCallFunction_Raw func);
+  void Bind(RPCID id, RPC_BindCallFunction_Raw func);
+
+  template <typename rpc, typename Func>
+    requires(rpc::template Invocable<Func> ||
+             rpc::template ContextInvocable<Func>)
+  void Bind(Func&& func)
+  {
+    logger->info("Binding RPC {} -> {}", rpc::NameString.value, rpc::Id);
+    RPC_BindCallFunction_Raw rawFunc =
+        [func = std::move(func)](const RPCContext& context,
+                                 std::span<const uint8_t> payload) -> RPCResult
+    {
+      // deserialize the payload
+      NetBinaryReader deserializer(
+          reinterpret_cast<const std::byte*>(payload.data()), payload.size());
+      using Return = typename rpc::ReturnType;
+      using ArgsTuple = typename rpc::ArgsTuple;
+      ArgsTuple args;
+      deserializer(args);
+      RPCResult result;
+      if constexpr (std::is_void_v<Return>)
+      {
+        std::apply(
+            [&](auto&... xs)
+            {
+              if constexpr (rpc::template ContextInvocable<Func>)
+                std::invoke(func, context, xs...);
+              else
+                std::invoke(func, xs...);
+            },
+            args);
+
+        return result;
+      }
+      else
+      {
+        Return ret = std::apply(
+            [&](auto&... xs) -> Return
+            {
+              if constexpr (rpc::template ContextInvocable<Func>)
+                return std::invoke(func, context, xs...);
+              else
+                return std::invoke(func, xs...);
+            },
+            args);
+
+        NetBinaryWriter writer;
+
+        writer(ret);
+        auto bytes = writer.GetBytes();
+        // result is a std::expected<vector<uint8_t>, RPCError>
+        result = std::vector<std::byte>(bytes.begin(), bytes.end());
+
+        return result;
+      }
+    };
+    std::unique_lock lock(mutex);
+    bindings[rpc::Id] = std::move(rawFunc);
+  }
+
+  void Call(Intent::VIntent target, std::string_view methodName,
+            std::span<const uint8_t> payload);
+  void Call(Intent::VIntent target, RPCID methodId,
+            std::span<const uint8_t> payload);
+  [[nodiscard]] std::future<RPCResult> Call_R(Intent::VIntent target,
+                                              std::string_view methodName,
+                                              std::span<const uint8_t> payload);
+  [[nodiscard]] std::future<RPCResult> Call_R(Intent::VIntent target,
+                                              RPCID methodId,
+                                              std::span<const uint8_t> payload);
+  template <typename rpc, typename Args = typename rpc::ArgsTuple>
+  void Call(Intent::VIntent target, const Args& args)
+  {
+    logger->info("Calling RPC {} -> {} on target {}", rpc::NameString.value,
+                 rpc::Id, IntentToString(target));
+    std::vector<std::byte> payload;
+    NetBinaryWriter serializer;
+    serializer(args);
+    auto bytes = serializer.GetBytes();
+    payload.insert(payload.end(), bytes.begin(), bytes.end());
+    Call(target, rpc::Id, payload);
+  }
+  template <typename rpc, typename Args = typename rpc::ArgsTuple>
+    requires(!std::is_void<typename rpc::ReturnType>::value)
+  [[nodiscard]] std::future<TRPCResult<typename rpc::ReturnType>>
+  Call_R(Intent::VIntent target, const Args& args)
+  {
+    logger->info("Calling RPC {} -> {} on target {}, response expected",
+                 rpc::NameString.value, rpc::Id, IntentToString(target));
+    static_assert(
+        !std::is_void<typename rpc::ReturnType>::value,
+        "Use the void overload of Call for RPCs with no return value");
+    RPCCallID callId = nextCallID++;
+    std::unique_lock lock(mutex);
+    pendingCall newCall;
+    newCall.timestamp = std::chrono::steady_clock::now();
+    std::promise<TRPCResult<typename rpc::ReturnType>> typedPromise;
+    std::future<TRPCResult<typename rpc::ReturnType>> future =
+        typedPromise.get_future();
+    newCall.onComplete =
+        [typedPromise = std::move(typedPromise)](
+            const pendingCall& call, const RPCResult& result) mutable
+    {
+      if (result.has_value())
+      {
+        NetBinaryReader deserializer(result.value());
+        typename rpc::ReturnType returnValue;
+        deserializer(returnValue);
+        typedPromise.set_value(
+            TRPCResult<typename rpc::ReturnType>{std::move(returnValue)});
+      }
+      else
+      {
+        typedPromise.set_value(std::unexpected(RPCError::RemoteException));
+      }
+    };
+    pendingCalls.emplace(callId, std::move(newCall));
+    lock.unlock();
+    std::vector<std::byte> payload;
+    NetBinaryWriter serializer;
+    serializer(args);
+    auto bytes = serializer.GetBytes();
+    payload.insert(payload.end(), bytes.begin(), bytes.end());
+
+    _SendCallRequest(target, rpc::Id, callId, true, payload);
+    return future;
+  }
+
+private:
+  void _SendCallRequest(Intent::VIntent target, RPCID rpcId, RPCCallID callId,
+                        bool responseExpected,
+                        std::span<const std::byte> payload)
+  {
+
+    RPCHeader header{
+        .rpcId = rpcId,
+        .callId = callId,
+        .responseFlag =
+            responseExpected ? RPCFlags::ResponseExpected : RPCFlags::None,
+        .payloadSize = static_cast<uint16_t>(payload.size()),
+    };
+    NetBinaryWriter writer;
+    writer(header);
+    writer->adapter().writeBuffer<sizeof(std::byte)>(payload.data(),
+                                                     payload.size());
+    config_.intentChannel->Send(target, writer.GetBytes());
+  }
+  void _HandleCall(const RPCHeader& header, std::span<const std::byte> payload,
+                   const Intent::VIntent& intent, const AtlasNetNodeID& sender)
+  {
+    const RPCID rpcId = header.rpcId;
+  const RPCCallID callId = header.callId;
+  const bool responseExpected = header.responseFlag & RPCFlags::ResponseExpected;
+
+  std::shared_lock lock(mutex);
+  auto it = bindings.find(rpcId);
+  if (it == bindings.end())
+  {
+
+    lock.unlock();
+    logger->error("Non bound RPC called: {}, from address: {}", rpcId,
+                  sender.to_string());
+    if (responseExpected)
+    {
+      RPC_Internal::RPCResponseMessage response{
+          .context = RPC_Internal::RPCResponseContext{.rpcId = rpcId,
+                                                      .callId = callId},
+          .result = RPCResultW{std::unexpected(RPCError::UnknownRPC)}};
+      auto msg = config_.messageSystem->QueueMessage(
+          response, sender, request.sendMode);
+      auto status = msg->wait_for(config_.timeout);
+      assert(status == std::future_status::ready &&
+             "Failed to send RPC response: message send timed out");
+      MessageSendResultCode resultCode = msg->get().code;
+      assert(resultCode == MessageSendResultCode::eSuccess &&
+             "Failed to send RPC response: message send failed");
+    }
+  }
+  else
+  {
+    logger->info("Received RPC call for RPC {} from {}", rpcId, sender.to_string());
+    RPC_BindCallFunction_Raw func = it->second;
+    lock.unlock();
+    RPCResult result = func(RPCContext{.sourceAddress = sender}, request.payload);
+
+    if (responseExpected)
+    {
+      RPC_Internal::RPCResponseMessage response{
+          .context = RPC_Internal::RPCResponseContext{.rpcId = rpcId,
+                                                      .callId = callId},
+          .result = RPCResultW{std::move(result)}};
+      auto msg = config_.messageSystem->QueueMessage(
+          response, sender, request.sendMode);
+      auto status = msg->wait_for(config_.timeout);
+      logger->info("Sending RPC response for RPC {} to {}, result: {}", rpcId,
+                   sender.to_string(),
+                   result.has_value() ? "success" : "timeout/error");
+      assert(status == std::future_status::ready &&
+             "Failed to send RPC response: message send timed out");
+      MessageSendResultCode resultCode = msg->get().code;
+      assert(resultCode == MessageSendResultCode::eSuccess &&
+             "Failed to send RPC response: message send failed");
+    }
+  }
+  }
+};
+} // namespace AtlasNet::Network::RPC

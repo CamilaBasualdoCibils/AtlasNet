@@ -1,0 +1,38 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "Build Valkey-Server",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build",
+                "--target",
+                "Valkey-Server-Compile"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Build AtlasNetDB",
+            "type": "shell",
+            "command": "cmake",
+            "args": [
+                "--build",
+                "${workspaceFolder}/build",
+                "--target",
+                "AtlasNetDB"
+            ],
+            "problemMatcher": "$gcc"
+        },
+        {
+            "label": "Build Valkey-Server + AtlasNetDB",
+            "dependsOn": [
+                "Build Valkey-Server",
+                "Build AtlasNetDB"
+            ],
+            "dependsOrder": "parallel",
+            "problemMatcher": []
+        }
+    ]
+}

@@ -1,14 +1,11 @@
 #pragma once
-#include "IAtlasNetShard.hpp"
-#include "ShardEnums.hpp"
-#include "World.hpp"
-#include "atlasnet/core/entity/Entity.hpp"
-#include "atlasnet/core/entity/EntityHandle.hpp"
+
+//#include "ShardEnums.hpp"
 #include "entities/OrbitEntity.hpp"
 #include <atomic>
 #include <chrono>
 #include <thread>
-
+/* 
 class TankBattleShard : public AtlasNet::IAtlasNetShard
 {
   std::shared_ptr<spdlog::logger> logger = spdlog::stdout_color_mt("TankBattleShard");
@@ -54,10 +51,10 @@ public:
           atlasTransform.Cartesian().position = entity->transform.position;
           AtlasNet_UpdateEntityTransform(entity->GetAtlasEntityID().value(),
                                          atlasTransform);
-          /* logger->info("Updated transform for entity ID {}",
+           logger->info("Updated transform for entity ID {}",
                        entity->GetAtlasEntityID().value().to_string());
           logger->info("Entity position: xyz {}",
-                       glm::to_string(atlasTransform.Cartesian().position)); */
+                       glm::to_string(atlasTransform.Cartesian().position)); 
         }
       }
       world.Render();
@@ -128,4 +125,4 @@ public:
     // the client's entity in the world and processing any spawnShardPayload
     // data.
   }
-};
+}; */

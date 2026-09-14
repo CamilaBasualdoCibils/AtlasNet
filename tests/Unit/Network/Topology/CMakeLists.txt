@@ -3,10 +3,8 @@ add_executable(AtlasNet_tests_Topology ${CMAKE_CURRENT_SOURCE_DIR}/Topology.cpp)
 
 target_link_libraries(AtlasNet_tests_Topology
 AtlasNetCore
-AtlasNetTestCrashUtils
-gtest
-GTest::gmock
-raylib
+GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+raylib glfw
 )
 
 gtest_discover_tests(AtlasNet_tests_Topology)

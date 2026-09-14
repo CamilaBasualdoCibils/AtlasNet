@@ -2,50 +2,43 @@
   "group": {
     "default": {
       "targets": [
-        "atlasnet-controller-dev",
-        "atlasnet-cartograph-frontend-dev",
-        "atlasnet-cartograph-backend-dev",
-        "atlasnet-gateway-dev"
+
+        "atlasnet-cartograph-dev",
+        "atlasnet-node-dev",
+        "atlasnet-db-dev"
       ]
     }
   },
   "target": {
-    "atlasnet-controller-dev": {
+
+    "atlasnet-node-dev": {
       "context": ".",
       "dockerfile": "dev/docker/Dev.Dockerfile",
-      "target": "atlasnet-controller-dev",
+      "target": "atlasnet-node-dev",
       "load": true,
       "tags": [
-        "atlasnet-controller-dev"
+        "atlasnet-node-dev"
       ]
     },
-    "atlasnet-gateway-dev": {
+    "atlasnet-cartograph-dev": {
       "context": ".",
       "dockerfile": "dev/docker/Dev.Dockerfile",
-      "target": "atlasnet-gateway-dev",
+      "target": "atlasnet-cartograph-dev",
       "load": true,
       "tags": [
-        "atlasnet-gateway-dev"
+        "atlasnet-cartograph-dev"
       ]
     },
-    "atlasnet-cartograph-frontend-dev": {
+    "atlasnet-db-dev": {
       "context": ".",
       "dockerfile": "dev/docker/Dev.Dockerfile",
-      "target": "atlasnet-cartograph-frontend-dev",
+      "target": "atlasnet-db-dev",
       "load": true,
       "tags": [
-        "atlasnet-cartograph-frontend-dev"
-      ]
-    },
-    "atlasnet-cartograph-backend-dev": {
-      "context": ".",
-      "dockerfile": "dev/docker/Dev.Dockerfile",
-      "target": "atlasnet-cartograph-backend-dev",
-      "load": true,
-      "tags": [
-        "atlasnet-cartograph-backend-dev"
+        "atlasnet-db-dev"
       ]
     }
+
 
   }
 }

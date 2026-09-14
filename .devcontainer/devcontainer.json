@@ -8,7 +8,8 @@
 			"moby": false
 		},
 		"ghcr.io/devcontainers/features/copilot-cli:1": {},
-		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {}
+		"ghcr.io/devcontainers/features/kubectl-helm-minikube:1": {},
+		"ghcr.io/msclock/features/vcpkg:1": {}
 	},
 	"containerEnv": {
     "WAYLAND_DISPLAY": "${localEnv:WAYLAND_DISPLAY}",

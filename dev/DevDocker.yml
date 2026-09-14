@@ -1,0 +1,40 @@
+version: "3.8"
+
+networks:
+  AtlasNet:
+    driver: overlay
+services:
+  Atlasnet-Node:
+    image: atlasnet-node-dev
+    networks: [AtlasNet]
+    environment:
+      - ATLASNET_DB_HOST=AtlasNet-DB
+      - ATLASNET_DB_PORT=3373
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    tty: true
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+  AtlasNet-DB:
+    image: atlasnet-db-dev
+    networks: [AtlasNet]
+    tty: true
+    environment:
+      - ATLASNET_CLUSTER_PORT=3373
+    ports:
+      - target: 6379
+        published: 6379
+        protocol: tcp
+        mode: ingress
+    deploy:
+      mode: replicated
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+
+ 

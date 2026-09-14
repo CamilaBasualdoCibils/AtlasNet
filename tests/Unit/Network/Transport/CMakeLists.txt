@@ -1,10 +1,13 @@
 
-add_executable(AtlasNet_tests_Transport ${CMAKE_CURRENT_SOURCE_DIR}/Transport.cpp)
+add_executable(AtlasNet_tests_Transport 
+${CMAKE_CURRENT_SOURCE_DIR}/Transport.cpp 
+${CMAKE_CURRENT_SOURCE_DIR}/UDP.cpp 
+${CMAKE_CURRENT_SOURCE_DIR}/Packets.cpp)
 
 target_link_libraries(AtlasNet_tests_Transport
 AtlasNetCore
-AtlasNetTestCrashUtils
-gtest
+GTest::gtest GTest::gtest_main GTest::gmock GTest::gmock_main
+raylib
 )
 
 gtest_discover_tests(AtlasNet_tests_Transport)

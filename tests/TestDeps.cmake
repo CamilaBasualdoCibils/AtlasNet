@@ -28,10 +28,21 @@ FetchContent_MakeAvailable(raylib)
 endif()
 
 
+
+
 set(VENV_DIR "${CMAKE_CURRENT_SOURCE_DIR}/.venv" CACHE PATH "Path to Python virtual environment for tests")
 set(VENV_PIP "${VENV_DIR}/bin/pip" CACHE FILEPATH "Path to pip executable in the Python virtual environment")
 set(VENV_PYTHON "${VENV_DIR}/bin/python" CACHE FILEPATH "Path to Python executable in the Python virtual environment")
 # Step 1: Create venv
+if(EXISTS "${VENV_DIR}")
+    execute_process(
+        COMMAND ${CMAKE_COMMAND} -E rm -rf "${VENV_DIR}"
+        RESULT_VARIABLE RM_VENV_RESULT
+    )
+    if(NOT RM_VENV_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to remove existing Python venv folder: ${VENV_DIR}")
+    endif()
+endif()
 execute_process(
     COMMAND python3 -m venv ${VENV_DIR}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
@@ -48,5 +59,5 @@ execute_process(
     RESULT_VARIABLE PIP_RESULT
 )
 if(NOT PIP_RESULT EQUAL 0)
-    message(FATAL_ERROR "Failed to install Python dependencies")
+    message(FATAL_ERROR "Failed to install Python dependencies " ${PIP_RESULT})
 endif()
