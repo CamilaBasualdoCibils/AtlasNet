@@ -1,6 +1,7 @@
 {
   "name": "atlasnet",
   "version-string": "0.1.0",
+  "builtin-baseline": "b773faa425fbb6804af8dcdaa6bd725409fc4c80",
 
   "dependencies": [
     "glm",

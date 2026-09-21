@@ -11,8 +11,9 @@ jobs:
 
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      # Keep CI lean: tests only (no Cartograph/examples/dev)
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
+      # Match local / builtin-baseline in vcpkg.json
+      VCPKG_COMMIT: b773faa425fbb6804af8dcdaa6bd725409fc4c80
 
     steps:
       - name: Checkout
@@ -34,6 +35,7 @@ jobs:
         uses: lukka/run-vcpkg@v11
         with:
           vcpkgDirectory: ${{ env.VCPKG_ROOT }}
+          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
 
       - name: Cache vcpkg installed packages
         uses: actions/cache@v4
@@ -41,8 +43,9 @@ jobs:
           path: |
             ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
             ${{ github.workspace }}/build/vcpkg_installed
-          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json', 'vcpkg-triplets/**') }}
+          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'vcpkg-triplets/**') }}
           restore-keys: |
+            vcpkg-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-
 
       - name: Configure
