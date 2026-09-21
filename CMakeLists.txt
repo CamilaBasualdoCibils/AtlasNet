@@ -120,7 +120,7 @@ target_include_directories(AtlasNetDB
     "${CMAKE_SOURCE_DIR}/external/valkey/src"
 
 )
-target_link_libraries(AtlasNetDB AtlasNetCore)
+target_link_libraries(AtlasNetDB PUBLIC AtlasNetCore)
 set_target_properties(AtlasNetDB PROPERTIES FOLDER "AtlasNet")
 
 # DB Debug
@@ -130,6 +130,7 @@ add_custom_target(Valkey-Server-Compile
     COMMENT "Compiling Valkey Server for AtlasNetDB debugging"
     VERBATIM
 )
+
 add_executable(Valkey-Server-Debug IMPORTED GLOBAL)
 
 set_target_properties(Valkey-Server-Debug PROPERTIES

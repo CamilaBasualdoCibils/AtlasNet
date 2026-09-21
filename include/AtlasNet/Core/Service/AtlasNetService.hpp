@@ -27,11 +27,11 @@ namespace AtlasNet
 {
 enum class AtlasNetServiceType
 {
+  INVALID,
   Node,
-  DB,
-  Gateway
+  DB
 };
-BOOST_DESCRIBE_ENUM(AtlasNetServiceType, Node, DB, Gateway);
+BOOST_DESCRIBE_ENUM(AtlasNetServiceType, INVALID, Node, DB);
 class AtlasNetService
 {
 public:

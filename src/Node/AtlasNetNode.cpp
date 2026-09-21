@@ -193,7 +193,7 @@ void AtlasNet::AtlasNetNode::Initialize()
     }
     DB::RegisterNodeRequest registerRequest;
     registerRequest.handshakeAddress = nodeConfig.dbHandshakeAddress;
-    registerRequest.channelBusAddress = Network::SocketAddress(Network::IPv6::Any(),GetClusterTransport())
+    //registerRequest.channelBusAddress = Network::SocketAddress(Network::IPv6::Any(),GetClusterTransport());
     registerRequest.nodeID = GetNodeID();
     std::future<Network::RPC::TRPCResult<DB::RegisterNodeResponse>> response =
         GetHandshakeRPC().Call<DB::RPC_DB_RegisterNode>(
