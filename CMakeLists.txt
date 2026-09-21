@@ -86,6 +86,7 @@ PUBLIC
   hiredis::hiredis_ssl
   $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
   nlohmann_json::nlohmann_json
+  EnTT::EnTT
 )
 set_target_properties(AtlasNetCore PROPERTIES FOLDER "AtlasNet")
 

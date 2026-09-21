@@ -24,4 +24,13 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(redis++ CONFIG REQUIRED)
 find_package(Bitsery CONFIG REQUIRED)
 
+# EnTT is header-only; scoped for SpatialObject / component backend.
+include(FetchContent)
+FetchContent_Declare(
+  entt
+  URL https://github.com/skypjack/entt/archive/refs/tags/v3.16.0.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(ENTT_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(entt)
 
