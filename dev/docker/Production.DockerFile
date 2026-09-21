@@ -51,7 +51,7 @@ COPY dev/ dev/
 COPY include/ include/
 COPY src/ src/
 RUN cmake --preset linux-vcpkg -DATLASNET_EXAMPLES=OFF -DATLASNET_TESTS=OFF -DATLASNET_CARTOGRAPH=ON
-RUN cmake --build --preset linux-vcpkg --target AtlasNetNode AtlasNetDB
+RUN cmake --build --preset linux-vcpkg --target AtlasNetNode AtlasNetNode-ValkeyModule
 
 FROM debian:stable-slim AS runner
 WORKDIR /atlasnet
@@ -76,8 +76,8 @@ RUN apt-get update && \
     libatomic1 \
     binutils && \
     rm -rf /var/lib/apt/lists/*
-COPY --from=builder /atlasnet/build/libAtlasNetDB.so /atlasnet/libAtlasNetDB.so
-CMD ["valkey-server", "--loadmodule", "/atlasnet/libAtlasNetDB.so"]
+COPY --from=builder /atlasnet/build/libAtlasNetNode-ValkeyModule.so /atlasnet/libAtlasNetNode-ValkeyModule.so
+CMD ["valkey-server", "--loadmodule", "/atlasnet/libAtlasNetNode-ValkeyModule.so"]
 FROM runner AS atlasnet-cartograph
 #COPY --from=builder /atlasnet/build/AtlasNetCartographBackend /atlasnet/
 #COPY web/ /atlasnet/frontend/

@@ -8,7 +8,7 @@
             "program": "${workspaceFolder}/external/valkey/src/valkey-server",
             "args": [
                 "--loadmodule",
-                "./libAtlasNetDB.so"
+                "./libAtlasNetNode-ValkeyModule.so"
             ],
             "cwd": "${workspaceFolder}/build",
             "stopAtEntry": false,
@@ -22,7 +22,7 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Build Valkey-Server + AtlasNetDB"
+            "preLaunchTask": "Build Valkey-Server + AtlasNetNode-ValkeyModule"
         },
         {
             "name": "CMake Test (GDB Fork)",

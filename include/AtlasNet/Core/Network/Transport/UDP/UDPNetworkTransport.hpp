@@ -58,20 +58,20 @@ public:
       logger->error("Failed to bind UDP socket: {}", error);
       throw std::runtime_error("Failed to bind UDP socket: " + error);
     }
-   /*  sockaddr_storage actual{};
-    socklen_t actualLen = sizeof(actual);
+    /*  sockaddr_storage actual{};
+     socklen_t actualLen = sizeof(actual);
 
-    if (::getsockname(socket_, reinterpret_cast<sockaddr*>(&actual),
-                      &actualLen) < 0)
-    {
-      logger->error("getsockname failed: {}", strerror(errno));
-    }
-    else
-    {
-      logger->info(
-          "UDP fd {} actually bound to {}", socket_,
-          SocketAddress(reinterpret_cast<sockaddr*>(&actual)).to_string());
-    } */
+     if (::getsockname(socket_, reinterpret_cast<sockaddr*>(&actual),
+                       &actualLen) < 0)
+     {
+       logger->error("getsockname failed: {}", strerror(errno));
+     }
+     else
+     {
+       logger->info(
+           "UDP fd {} actually bound to {}", socket_,
+           SocketAddress(reinterpret_cast<sockaddr*>(&actual)).to_string());
+     } */
     // If we requested an ephemeral port, find out which one
     // the OS actually assigned.
     if (listenAddress.get_port() == PORT_EPHEMERAL)
@@ -247,7 +247,17 @@ public:
     return received;
   }
 
-  virtual ~UDPNetworkTransport() = default;
+  UDPNetworkTransport(const UDPNetworkTransport&) = delete;
+  UDPNetworkTransport& operator=(const UDPNetworkTransport&) = delete;
+  ~UDPNetworkTransport() override
+  {
+    close(socket_);
+  }
+
+  int GetPollDescriptor() const override
+  {
+    return socket_;
+  }
 
   SocketAddress GetListenAddress() override
   {

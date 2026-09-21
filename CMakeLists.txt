@@ -94,40 +94,33 @@ file(GLOB_RECURSE _node_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Node/*.cpp"
 )
 
-add_executable(AtlasNetNode ${_node_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetNode
-      PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-
+add_executable(AtlasNetNode
+    ${_node_sources}
+    src/Standalone/Entry.cpp
+    src/Standalone/Configuration.cpp
+    src/Backends/ValkeyRemoteBackend.cpp
 )
-
-target_link_libraries(AtlasNetNode AtlasNetCore)
+target_include_directories(AtlasNetNode PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AtlasNetNode PRIVATE AtlasNetCore)
 set_target_properties(AtlasNetNode PROPERTIES FOLDER "AtlasNet")
 
-# ========= ATLASNET DB ========
+# The embedded host compiles the same runtime with only the Module API backend.
 file(GLOB_RECURSE _db_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/DB/*.cpp"
 )
-
-add_library(AtlasNetDB SHARED ${_db_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetDB
-      PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+add_library(AtlasNetNode-ValkeyModule SHARED ${_node_sources} ${_db_sources})
+target_include_directories(AtlasNetNode-ValkeyModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/external/valkey/src"
-
 )
-target_link_libraries(AtlasNetDB PUBLIC AtlasNetCore)
-set_target_properties(AtlasNetDB PROPERTIES FOLDER "AtlasNet")
+target_link_libraries(AtlasNetNode-ValkeyModule PRIVATE AtlasNetCore)
+set_target_properties(AtlasNetNode-ValkeyModule PROPERTIES FOLDER "AtlasNet")
 
 # DB Debug
 add_custom_target(Valkey-Server-Compile
     COMMAND make -j${NPROC} valkey-server
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/valkey
-    COMMENT "Compiling Valkey Server for AtlasNetDB debugging"
+    COMMENT "Compiling Valkey Server for AtlasNetNode-ValkeyModule debugging"
     VERBATIM
 )
 
@@ -141,8 +134,25 @@ set_target_properties(Valkey-Server-Debug PROPERTIES
 add_dependencies(
     Valkey-Server-Debug
     Valkey-Server-Compile
-    AtlasNetDB
+    AtlasNetNode-ValkeyModule
 )
+
+set(ATLASNET_LOCAL_VALKEY_PORT 16379 CACHE STRING
+    "Valkey port used by the AtlasNetNode-Local development target")
+
+add_executable(AtlasNetNode-Local
+    ${_node_sources}
+    src/Standalone/LocalEntry.cpp
+    src/Backends/ValkeyRemoteBackend.cpp
+)
+target_include_directories(AtlasNetNode-Local PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AtlasNetNode-Local PRIVATE AtlasNetCore)
+target_compile_definitions(AtlasNetNode-Local PRIVATE
+    ATLASNET_LOCAL_VALKEY_SERVER="${CMAKE_SOURCE_DIR}/external/valkey/src/valkey-server"
+    ATLASNET_LOCAL_VALKEY_PORT=${ATLASNET_LOCAL_VALKEY_PORT}
+)
+add_dependencies(AtlasNetNode-Local Valkey-Server-Compile)
+set_target_properties(AtlasNetNode-Local PROPERTIES FOLDER "AtlasNet/Development")
 
 # ========= ATLASNET CARTOGRAPH ========
 if (ATLASNET_CARTOGRAPH)

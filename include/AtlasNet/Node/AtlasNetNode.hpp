@@ -12,49 +12,27 @@
 #include "AtlasNet/Core/Network/Intent/ClusterIntentChannel.hpp"
 #include "AtlasNet/Core/Network/RPC/NetworkTransportRPC.hpp"
 #include "AtlasNet/Core/Network/Transport/INetworkTransport.hpp"
-#include <boost/describe.hpp>
-#include <boost/program_options/options_description.hpp>
-#include <boost/program_options/variables_map.hpp>
-#include <boost/stacktrace.hpp>
-#include <boost/stacktrace/stacktrace.hpp>
+#include "AtlasNet/DB/Backend/IDatabaseBackend.hpp"
+#include "AtlasNet/Node/NodeConfig.hpp"
+#include <atomic>
 #include <chrono>
 #include <memory>
-#include <set>
 #include <spdlog/logger.h>
+#include <stop_token>
 #include <thread>
-#include <unordered_set>
 namespace AtlasNet
 {
-enum class AtlasNetServiceType
+class AtlasNetNode final
 {
-  INVALID,
-  Node,
-  DB
-};
-BOOST_DESCRIBE_ENUM(AtlasNetServiceType, INVALID, Node, DB);
-class AtlasNetService
-{
-public:
-  struct Options
-  {
-
-    Network::Cluster::ClusterTransportType networkTransportType =
-        Network::Cluster::ClusterTransportType::INVALID;
-    Network::PortType clusterListenPort = Network::PORT_EPHEMERAL;
-    Network::PortType handshakeListenPort = Network::PORT_INVALID;
-  };
-
 private:
-  Options options;
-  const AtlasNetServiceType service_type;
-  std::shared_ptr<spdlog::logger> logger;
-  const int signalFd;
+  NodeConfig nodeConfig;
   const AtlasNetNodeID nodeID;
+  std::shared_ptr<spdlog::logger> logger;
   std::atomic_bool stop_requested{false};
-  
+
   std::shared_ptr<Network::INetworkTransport> HandshakeTransport;
-  std::shared_ptr<Network::RPC::NetworkTransportRPC> HandshakeRPC; 
-  
+  std::shared_ptr<Network::RPC::NetworkTransportRPC> HandshakeRPC;
+
   std::shared_ptr<Network::INetworkTransport> baseTransport;
   std::shared_ptr<Network::Cluster::ClusterTransport> clusterTransport;
   std::shared_ptr<Network::Cluster::ChannelBus> channelBus;
@@ -64,19 +42,38 @@ private:
       clusterIntentChannels;
 
 public:
-  AtlasNetService(AtlasNetServiceType service_type, int argc, char** argv);
-  void Run();
+  explicit AtlasNetNode(NodeConfig config,
+                        std::unique_ptr<DB::IDatabaseBackend> backend = {});
+  const NodeConfig& GetConfig() const
+  {
+    return nodeConfig;
+  }
+  void Start();
+  void Poll();
+  // Borrowed until node destruction. Hosts remove their event registration
+  // first.
+  int GetHandshakePollDescriptor() const
+  {
+    return HandshakeTransport ? HandshakeTransport->GetPollDescriptor() : -1;
+  }
+  void Run(std::stop_token stop = {});
+  void RequestStop()
+  {
+    stop_requested.store(true);
+  }
 
-  virtual ~AtlasNetService() = default;
+  ~AtlasNetNode();
 
   auto GetLogger() const -> std::shared_ptr<spdlog::logger>
   {
     return logger;
   }
 
-protected:
-  virtual void AddOptions(boost::program_options::options_description& desc);
-  virtual void ParseOptions(const boost::program_options::variables_map& vm);
+private:
+  Network::SocketAddress GetClusterListenAddress() const
+  {
+    return baseTransport->GetListenAddress();
+  }
   Network::Cluster::ClusterTransport& GetClusterTransport() const
   {
     return *clusterTransport;
@@ -96,18 +93,12 @@ protected:
   {
     return nodeID;
   }
+
 private:
-  void MainLoop();
-  virtual void Initialize() = 0;
-  virtual void Tick() = 0;
+  bool started = false;
+  void Initialize();
+  void Tick();
   void InitializeChannels();
-
-  static std::string GetHostID();
-  static int SetupSignals();
-  std::optional<int> CheckForSignal();
-
-
-  const int argc;
-  char const* const* argv;
+  std::unique_ptr<DB::IDatabaseBackend> database;
 };
 } // namespace AtlasNet

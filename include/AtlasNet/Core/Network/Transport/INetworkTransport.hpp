@@ -10,12 +10,17 @@ public:
   virtual ~INetworkTransport() = default;
   INetworkTransport() = default;
   virtual bool Send(const SocketAddress& destination,
-            std::span<const std::byte> payload) = 0;
+                    std::span<const std::byte> payload) = 0;
 
   virtual size_t Receive(std::span<TransportDatagram> packets) = 0;
 
   virtual size_t TryReceive(std::span<TransportDatagram> packets) = 0;
 
+  // Borrowed descriptor for hosts with an event loop; -1 means unavailable.
+  virtual int GetPollDescriptor() const
+  {
+    return -1;
+  }
   virtual PortType GetListenPort() = 0;
   virtual SocketAddress GetListenAddress() = 0;
 };
