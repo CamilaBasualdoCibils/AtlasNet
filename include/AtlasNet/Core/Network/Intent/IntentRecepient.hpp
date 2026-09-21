@@ -2,6 +2,9 @@
 
 #include "AtlasNet/Core/Core.hpp"
 #include <boost/describe/enum.hpp>
+#include <format>
+#include <string>
+#include <variant>
 namespace AtlasNet::Network::Intent
 {
 struct IRecepient
@@ -60,7 +63,7 @@ struct ShardOfEntityRecepient : public IRecepient
   std::string ToString() const
   {
     return std::format("ShardOfEntityRecepient(entityID={})",
-                       entityID.to_string());
+                       std::string(entityID.to_string()));
   }
 };
 struct ShardOfClientRecepient : public IRecepient
@@ -75,7 +78,7 @@ struct ShardOfClientRecepient : public IRecepient
   std::string ToString() const
   {
     return std::format("ShardOfClientRecepient(clientID={})",
-                       clientID.to_string());
+                       std::string(clientID.to_string()));
   }
 };
 struct IngressOfClientRecepient : public IRecepient
@@ -90,7 +93,7 @@ struct IngressOfClientRecepient : public IRecepient
   std::string ToString() const
   {
     return std::format("IngressOfClientRecepient(clientID={})",
-                       clientID.to_string());
+                       std::string(clientID.to_string()));
   }
 };
 struct DatabaseRecepient : public IRecepient

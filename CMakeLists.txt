@@ -63,6 +63,7 @@ target_include_directories(AtlasNetCore
 target_compile_definitions(AtlasNetCore PUBLIC
     SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 )
+target_compile_features(AtlasNetCore PUBLIC cxx_std_23)
 
 target_link_libraries(AtlasNetCore
 PUBLIC

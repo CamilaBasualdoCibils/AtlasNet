@@ -25,15 +25,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build clang lld pkg-config \
+            ninja-build clang-18 lld-18 pkg-config \
             autoconf autoconf-archive automake libtool \
             libssl-dev zlib1g-dev \
             libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxi-dev libxext-dev
-          # Ensure cmake can find the ninja binary from ninja-build
+          command -v clang++-18
           command -v ninja
-          command -v autoconf
-          command -v automake
           dpkg -l autoconf-archive | tail -1
 
       - name: Setup vcpkg

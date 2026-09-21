@@ -48,7 +48,7 @@ struct PacketHeader
     archive(magic, version, flags, channel, packetSequence, ackSequence,
             ackBits, messageCount, payloadBytes);
   }
-  constexpr static size_t NetSize() noexcept
+  static size_t NetSize() noexcept
   {
     NetBinaryWriter writer;
     writer(PacketHeader());
@@ -64,7 +64,7 @@ struct MessageHeader
   {
     archive(messageSequence, payloadBytes);
   }
-  constexpr static size_t NetSize() noexcept
+  static size_t NetSize() noexcept
   {
     NetBinaryWriter writer;
     writer(MessageHeader());
