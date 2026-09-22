@@ -10,7 +10,13 @@ A VS Code bottom panel that launches real local AtlasNet processes in separate C
 4. Open the AtlasNet repository as a single-folder workspace. Run **AtlasNet: Open Local Stack** from the Command Palette.
 5. Edit counts, capabilities, paths, ports and extra arguments; press **Run stack**. Select processes in **Run and Debug → Call Stack** to switch debugger context. Normal source breakpoints apply to all processes.
 
-The panel saves configuration to `.vscode/atlasnet-stack.json` when saving or running. Do not store credentials in a committed configuration. It does not build automatically. Use **Stop stack** to stop only sessions launched by this panel; individual session stop buttons are also available. Stop the stack before reloading the extension host.
+The panel saves configuration to `.vscode/atlasnet-stack.json` when saving or running. Do not store credentials in a committed configuration. It does not build automatically. Use **Stop gracefully** to deliver SIGTERM through GDB so AtlasNet nodes run their signal-driven shutdown path. Managed Valkey stops after the final node exits. **Force stop** immediately terminates the debug sessions. Both controls only affect sessions launched by this panel, and each session has its own controls.
+
+Before launching, the panel runs its editable prelaunch command as a visible VS Code task. It defaults to `cmake --build "${workspaceFolder}/build" --parallel`, which builds CMake’s default `all` target. Clear the field to disable it. A failed build prevents the stack from starting.
+
+## Valgrind and perf
+
+Enable either or both tools in the panel. They wrap each AtlasNet node through GDB; managed Valkey remains a normal GDB launch so its readiness check still works. Valgrind uses full leak checking and origin tracking. perf records DWARF call graphs into the configured output pattern; include `${index}` to prevent nodes from overwriting one another. Running both nests Valgrind inside perf record. These tools substantially slow startup, so registry retries can expire while a node is paused or instrumented heavily.
 
 ## Arguments and networking
 

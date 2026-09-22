@@ -2,12 +2,15 @@
 #include "Configuration.hpp"
 #include <csignal>
 #include <iostream>
+#include <stop_token>
 
 namespace
 {
 volatile std::sig_atomic_t stopRequested = 0;
+std::stop_source stopSource;
 void Stop(int)
 {
+  stopSource.request_stop();
   stopRequested = 1;
 }
 } // namespace
@@ -29,12 +32,8 @@ int main(int argc, char** argv)
       backend =
           std::make_unique<AtlasNet::DB::ValkeyRemoteBackend>(config.valkeyURI);
     AtlasNet::AtlasNetNode node(std::move(config.node), std::move(backend));
-    node.Start();
-    while (!stopRequested)
-    {
-      node.Poll();
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    node.Run(stopSource.get_token());
+
     return 0;
   }
   catch (const std::exception& error)

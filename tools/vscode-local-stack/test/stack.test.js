@@ -32,3 +32,15 @@ test('external Valkey is not launched and zero-count groups are omitted', () => 
   const config = defaults(); config.launchValkey = false; config.groups[1].count = 0;
   assert.equal(plan(config, '/repo').length, 5);
 });
+
+test('Valgrind and perf can wrap every node together while Valkey remains direct', () => {
+  const config = defaults(); config.valgrind = true; config.perf = true;
+  const result = plan(config, '/repo');
+  assert.equal(result[0].setupCommands.length, 1);
+  for (const launch of result.slice(1)) {
+    const wrapper = launch.setupCommands[1].text;
+    assert.match(wrapper, /^set exec-wrapper /);
+    assert.match(wrapper, /\/usr\/bin\/perf.*record.*--.*\/usr\/bin\/valgrind/);
+    assert.match(wrapper, /perf-[0-9]+\.data/);
+  }
+});

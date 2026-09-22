@@ -1,7 +1,7 @@
 'use strict';
 const vscode = acquireVsCodeApi();
 const $ = id => document.getElementById(id);
-const fields = ['program', 'cwd', 'gdb', 'clusterPort', 'handshakePort', 'valkeyURI', 'launchValkey', 'valkeyProgram', 'valkeyPort'];
+const fields = ['preLaunchCommand', 'program', 'cwd', 'gdb', 'valgrind', 'valgrindProgram', 'perf', 'perfProgram', 'perfOutput', 'clusterPort', 'handshakePort', 'valkeyURI', 'launchValkey', 'valkeyProgram', 'valkeyPort'];
 let config, locked = false;
 function notice(message, error = false) { $('message').textContent = message; $('message').className = error ? 'error' : ''; }
 function collect() {
@@ -33,7 +33,8 @@ function addGroup(group) {
   $('groups').append(row);
 }
 for (const type of ['run', 'save']) $(type).onclick = () => { try { const value = collect(); notice(''); vscode.postMessage({ type, config: value }); } catch (error) { notice('Arguments must be valid JSON arrays: ' + error.message, true); } };
-$('stop').onclick = () => vscode.postMessage({ type: 'stop' });
+$('gracefulStop').onclick = () => vscode.postMessage({ type: 'gracefulStop' });
+$('forceStop').onclick = () => vscode.postMessage({ type: 'forceStop' });
 $('add').onclick = () => { if (!locked) addGroup({ name: 'Node', count: 1, capabilities: ['Shard'], args: [] }); };
 window.addEventListener('message', ({ data }) => {
   if (data.type === 'config') render(data.config);
@@ -41,10 +42,14 @@ window.addEventListener('message', ({ data }) => {
   if (data.type === 'status') {
     locked = data.busy || data.sessions.length > 0;
     document.querySelectorAll('#settings input, #groups input, #groups textarea, #groups button, #run, #add, #save').forEach(e => { e.disabled = locked; });
-    $('stop').disabled = !locked;
+    $('gracefulStop').disabled = !locked;
+    $('forceStop').disabled = !locked;
     $('summary').textContent = `${data.sessions.length} debug sessions${data.busy ? ' • starting…' : ''}`;
     $('sessions').replaceChildren();
-    for (const session of data.sessions) { const button = document.createElement('button'); button.textContent = '■ Stop ' + session.name; button.onclick = () => vscode.postMessage({ type: 'stopOne', id: session.id }); $('sessions').append(button); }
+    for (const session of data.sessions) {
+      if (session.name !== 'AtlasNet / Valkey') { const graceful = document.createElement('button'); graceful.textContent = 'Stop gracefully ' + session.name; graceful.onclick = () => vscode.postMessage({ type: 'gracefulStopOne', id: session.id }); $('sessions').append(graceful); }
+      const force = document.createElement('button'); force.textContent = '■ Force ' + session.name; force.onclick = () => vscode.postMessage({ type: 'forceStopOne', id: session.id }); $('sessions').append(force);
+    }
   }
 });
 vscode.postMessage({ type: 'ready' });

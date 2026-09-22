@@ -214,6 +214,9 @@ void AtlasNet::AtlasNetNode::Run(std::stop_token stop)
     Poll();
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
+  GetLogger()->info("Shutting Down...");
+  Shutdown();
+  GetLogger()->info("Goodbye");
 }
 
 void AtlasNet::AtlasNetNode::InitializeChannels()
@@ -223,6 +226,7 @@ void AtlasNet::AtlasNetNode::InitializeChannels()
           .transport = clusterTransport,
           .name = "ChannelBus:" + nodeID.to_string()});
 }
+void AtlasNet::AtlasNetNode::Shutdown() {}
 
 AtlasNet::AtlasNetNode::~AtlasNetNode()
 {

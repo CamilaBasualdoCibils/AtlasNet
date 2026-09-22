@@ -3,7 +3,10 @@ const capabilities = ['Database', 'Shard', 'ControllerEligible', 'ClientIngress'
 function defaults() {
   return {
     program: '${workspaceFolder}/build/AtlasNetNode', cwd: '${workspaceFolder}/build',
+    preLaunchCommand: 'cmake --build "${workspaceFolder}/build" --parallel',
     gdb: '/usr/bin/gdb', clusterPort: 42000, handshakePort: 43000,
+    valgrind: false, valgrindProgram: '/usr/bin/valgrind',
+    perf: false, perfProgram: '/usr/bin/perf', perfOutput: '${workspaceFolder}/build/perf-${index}.data',
     valkeyURI: 'tcp://127.0.0.1:46379', launchValkey: true,
     valkeyProgram: '${workspaceFolder}/external/valkey/src/valkey-server', valkeyPort: 46379,
     groups: [
@@ -19,6 +22,11 @@ function plan(config, root) {
   const port = (v, name) => Number.isInteger(v) && v > 0 && v <= 65535 ? v : fail(`${name} must be 1–65535`);
   const expand = value => value.replaceAll('${workspaceFolder}', root);
   for (const key of ['program', 'cwd', 'gdb', 'valkeyURI']) string(config[key], key);
+  if (config.valgrind) string(config.valgrindProgram, 'Valgrind executable');
+  if (config.perf) {
+    string(config.perfProgram, 'perf executable');
+    string(config.perfOutput, 'perf output path');
+  }
   if (!Array.isArray(config.groups)) fail('Groups must be an array');
   const nodes = [];
   config.groups.forEach((group, groupIndex) => {
@@ -39,9 +47,21 @@ function plan(config, root) {
     n.handshake = port(config.handshakePort + n.index, 'Handshake port');
     for (const p of [n.cluster, n.handshake]) { if (used.has(p)) fail(`UDP port ${p} is duplicated`); used.add(p); }
   }
-  const debug = (name, program, args) => ({ name, type: 'cppdbg', request: 'launch', program: expand(program),
-    cwd: expand(config.cwd), args, MIMode: 'gdb', miDebuggerPath: expand(config.gdb), stopAtEntry: false,
-    externalConsole: false, setupCommands: [{ text: '-enable-pretty-printing', ignoreFailures: true }] });
+  const debug = (name, program, args, node) => {
+    const setupCommands = [{ text: '-enable-pretty-printing', ignoreFailures: true }];
+    if (node && (config.valgrind || config.perf)) {
+      const wrapper = [];
+      if (config.perf) {
+        const output = expand(config.perfOutput).replaceAll('${index}', String(node.index)).replaceAll('${instance}', String(node.instance));
+        wrapper.push(expand(config.perfProgram), 'record', '--call-graph', 'dwarf', '-o', output, '--');
+      }
+      if (config.valgrind) wrapper.push(expand(config.valgrindProgram), '--vgdb=no', '--leak-check=full', '--track-origins=yes');
+      setupCommands.push({ text: 'set exec-wrapper ' + wrapper.map(gdbQuote).join(' ') });
+    }
+    return { name, type: 'cppdbg', request: 'launch', program: expand(program),
+      cwd: expand(config.cwd), args, MIMode: 'gdb', miDebuggerPath: expand(config.gdb), stopAtEntry: false,
+      externalConsole: false, setupCommands };
+  };
   const result = [];
   if (config.launchValkey) {
     string(config.valkeyProgram, 'Valkey executable'); port(config.valkeyPort, 'Valkey port');
@@ -56,8 +76,12 @@ function plan(config, root) {
     if (isDB) args.push('--valkey-uri', config.valkeyURI);
     else args.push('--DB-host', '127.0.0.1', '--DB-port', String(database.handshake));
     args.push(...n.group.args.map(a => expand(a).replaceAll('${index}', String(n.index)).replaceAll('${instance}', String(n.instance))));
-    result.push(debug(`AtlasNet / ${n.groupIndex + 1}: ${n.group.name} #${n.instance}`, config.program, args));
+    result.push(debug(`AtlasNet / ${n.groupIndex + 1}: ${n.group.name} #${n.instance}`, config.program, args, n));
   }
   return result;
 }
 module.exports = { defaults, plan, capabilities };
+
+function gdbQuote(value) {
+  return JSON.stringify(String(value));
+}

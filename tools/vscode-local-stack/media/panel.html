@@ -3,11 +3,14 @@
 <style nonce="NONCE">
 body{font:var(--vscode-font-size) var(--vscode-font-family);color:var(--vscode-foreground);padding:12px}input,textarea,button{font:inherit;color:var(--vscode-input-foreground);background:var(--vscode-input-background);border:1px solid var(--vscode-input-border,transparent);padding:5px}button{cursor:pointer;background:var(--vscode-button-background);color:var(--vscode-button-foreground)}button:disabled{opacity:.5;cursor:default}input[type=number]{width:70px}input[type=text]{width:min(650px,90%)}label{display:block;margin:6px 0}label.check{display:inline-block;margin-right:12px}fieldset{border:1px solid var(--vscode-panel-border);margin:10px 0;padding:10px}textarea{display:block;width:95%;min-height:45px;margin-top:6px}.toolbar{display:flex;gap:8px;align-items:center;position:sticky;top:0;background:var(--vscode-panel-background);padding:8px 0}#message{white-space:pre-wrap;color:var(--vscode-descriptionForeground)}.error{color:var(--vscode-errorForeground)!important}h2{font-size:16px}p{color:var(--vscode-descriptionForeground)}#sessions button{margin:4px}
 </style></head><body>
-<div class="toolbar"><button id="run">▶ Run stack</button><button id="stop">■ Stop stack</button><button id="save">Save</button><span id="summary"></span></div>
+<div class="toolbar"><button id="run">▶ Run stack</button><button id="gracefulStop">Stop gracefully</button><button id="forceStop">■ Force stop</button><button id="save">Save</button><span id="summary"></span></div>
 <div id="message" role="status"></div>
 <p>Local processes, each with its own GDB session. Select a session in Run and Debug to inspect threads and breakpoints.</p>
 <fieldset id="settings"><legend>Executables and networking</legend>
+<label>Prelaunch command <input id="preLaunchCommand" type="text"></label>
 <label>Node executable <input id="program" type="text"></label><label>Working directory <input id="cwd" type="text"></label><label>GDB <input id="gdb" type="text"></label>
+<label><input id="valgrind" type="checkbox"> Run nodes with Valgrind</label><label>Valgrind executable <input id="valgrindProgram" type="text"></label>
+<label><input id="perf" type="checkbox"> Record nodes with perf</label><label>perf executable <input id="perfProgram" type="text"></label><label>perf output pattern <input id="perfOutput" type="text"></label>
 <label>First cluster UDP port <input id="clusterPort" type="number"></label><label>First registry UDP port <input id="handshakePort" type="number"></label>
 <label>Valkey URI <input id="valkeyURI" type="text"></label><label><input id="launchValkey" type="checkbox"> Launch local Valkey under GDB (temporary, no persistence)</label>
 <label>Valkey executable <input id="valkeyProgram" type="text"></label><label>Valkey TCP port <input id="valkeyPort" type="number"></label>

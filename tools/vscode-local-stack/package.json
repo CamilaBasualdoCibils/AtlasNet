@@ -2,7 +2,7 @@
   "name": "atlasnet-local-stack",
   "displayName": "AtlasNet Local Stack",
   "description": "Launch configurable local AtlasNet stacks under GDB.",
-  "version": "0.1.0",
+  "version": "0.3.0",
   "publisher": "atlasnet",
   "engines": { "vscode": "^1.85.0" },
   "categories": ["Debuggers"],

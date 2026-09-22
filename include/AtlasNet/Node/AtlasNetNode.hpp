@@ -59,6 +59,7 @@ public:
   void Run(std::stop_token stop = {});
   void RequestStop()
   {
+    GetLogger()->info("Shutdown Requested...");
     stop_requested.store(true);
   }
 
@@ -99,6 +100,7 @@ private:
   void Initialize();
   void Tick();
   void InitializeChannels();
+  void Shutdown();
   std::unique_ptr<DB::IDatabaseBackend> database;
 };
 } // namespace AtlasNet
