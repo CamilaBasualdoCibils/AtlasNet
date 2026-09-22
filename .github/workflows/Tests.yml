@@ -25,14 +25,13 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build clang-18 lld-18 libc++-18-dev libc++abi-18-dev pkg-config \
+            ninja-build gcc-14 g++-14 pkg-config \
             autoconf autoconf-archive automake libtool \
             libssl-dev zlib1g-dev \
             libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
             libxcursor-dev libxi-dev libxext-dev
-          command -v clang++-18
+          command -v g++-14
           command -v ninja
-          test -f /usr/include/c++/v1/expected
           dpkg -l autoconf-archive | tail -1
 
       - name: Setup vcpkg
@@ -55,7 +54,7 @@ jobs:
       - name: Configure
         run: |
           mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
-          cmake --preset linux-vcpkg-debug \
+          cmake --preset linux-vcpkg-ci \
             -DVCPKG_MANIFEST_FEATURES=testing \
             -DATLASNET_CARTOGRAPH=OFF \
             -DATLASNET_EXAMPLES=OFF \
