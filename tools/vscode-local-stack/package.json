@@ -1,0 +1,19 @@
+{
+  "name": "atlasnet-local-stack",
+  "displayName": "AtlasNet Local Stack",
+  "description": "Launch configurable local AtlasNet stacks under GDB.",
+  "version": "0.1.0",
+  "publisher": "atlasnet",
+  "engines": { "vscode": "^1.85.0" },
+  "categories": ["Debuggers"],
+  "main": "./extension.js",
+  "extensionKind": ["workspace"],
+  "extensionDependencies": ["ms-vscode.cpptools"],
+  "capabilities": { "untrustedWorkspaces": { "supported": false } },
+  "contributes": {
+    "commands": [{ "command": "atlasnetLocalStack.open", "title": "AtlasNet: Open Local Stack" }],
+    "viewsContainers": { "panel": [{ "id": "atlasnetLocalStack", "title": "AtlasNet", "icon": "media/stack.svg" }] },
+    "views": { "atlasnetLocalStack": [{ "type": "webview", "id": "atlasnetLocalStack.panel", "name": "Local Stack" }] }
+  },
+  "scripts": { "test": "node --test test/*.test.js", "package": "npx @vscode/vsce package --allow-missing-repository" }
+}

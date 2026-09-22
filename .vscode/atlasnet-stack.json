@@ -1,0 +1,31 @@
+{
+  "program": "${workspaceFolder}/build/AtlasNetNode",
+  "cwd": "${workspaceFolder}/build",
+  "gdb": "/usr/bin/gdb",
+  "clusterPort": 42000,
+  "handshakePort": 43000,
+  "valkeyURI": "tcp://127.0.0.1:46379",
+  "launchValkey": true,
+  "valkeyProgram": "${workspaceFolder}/external/valkey/src/valkey-server",
+  "valkeyPort": 46379,
+  "groups": [
+    {
+      "name": "Database",
+      "count": 1,
+      "capabilities": [
+        "Database"
+      ],
+      "args": []
+    },
+    {
+      "name": "Workers",
+      "count": 2,
+      "capabilities": [
+        "Shard",
+        "ControllerEligible",
+        "ClientIngress"
+      ],
+      "args": []
+    }
+  ]
+}
