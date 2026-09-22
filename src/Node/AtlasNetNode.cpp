@@ -18,7 +18,7 @@ AtlasNet::AtlasNetNode::AtlasNetNode(
       !HasCapability(nodeConfig.capabilities, NodeCapability::ClientIngress))
     throw std::invalid_argument(
         "Ingress sockets require ClientIngress capability");
-  logger = spdlog::stdout_color_mt("AtlasNet:" + nodeID.to_string());
+  logger = spdlog::stdout_color_mt("AtlasNet:" + nodeID.to_short_string());
 }
 
 void AtlasNet::AtlasNetNode::Tick()
