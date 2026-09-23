@@ -1,13 +1,27 @@
 #pragma once
+#include "AtlasNet/Core/Types/ShardID.hpp"
 #include <cstdint>
 #include <memory>
 #include <string>
+namespace AtlasNet::Network::RPC
+{
+class LocalShardRPC;
+}
 namespace AtlasNet::Module
 {
+class IShardLogic
+{
+public:
+  virtual ~IShardLogic() = default;
+  virtual void Start(ShardID, Network::RPC::LocalShardRPC&) = 0;
+  virtual void Poll() = 0;
+  virtual void Shutdown() = 0;
+};
 class ShardProvider
 {
 public:
   virtual ~ShardProvider() = default;
+  virtual std::unique_ptr<IShardLogic> CreateShardLogic() { return {}; }
 };
 struct ClientIngressListenerConfig
 {

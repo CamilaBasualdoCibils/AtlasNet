@@ -10,6 +10,8 @@ A VS Code bottom panel that launches real local AtlasNet processes in separate C
 4. Open the AtlasNet repository as a single-folder workspace. Run **AtlasNet: Open Local Stack** from the Command Palette.
 5. Edit counts, capabilities, paths, ports and extra arguments; press **Run stack**. Select processes in **Run and Debug → Call Stack** to switch debugger context. Normal source breakpoints apply to all processes.
 
+Each node debug session follows its forked shard workers. GDB keeps the node as inferior 1 and displays workers as additional inferiors in the same Call Stack. Continuing a node session resumes its workers too, and breakpoints in worker or module code become active when those binaries are loaded.
+
 The panel saves configuration to `.vscode/atlasnet-stack.json` when saving or running. Do not store credentials in a committed configuration. It does not build automatically. Use **Stop gracefully** to deliver SIGTERM through GDB so AtlasNet nodes run their signal-driven shutdown path. Managed Valkey stops after the final node exits. **Force stop** immediately terminates the debug sessions. Both controls only affect sessions launched by this panel, and each session has its own controls.
 
 Before launching, the panel runs its editable prelaunch command as a visible VS Code task. It defaults to `cmake --build "${workspaceFolder}/build" --parallel`, which builds CMake’s default `all` target. Clear the field to disable it. A failed build prevents the stack from starting.

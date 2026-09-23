@@ -3,6 +3,7 @@
 #include "AtlasNet/Core/Network/Cluster/ClusterCommons.hpp"
 #include "AtlasNet/Node/Module/Providers.hpp"
 #include "AtlasNet/Node/NodeCapability.hpp"
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -20,6 +21,7 @@ struct NodeConfig
   TransportOptions transport;
   NodeCapability capabilities = DefaultNodeCapabilities;
   std::vector<std::string> modules;
+  std::filesystem::path shardWorkerExecutable;
   struct ClientIngressListener
   {
     std::string transport;

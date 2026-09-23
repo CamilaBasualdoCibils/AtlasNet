@@ -49,6 +49,15 @@ function plan(config, root) {
   }
   const debug = (name, program, args, node) => {
     const setupCommands = [{ text: '-enable-pretty-printing', ignoreFailures: true }];
+    if (node) setupCommands.push(
+      // Retain forked workers as inferiors while keeping the node selected.
+      // schedule-multiple makes Continue resume the node and every worker.
+      { text: 'set follow-fork-mode parent' },
+      { text: 'set detach-on-fork off' },
+      { text: 'set schedule-multiple on' },
+      { text: 'set follow-exec-mode same' },
+      { text: 'set breakpoint pending on' }
+    );
     if (node && (config.valgrind || config.perf)) {
       const wrapper = [];
       if (config.perf) {

@@ -3,6 +3,7 @@
 #include "AtlasNet/Core/Memory/Memory.hpp"
 #include "AtlasNet/Core/Network/Address/SocketAddress.hpp"
 #include "AtlasNet/Core/Network/Transport/INetworkTransport.hpp"
+#include "AtlasNet/Core/Network/Transport/NetworkTrafficProfiler.hpp"
 #include "AtlasNet/Core/Network/Transport/TransportDatagram.hpp"
 #include <boost/container/static_vector.hpp>
 #include <deque>
@@ -167,6 +168,13 @@ public:
     {
       logger->error("sendto failed: {}", strerror(errno));
     }
+#ifdef ATLASNET_TRACY_ENABLED
+    else
+    {
+      trafficProfiler_.RecordTx(static_cast<size_t>(result));
+    }
+    PlotNetworkTraffic();
+#endif
     return true;
   }
 
@@ -259,8 +267,14 @@ public:
       }
 
       ++received;
+#ifdef ATLASNET_TRACY_ENABLED
+      trafficProfiler_.RecordRx(static_cast<size_t>(bytes));
+#endif
     }
 
+#ifdef ATLASNET_TRACY_ENABLED
+    PlotNetworkTraffic();
+#endif
     return received;
   }
 
@@ -298,6 +312,26 @@ private:
       freeBuffers;
   int socket_;
   std::shared_ptr<spdlog::logger> logger;
+
+#ifdef ATLASNET_TRACY_ENABLED
+  inline static NetworkTrafficProfiler trafficProfiler_;
+
+  void PlotNetworkTraffic()
+  {
+    const auto rates = trafficProfiler_.Sample();
+    if (!rates)
+      return;
+
+    const double txBytesPerSecond = rates->txBytesPerSecond;
+    const double rxBytesPerSecond = rates->rxBytesPerSecond;
+    const double txPacketsPerSecond = rates->txPacketsPerSecond;
+    const double rxPacketsPerSecond = rates->rxPacketsPerSecond;
+    TracyPlot("Net TX bytes/sec", txBytesPerSecond);
+    TracyPlot("Net RX bytes/sec", rxBytesPerSecond);
+    TracyPlot("Net TX packets/sec", txPacketsPerSecond);
+    TracyPlot("Net RX packets/sec", rxPacketsPerSecond);
+  }
+#endif
 
   UDPBuffer* GetFreeBuffer()
   {

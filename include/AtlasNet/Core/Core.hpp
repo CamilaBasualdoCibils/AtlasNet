@@ -1,5 +1,6 @@
 #pragma once
 #include "AtlasNet/Core/Types/Snowflake.hpp"
+#include "AtlasNet/Core/Types/ShardID.hpp"
 #include "AtlasNet/Core/Types/StrongTypedef.hpp"
 #include "AtlasNet/Core/Types/UUID.hpp"
 #include <nlohmann/json.hpp>
@@ -12,7 +13,7 @@ using _JsonOrdered = nlohmann::ordered_json;
  */
 
 using AtlasNetNodeID = UUID;
-/* using AtlasNetShardID = StrongTypedef<uint32_t, struct ShardIDTag>;
+/*
 using AtlasNetGatewayID = StrongTypedef<uint32_t, struct GatewayIDTag>;
 using AtlasNetControllerID = StrongTypedef<uint32_t, struct ControllerIDTag>; */
 

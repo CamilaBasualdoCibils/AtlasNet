@@ -5,7 +5,7 @@ body{font:var(--vscode-font-size) var(--vscode-font-family);color:var(--vscode-f
 </style></head><body>
 <div class="toolbar"><button id="run">▶ Run stack</button><button id="gracefulStop">Stop gracefully</button><button id="forceStop">■ Force stop</button><button id="save">Save</button><span id="summary"></span></div>
 <div id="message" role="status"></div>
-<p>Local processes, each with its own GDB session. Select a session in Run and Debug to inspect threads and breakpoints.</p>
+<p>Each node has a GDB session that also follows its shard workers. Select its processes in Run and Debug to inspect threads and breakpoints.</p>
 <fieldset id="settings"><legend>Executables and networking</legend>
 <label>Prelaunch command <input id="preLaunchCommand" type="text"></label>
 <label>Node executable <input id="program" type="text"></label><label>Working directory <input id="cwd" type="text"></label><label>GDB <input id="gdb" type="text"></label>
