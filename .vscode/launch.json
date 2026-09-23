@@ -5,18 +5,16 @@
             "name": "(gdb) Valkey",
             "type": "cppdbg",
             "request": "launch",
-
             "program": "${workspaceFolder}/external/valkey/src/valkey-server",
-            "args": ["--loadmodule","./libAtlasNetDB.so"],
-
+            "args": [
+                "--loadmodule",
+                "./libAtlasNetNode-ValkeyModule.so"
+            ],
             "cwd": "${workspaceFolder}/build",
-
             "stopAtEntry": false,
-
             "externalConsole": false,
             "MIMode": "gdb",
             "miDebuggerPath": "/usr/bin/gdb",
-
             "setupCommands": [
                 {
                     "description": "Enable pretty-printing for gdb",
@@ -24,7 +22,36 @@
                     "ignoreFailures": true
                 }
             ],
-            "preLaunchTask": "Build Valkey-Server + AtlasNetDB"
+            "preLaunchTask": "Build Valkey-Server + AtlasNetNode-ValkeyModule"
+        },
+        {
+            "name": "CMake Test (GDB Fork)",
+            "type": "cppdbg",
+            "request": "launch",
+            "program": "${cmake.testProgram}",
+            "args": [
+                "${cmake.testArgs}"
+            ],
+            "cwd": "${cmake.testWorkingDirectory}",
+            "environment": "${cmake.testEnvironment}",
+            "MIMode": "gdb",
+            "setupCommands": [
+                {
+                    "text": "set follow-fork-mode parent"
+                },
+                {
+                    "text": "set detach-on-fork off"
+                },
+                {
+                    "text": "set schedule-multiple on"
+                },
+                {
+                    "text": "set breakpoint pending on"
+                }
+            ],
+            "presentation": {
+                "hidden": true
+            }
         }
     ]
 }

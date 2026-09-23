@@ -29,13 +29,13 @@
         "atlasnet-cartograph-dev"
       ]
     },
-    "atlasnet-db-dev": {
+    "atlasnet-node-valkeymodule-dev": {
       "context": ".",
       "dockerfile": "dev/docker/Dev.Dockerfile",
-      "target": "atlasnet-db-dev",
+      "target": "atlasnet-node-valkeymodule-dev",
       "load": true,
       "tags": [
-        "atlasnet-db-dev"
+        "atlasnet-node-valkeymodule-dev"
       ]
     }
 

@@ -399,7 +399,6 @@ public:
 
     throw std::invalid_argument("Invalid SocketAddress: " + std::string(str));
   }
-
   template <typename T>
     requires std::derived_from<T, IAddress>
   T get_address() const

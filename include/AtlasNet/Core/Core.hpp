@@ -10,8 +10,8 @@ namespace AtlasNet
 /* using _Json = nlohmann::json;
 using _JsonOrdered = nlohmann::ordered_json;
  */
+
 using AtlasNetNodeID = UUID;
-using AtlasNetDBID = UUID;
 /* using AtlasNetShardID = StrongTypedef<uint32_t, struct ShardIDTag>;
 using AtlasNetGatewayID = StrongTypedef<uint32_t, struct GatewayIDTag>;
 using AtlasNetControllerID = StrongTypedef<uint32_t, struct ControllerIDTag>; */
@@ -27,6 +27,5 @@ using AtlasNetClientID = Snowflake;
 
 using _Json = nlohmann::json;
 } // namespace AtlasNet
-
 
 

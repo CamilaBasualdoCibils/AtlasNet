@@ -1,0 +1,32 @@
+{
+  "program": "${workspaceFolder}/build/AtlasNetNode",
+  "cwd": "${workspaceFolder}/build",
+  "preLaunchCommand": "cmake --build \"${workspaceFolder}/build\" --parallel",
+  "gdb": "/usr/bin/gdb",
+  "clusterPort": 42000,
+  "handshakePort": 43000,
+  "valgrind": false,
+  "valgrindProgram": "/usr/bin/valgrind",
+  "perf": false,
+  "perfProgram": "/usr/bin/perf",
+  "perfOutput": "${workspaceFolder}/build/perf-${index}.data",
+  "valkeyURI": "tcp://127.0.0.1:46380",
+  "launchValkey": true,
+  "valkeyProgram": "${workspaceFolder}/external/valkey/src/valkey-server",
+  "valkeyPort": 46380,
+  "groups": [
+    {
+      "name": "Database",
+      "count": 1,
+      "capabilities": [
+        "Database",
+        "ControllerEligible",
+        "ClientIngress"
+      ],
+      "args": [
+        "--module",
+        "${workspaceFolder}/build/AtlasNetSteamNetSock.so"
+      ]
+    }
+  ]
+}

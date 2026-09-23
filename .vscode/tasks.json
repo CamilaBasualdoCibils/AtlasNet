@@ -14,22 +14,22 @@
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Build AtlasNetDB",
+            "label": "Build AtlasNetNode-ValkeyModule",
             "type": "shell",
             "command": "cmake",
             "args": [
                 "--build",
                 "${workspaceFolder}/build",
                 "--target",
-                "AtlasNetDB"
+                "AtlasNetNode-ValkeyModule"
             ],
             "problemMatcher": "$gcc"
         },
         {
-            "label": "Build Valkey-Server + AtlasNetDB",
+            "label": "Build Valkey-Server + AtlasNetNode-ValkeyModule",
             "dependsOn": [
                 "Build Valkey-Server",
-                "Build AtlasNetDB"
+                "Build AtlasNetNode-ValkeyModule"
             ],
             "dependsOrder": "parallel",
             "problemMatcher": []

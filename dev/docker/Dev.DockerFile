@@ -52,7 +52,7 @@ COPY ./external/valkey /src/valkey
 WORKDIR /src/valkey
 
 RUN make -j$(nproc)
-FROM archlinux:latest as atlasnet-db-dev
+FROM archlinux:latest as atlasnet-node-valkeymodule-dev
 
 COPY --from=valkey-builder /src/valkey/src/valkey-server /usr/local/bin/
 RUN pacman -Syu --noconfirm && \
@@ -70,10 +70,10 @@ RUN pacman -Syu --noconfirm && \
         binutils && \
     pacman -Scc --noconfirm
 COPY --from=atlasnetstage \
-    /atlasnet/libAtlasNetDB.so \
-    /atlasnet/libAtlasNetDB.so
+    /atlasnet/libAtlasNetNode-ValkeyModule.so \
+    /atlasnet/libAtlasNetNode-ValkeyModule.so
 
-CMD ["valkey-server","--loadmodule","/atlasnet/libAtlasNetDB.so"]
+CMD ["valkey-server","--loadmodule","/atlasnet/libAtlasNetNode-ValkeyModule.so"]
 
 
 FROM nginx:alpine AS atlasnet-cartograph-dev

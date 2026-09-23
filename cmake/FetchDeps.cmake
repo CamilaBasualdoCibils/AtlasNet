@@ -1,5 +1,20 @@
 include(FetchContent)
 Set(FETCHCONTENT_QUIET FALSE)
+
+message(STATUS "Fetching mimalloc")
+set(MI_BUILD_SHARED OFF CACHE BOOL "Build mimalloc shared library" FORCE)
+set(MI_BUILD_STATIC ON CACHE BOOL "Build mimalloc static library" FORCE)
+set(MI_BUILD_OBJECT OFF CACHE BOOL "Build mimalloc object library" FORCE)
+set(MI_BUILD_TESTS OFF CACHE BOOL "Build mimalloc tests" FORCE)
+set(MI_OVERRIDE OFF CACHE BOOL "Do not override the process allocator" FORCE)
+FetchContent_Declare(
+    mimalloc
+    URL https://github.com/microsoft/mimalloc/archive/refs/tags/v3.5.3.tar.gz
+    USES_TERMINAL_DOWNLOAD TRUE
+    DOWNLOAD_NO_EXTRACT FALSE
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+FetchContent_MakeAvailable(mimalloc)
 find_package(Boost REQUIRED CONFIG COMPONENTS
     beast
     container
