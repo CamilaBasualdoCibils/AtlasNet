@@ -108,13 +108,26 @@ PUBLIC
   nlohmann_json::nlohmann_json
 PRIVATE
   mimalloc-static
+  ${CMAKE_DL_LIBS}
 )
 set_target_properties(AtlasNetCore PROPERTIES FOLDER "AtlasNet")
+
+# ========= ATLASNET MODULE SDK ========
+# Shared by the node host and loadable modules so registry calls cross the
+# dynamic-library boundary through one implementation.
+add_library(AtlasNetModule SHARED
+    src/Node/Module/ModuleRegistry.cpp
+)
+target_include_directories(AtlasNetModule PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+set_target_properties(AtlasNetModule PROPERTIES FOLDER "AtlasNet")
 
 # ========= ATLASNET Node ========
 file(GLOB_RECURSE _node_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Node/*.cpp"
 )
+list(FILTER _node_sources EXCLUDE REGEX "/Module/ModuleRegistry\\.cpp$")
 
 add_executable(AtlasNetNode
     ${_node_sources}
@@ -123,7 +136,7 @@ add_executable(AtlasNetNode
     src/Backends/ValkeyRemoteBackend.cpp
 )
 target_include_directories(AtlasNetNode PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(AtlasNetNode PRIVATE AtlasNetCore)
+target_link_libraries(AtlasNetNode PRIVATE AtlasNetCore AtlasNetModule)
 set_target_properties(AtlasNetNode PROPERTIES FOLDER "AtlasNet")
 
 # The embedded host compiles the same runtime with only the Module API backend.
@@ -135,7 +148,7 @@ target_include_directories(AtlasNetNode-ValkeyModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/external/valkey/src"
 )
-target_link_libraries(AtlasNetNode-ValkeyModule PRIVATE AtlasNetCore)
+target_link_libraries(AtlasNetNode-ValkeyModule PRIVATE AtlasNetCore AtlasNetModule)
 set_target_properties(AtlasNetNode-ValkeyModule PROPERTIES FOLDER "AtlasNet")
 
 # DB Debug
@@ -168,13 +181,26 @@ add_executable(AtlasNetNode-Local
     src/Backends/ValkeyRemoteBackend.cpp
 )
 target_include_directories(AtlasNetNode-Local PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
-target_link_libraries(AtlasNetNode-Local PRIVATE AtlasNetCore)
+target_link_libraries(AtlasNetNode-Local PRIVATE AtlasNetCore AtlasNetModule)
 target_compile_definitions(AtlasNetNode-Local PRIVATE
     ATLASNET_LOCAL_VALKEY_SERVER="${CMAKE_SOURCE_DIR}/external/valkey/src/valkey-server"
     ATLASNET_LOCAL_VALKEY_PORT=${ATLASNET_LOCAL_VALKEY_PORT}
 )
 add_dependencies(AtlasNetNode-Local Valkey-Server-Compile)
 set_target_properties(AtlasNetNode-Local PROPERTIES FOLDER "AtlasNet/Development")
+
+# ========= ATLASNET MODULES ========
+add_library(AtlasNetSteamNetSock MODULE
+    modules/SteamNetSock/SteamNetSockModule.cpp
+)
+target_link_libraries(AtlasNetSteamNetSock PRIVATE
+    AtlasNetModule
+    GameNetworkingSockets::GameNetworkingSockets_s
+)
+set_target_properties(AtlasNetSteamNetSock PROPERTIES
+    PREFIX ""
+    FOLDER "AtlasNet/Modules"
+)
 
 # ========= ATLASNET CARTOGRAPH ========
 if (ATLASNET_CARTOGRAPH)

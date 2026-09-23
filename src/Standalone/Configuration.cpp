@@ -1,5 +1,4 @@
 #include "Configuration.hpp"
-#include <boost/describe/enum_from_string.hpp>
 #include <boost/program_options.hpp>
 #include <charconv>
 #include <cstdlib>
@@ -44,10 +43,10 @@ NodeCapability ParseCapabilities(const std::string& value)
   return result;
 }
 
-inline std::vector<AtlasNet::NodeConfig::IngressSocketOption>
+inline std::vector<AtlasNet::NodeConfig::ClientIngressListener>
 ParseSocketOptions(const std::vector<std::string>& ingressOptions)
 {
-  std::vector<AtlasNet::NodeConfig::IngressSocketOption> result;
+  std::vector<AtlasNet::NodeConfig::ClientIngressListener> result;
 
   auto parseEntry = [&](const std::string& entry)
   {
@@ -69,17 +68,20 @@ ParseSocketOptions(const std::vector<std::string>& ingressOptions)
       args = entry.substr(colon + 1);
     }
 
-    AtlasNet::NodeConfig::IngressSocketOption option{};
+    if (typeString.empty())
+      throw std::invalid_argument("Ingress transport name cannot be empty");
+    AtlasNet::NodeConfig::ClientIngressListener option{};
+    option.transport = std::move(typeString);
 
-    bool parsedType =
-        boost::describe::enum_from_string(typeString, option.type);
-
-    if (!parsedType)
+    // Accept the concise stable identifier syntax (TCP:5919) as well as the
+    // existing key/value form (TCP:port=5919).
+    if (!args.empty() && args.find('=') == std::string::npos &&
+        args.find(',') == std::string::npos)
     {
-      throw std::runtime_error("Unknown ingress transport type: " + typeString);
+      option.config.port = ParsePort(args);
+      result.push_back(std::move(option));
+      return;
     }
-
-    option.port = 0;
 
     // Parse comma-separated args
     std::stringstream stream(args);
@@ -102,7 +104,7 @@ ParseSocketOptions(const std::vector<std::string>& ingressOptions)
 
       if (key == "port")
       {
-        option.port = ParsePort(value);
+        option.config.port = ParsePort(value);
       }
       else
       {
@@ -114,9 +116,9 @@ ParseSocketOptions(const std::vector<std::string>& ingressOptions)
     for (size_t i = 0; i < extraArgs.size(); i++)
     {
       if (i)
-        option.ExtraArgs += ",";
+        option.config.arguments += ",";
 
-      option.ExtraArgs += extraArgs[i];
+      option.config.arguments += extraArgs[i];
     }
 
     result.push_back(std::move(option));
@@ -156,8 +158,10 @@ Configuration ParseConfiguration(int argc, const char* const* argv)
       "Comma-separated Shard,ClientIngress,ControllerEligible,Database or "
       "None")("valkey-uri", po::value<std::string>(),
               "Remote RESP URI required for Database capability")(
+      "module", po::value<std::vector<std::string>>()->multitoken(),
+      "AtlasNet node module shared object (repeatable)")(
       "ingress-sockets", po::value<std::vector<std::string>>()->multitoken(),
-      "Ingress socket configuration");
+      "Named client ingress listeners (for example TCP:port=5919)");
   po::variables_map vm;
   po::store(po::parse_command_line(argc, argv, description), vm);
   po::notify(vm);
@@ -178,6 +182,16 @@ Configuration ParseConfiguration(int argc, const char* const* argv)
     return std::nullopt;
   };
   auto& config = result.node;
+  if (vm.count("module"))
+    config.modules = vm["module"].as<std::vector<std::string>>();
+  else if (const char* value = std::getenv("ATLASNET_MODULES"))
+  {
+    std::stringstream modules(value);
+    std::string path;
+    while (std::getline(modules, path, ';'))
+      if (!path.empty())
+        config.modules.push_back(std::move(path));
+  }
   if (auto value = setting("cluster-port", "ATLASNET_CLUSTER_PORT"))
     config.transport.clusterListenPort = ParsePort(*value);
   if (auto value = setting("handshake-port", "ATLASNET_HANDSHAKE_PORT"))
@@ -219,8 +233,8 @@ Configuration ParseConfiguration(int argc, const char* const* argv)
     ingress = vm["ingress-sockets"].as<std::vector<std::string>>();
   else if (auto value = std::getenv("ATLASNET_INGRESS_SOCKETS"))
     ingress.emplace_back(value);
-  config.ingressSockets = ParseSocketOptions(ingress);
-  if (!config.ingressSockets.empty() &&
+  config.clientIngressListeners = ParseSocketOptions(ingress);
+  if (!config.clientIngressListeners.empty() &&
       !HasCapability(config.capabilities, NodeCapability::ClientIngress))
     throw std::invalid_argument(
         "Ingress sockets require ClientIngress capability");

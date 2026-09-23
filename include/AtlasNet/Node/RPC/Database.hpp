@@ -13,7 +13,17 @@
 
 namespace AtlasNet::RPC::Database
 {
-using Ping = Network::RPC::RPCMethod<"AtlasNet.DB.Ping", int, int>;
+struct StartupInfo
+{
+  AtlasNetNodeID nodeID;
+  Network::SocketAddress channelBusAddress;
+
+  template <typename Archive> void serialize(Archive& ar)
+  {
+    ar(nodeID, channelBusAddress);
+  }
+};
+using Ping = Network::RPC::RPCMethod<"AtlasNet.DB.Ping", StartupInfo, int>;
 
 struct RegisterNodeRequest
 {
@@ -35,6 +45,16 @@ enum class RegisterNodeResponse
 using RegisterNode =
     Network::RPC::RPCMethod<"AtlasNet.DB.RegisterNode", RegisterNodeResponse,
                             RegisterNodeRequest>;
+
+enum class ClaimControllerPromotionResponse
+{
+  CLAIMED,
+  ALREADY_CLAIMED,
+  FAILURE
+};
+using ClaimControllerPromotion = Network::RPC::RPCMethod<
+    "AtlasNet.DB.ClaimControllerPromotion", ClaimControllerPromotionResponse,
+    AtlasNetNodeID>;
 
 // Declared for registry discovery; a handler is not implemented yet.
 using RegisteredNode = RegisterNodeRequest;

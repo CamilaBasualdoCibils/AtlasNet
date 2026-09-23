@@ -20,11 +20,13 @@
       "count": 1,
       "capabilities": [
         "Database",
-        "Shard",
         "ControllerEligible",
         "ClientIngress"
       ],
-      "args": []
+      "args": [
+        "--module",
+        "${workspaceFolder}/build/AtlasNetSteamNetSock.so"
+      ]
     }
   ]
 }

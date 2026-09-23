@@ -1,7 +1,8 @@
 #include "ValkeyRemoteBackend.hpp"
 #include "AtlasNet/Core/Serialization/NetBinarySerializer.hpp"
-#include "AtlasNet/DB/DebugMirror.hpp"
-#include "AtlasNet/DB/Keys.hpp"
+#include "AtlasNet/Node/DB/DebugMirror.hpp"
+#include "AtlasNet/Node/DB/Keys.hpp"
+#include <chrono>
 
 AtlasNet::RPC::Database::RegisterNodeResponse
 AtlasNet::DB::ValkeyRemoteBackend::RegisterNode(
@@ -21,4 +22,17 @@ AtlasNet::DB::ValkeyRemoteBackend::RegisterNode(
       AtlasNet::DB::DebugMirror::ToJSON(request).dump());
 #endif
   return RPC::Database::RegisterNodeResponse::SUCCESS;
+}
+
+AtlasNet::RPC::Database::ClaimControllerPromotionResponse
+AtlasNet::DB::ValkeyRemoteBackend::ClaimControllerPromotion(
+    AtlasNetNodeID nodeID)
+{
+  constexpr auto claimDuration = std::chrono::seconds(30);
+  const bool claimed = client.set(
+      AtlasNet::DB::Keys::ControllerPromotion, nodeID.to_string(),
+      claimDuration, sw::redis::UpdateType::NOT_EXIST);
+  return claimed ? RPC::Database::ClaimControllerPromotionResponse::CLAIMED
+                 : RPC::Database::ClaimControllerPromotionResponse::
+                       ALREADY_CLAIMED;
 }

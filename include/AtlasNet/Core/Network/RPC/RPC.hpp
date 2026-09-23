@@ -119,7 +119,8 @@ public:
     else
     {
       logger->debug("Calling RPC {} on target {}[ResponseExpected={}]",
-                   (std::string_view)rpc::NameString, target.to_string(), true);
+                    (std::string_view)rpc::NameString, TargetToString(target),
+                    true);
       RPCMethodID methodId = HashRPC(rpc::NameString);
 
       RPCCallID callId = nextCallID++;

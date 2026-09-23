@@ -6,6 +6,8 @@
 namespace AtlasNet::DB::Keys
 {
 inline constexpr std::string_view RegisteredNodes = "AtlasNet:RegisteredNodes";
+inline constexpr std::string_view ControllerPromotion =
+    "AtlasNet:ControllerPromotion";
 
 inline std::string DebugMirror(std::string_view key)
 {

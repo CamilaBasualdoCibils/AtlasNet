@@ -1,15 +1,98 @@
 #include "AtlasNet/Node/AtlasNetNode.hpp"
 #include "AtlasNet/Core/Network/Transport/UDP/UDPNetworkTransport.hpp"
 #include "AtlasNet/Node/NodeCapability.hpp"
-#include <boost/describe/enum_to_string.hpp>
+#include "Node/Controller/Controller.hpp"
+#include <mutex>
+#include <unordered_map>
+#include <chrono>
 #include <future>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
 #include <thread>
-#include <chrono>
 #ifdef ATLASNET_TRACY_ENABLED
 #include <tracy/Tracy.hpp>
 #endif
+
+namespace
+{
+class RuntimeResolver final
+    : public AtlasNet::Network::Cluster::IClusterResolver,
+      public AtlasNet::Network::Intent::IIntentResolver
+{
+public:
+  void AddNode(AtlasNet::AtlasNetNodeID id,
+               AtlasNet::Network::SocketAddress address)
+  {
+    std::scoped_lock lock(mutex);
+    addresses.insert_or_assign(id.to_string(), address);
+    nodesByAddress.insert_or_assign(address.to_string(), id);
+  }
+
+  void SetDatabase(AtlasNet::AtlasNetNodeID id)
+  {
+    std::scoped_lock lock(mutex);
+    database = id;
+  }
+
+  std::optional<AtlasNet::Network::SocketAddress>
+  ResolveNodeAddress(AtlasNet::AtlasNetNodeID id) override
+  {
+    std::scoped_lock lock(mutex);
+    const auto it = addresses.find(id.to_string());
+    return it == addresses.end() ? std::nullopt
+                                 : std::optional(it->second);
+  }
+
+  std::optional<AtlasNet::Network::MACAddress>
+  ResolveNodeMAC(AtlasNet::AtlasNetNodeID) override
+  {
+    return std::nullopt;
+  }
+
+  std::optional<AtlasNet::AtlasNetNodeID> ResolveNodeID(
+      const AtlasNet::Network::SocketAddress& address) override
+  {
+    std::scoped_lock lock(mutex);
+    const auto it = nodesByAddress.find(address.to_string());
+    return it == nodesByAddress.end() ? std::nullopt
+                                      : std::optional(it->second);
+  }
+
+  std::optional<AtlasNet::AtlasNetNodeID>
+  ResolveNodeID(const AtlasNet::Network::MACAddress&) override
+  {
+    return std::nullopt;
+  }
+
+  std::optional<AtlasNet::AtlasNetNodeID> ResolveIntent(
+      const AtlasNet::Network::Intent::VIntent& intent) override
+  {
+    std::scoped_lock lock(mutex);
+    return std::visit(
+        [this](const auto& recipient) -> std::optional<AtlasNet::AtlasNetNodeID>
+        {
+          using T = std::decay_t<decltype(recipient)>;
+          if constexpr (std::is_same_v<
+                            T, AtlasNet::Network::Intent::Recepient::
+                                   NodeRecepient>)
+            return recipient.nodeID;
+          else if constexpr (std::is_same_v<
+                                 T, AtlasNet::Network::Intent::Recepient::
+                                        DatabaseRecepient>)
+            return database;
+          else
+            return std::nullopt;
+        },
+        intent);
+  }
+
+private:
+  std::mutex mutex;
+  std::unordered_map<std::string, AtlasNet::Network::SocketAddress> addresses;
+  std::unordered_map<std::string, AtlasNet::AtlasNetNodeID> nodesByAddress;
+  std::optional<AtlasNet::AtlasNetNodeID> database;
+};
+} // namespace
 
 AtlasNet::AtlasNetNode::AtlasNetNode(
     NodeConfig config, std::unique_ptr<DB::IDatabaseBackend> backend)
@@ -20,7 +103,7 @@ AtlasNet::AtlasNetNode::AtlasNetNode(
       !database)
     throw std::invalid_argument(
         "Database capability requires an injected backend");
-  if (!nodeConfig.ingressSockets.empty() &&
+  if (!nodeConfig.clientIngressListeners.empty() &&
       !HasCapability(nodeConfig.capabilities, NodeCapability::ClientIngress))
     throw std::invalid_argument(
         "Ingress sockets require ClientIngress capability");
@@ -36,6 +119,11 @@ void AtlasNet::AtlasNetNode::Tick()
   {
     GetHandshakeRPC().Poll(Network::PollType::NonBlocking);
   }
+  if (channelBus && intentRPC)
+  {
+    channelBus->TryReceive();
+    intentRPC->Poll(Network::PollType::NonBlocking);
+  }
   std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
 
@@ -45,29 +133,46 @@ void AtlasNet::AtlasNetNode::Initialize()
   ZoneScopedN("AtlasNetNode::Initialize");
 #endif
 
-  for (const auto& socket : nodeConfig.ingressSockets)
-  {
-    GetLogger()->info("Ingress Socket: {}:{} {}",
-                      boost::describe::enum_to_string(socket.type, "<INVALID>"),
-                      socket.port, socket.ExtraArgs);
-  }
   if (HasCapability(nodeConfig.capabilities, NodeCapability::Database))
   {
     GetHandshakeRPC().Bind<RPC::Database::Ping>(
-        [](const Network::RPC::NetworkTransportRPC::CallContext&, int)
-        { return 0; });
+        [this](const Network::RPC::NetworkTransportRPC::CallContext&, int)
+        {
+          return RPC::Database::StartupInfo{
+              .nodeID = GetNodeID(),
+              .channelBusAddress = GetClusterListenAddress()};
+        });
     GetHandshakeRPC().Bind<RPC::Database::RegisterNode>(
-        [this](const Network::RPC::NetworkTransportRPC::CallContext&,
+        [this](const Network::RPC::NetworkTransportRPC::CallContext& context,
                const RPC::Database::RegisterNodeRequest& request)
         {
           try
           {
+            auto address = context.caller;
+            address.set_port(request.channelBusAddress.get_port());
+            std::static_pointer_cast<RuntimeResolver>(clusterResolver)
+                ->AddNode(request.nodeID, address);
             return database->RegisterNode(request);
           }
           catch (const std::exception& e)
           {
             GetLogger()->error("Registry write failed: {}", e.what());
             return RPC::Database::RegisterNodeResponse::FAILURE;
+          }
+        });
+    intentRPC->Bind<RPC::Database::ClaimControllerPromotion>(
+        [this](const Network::RPC::ClusterIntentRPC::CallContext&,
+               AtlasNetNodeID claimant)
+        {
+          try
+          {
+            return database->ClaimControllerPromotion(claimant);
+          }
+          catch (const std::exception& e)
+          {
+            GetLogger()->error("Controller promotion claim failed: {}",
+                               e.what());
+            return RPC::Database::ClaimControllerPromotionResponse::FAILURE;
           }
         });
     RPC::Database::RegisterNodeRequest self;
@@ -80,7 +185,10 @@ void AtlasNet::AtlasNetNode::Initialize()
       throw std::runtime_error("Failed to register database node");
   }
   if (!nodeConfig.dbHandshakeAddress.IsValid())
+  {
+    TryClaimControllerPromotion();
     return;
+  }
 
   {
     // Poll on the host's thread so injected backends retain their threading
@@ -110,9 +218,16 @@ void AtlasNet::AtlasNetNode::Initialize()
       bool Successful = status == std::future_status::ready;
       if (Successful)
       {
-        Network::RPC::TRPCResult<int> result = pingResult.get();
+        Network::RPC::TRPCResult<RPC::Database::StartupInfo> result =
+            pingResult.get();
         if (result.has_value())
         {
+          auto address = nodeConfig.dbHandshakeAddress;
+          address.set_port(result.value().channelBusAddress.get_port());
+          auto resolver =
+              std::static_pointer_cast<RuntimeResolver>(clusterResolver);
+          resolver->AddNode(result.value().nodeID, address);
+          resolver->SetDatabase(result.value().nodeID);
           GetLogger()->info("Successfully pinged DB at {}",
                             nodeConfig.dbHandshakeAddress.to_string());
           break;
@@ -171,6 +286,7 @@ void AtlasNet::AtlasNetNode::Initialize()
       throw std::runtime_error("Database rejected node registration");
     GetLogger()->info("Successfully registered node with DB at {}",
                       nodeConfig.dbHandshakeAddress.to_string());
+    TryClaimControllerPromotion();
     if (!HasCapability(nodeConfig.capabilities,
                        AtlasNet::NodeCapability::Database))
     {
@@ -189,6 +305,7 @@ void AtlasNet::AtlasNetNode::Start()
 #endif
   if (started)
     throw std::logic_error("Node already started");
+  InitializeModules();
   switch (nodeConfig.transport.networkTransportType)
   {
 
@@ -205,8 +322,16 @@ void AtlasNet::AtlasNetNode::Start()
     break;
   }
   logger->info("Channel Bus listening on {}", baseTransport->GetListenPort());
-  /* clusterTransport = std::make_shared<Network::Cluster::ClusterTransport>(
-      baseTransport, nullptr); */
+  auto runtimeResolver = std::make_shared<RuntimeResolver>();
+  runtimeResolver->AddNode(
+      GetNodeID(), Network::SocketAddress(Network::IPv6::Loopback(),
+                                         baseTransport->GetListenPort()));
+  if (HasCapability(nodeConfig.capabilities, NodeCapability::Database))
+    runtimeResolver->SetDatabase(GetNodeID());
+  clusterResolver = runtimeResolver;
+  intentResolver = runtimeResolver;
+  clusterTransport = std::make_shared<Network::Cluster::ClusterTransport>(
+      baseTransport, clusterResolver);
 
   HandshakeTransport = std::make_shared<Network::UDPNetworkTransport>(
       "HandshakeTransport:" + nodeID.to_short_string(),
@@ -234,6 +359,8 @@ void AtlasNet::AtlasNetNode::Poll()
   if (!started)
     throw std::logic_error("Node has not started");
   Tick();
+  for (auto& listener : ingressListeners)
+    listener->Poll();
 }
 
 void AtlasNet::AtlasNetNode::Run(std::stop_token stop)
@@ -265,11 +392,114 @@ void AtlasNet::AtlasNetNode::InitializeChannels()
       Network::Cluster::ChannelBus::ChannelBusOptions{
           .transport = clusterTransport,
           .name = "ChannelBus:" + nodeID.to_string()});
+  auto channel = channelBus->MakeChannel(Network::Cluster::ChannelOptions{
+      .id = static_cast<Network::Cluster::ChannelID>(
+          Network::Cluster::ReservedChannels::INTENT_RPC),
+      .delivery = Network::Cluster::DeliveryMode::Reliable,
+      .ordering = Network::Cluster::OrderingMode::Ordered,
+      .batching = Network::Cluster::BatchMode::Immediate});
+  auto intentChannel = std::make_shared<Network::Intent::ClusterIntentChannel>(
+      GetNodeID(), std::move(channel), intentResolver);
+  clusterIntentChannels.emplace(Network::Cluster::ReservedChannels::INTENT_RPC,
+                                intentChannel);
+  intentRPC = std::make_shared<Network::RPC::ClusterIntentRPC>(
+      "IntentRPC:" + nodeID.to_short_string(),
+      Network::RPC::ClusterIntentRPC::Config{
+          .clusterIntentChannel = std::move(intentChannel)});
 }
-void AtlasNet::AtlasNetNode::Shutdown() {}
+void AtlasNet::AtlasNetNode::InitializeModules()
+{
+  for (const auto& path : nodeConfig.modules)
+  {
+    const auto& module = moduleLoader.Load(path, moduleRegistry);
+    GetLogger()->info("Loaded module {} {} from {}", module.name,
+                      module.version, path);
+  }
+  if (HasCapability(nodeConfig.capabilities, NodeCapability::Shard) &&
+      !moduleRegistry.HasShardProvider())
+  {
+    GetLogger()->critical("Node has Shard capability enabled, but no loaded "
+                          "module provides shard logic.");
+    throw std::runtime_error(
+        "Shard capability requires a module-provided ShardProvider");
+  }
+  for (const auto& requested : nodeConfig.clientIngressListeners)
+  {
+    auto provider =
+        moduleRegistry.GetClientIngressTransport(requested.transport);
+    if (!provider)
+      throw std::runtime_error(
+          "No loaded module provides client ingress transport '" +
+          requested.transport + "'");
+    auto listener = provider->CreateListener(requested.config);
+    if (!listener)
+      throw std::runtime_error("Client ingress provider '" +
+                               requested.transport +
+                               "' returned a null listener");
+    GetLogger()->info("Created client ingress listener for transport '{}'",
+                      requested.transport);
+    listener->Start();
+    ingressListeners.push_back(std::move(listener));
+  }
+}
+void AtlasNet::AtlasNetNode::Shutdown()
+{
+  if (controller)
+    controller->Stop();
+  for (auto it = ingressListeners.rbegin(); it != ingressListeners.rend(); ++it)
+    (*it)->Shutdown();
+  ingressListeners.clear();
+}
+
+void AtlasNet::AtlasNetNode::OnControllerPromotionClaimed()
+{
+  if (!controller)
+    controller = std::make_unique<Controller>(GetLogger());
+  controller->Start();
+}
+
+void AtlasNet::AtlasNetNode::TryClaimControllerPromotion()
+{
+  if (!HasCapability(nodeConfig.capabilities,
+                     NodeCapability::ControllerEligible))
+    return;
+
+  auto claim = intentRPC->Call<RPC::Database::ClaimControllerPromotion>(
+      Network::Intent::Recepient::DatabaseRecepient{}, GetNodeID());
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  while (claim.wait_for(std::chrono::seconds(0)) !=
+             std::future_status::ready &&
+         std::chrono::steady_clock::now() < deadline)
+  {
+    channelBus->TryReceive();
+    intentRPC->Poll(Network::PollType::NonBlocking);
+    std::this_thread::sleep_for(std::chrono::milliseconds(1));
+  }
+  if (claim.wait_for(std::chrono::seconds(0)) != std::future_status::ready)
+  {
+    GetLogger()->warn("Timed out claiming Controller promotion over intent RPC");
+    return;
+  }
+
+  const auto result = claim.get();
+  if (!result.has_value() ||
+      result.value() ==
+          RPC::Database::ClaimControllerPromotionResponse::FAILURE)
+    GetLogger()->warn("Failed to claim Controller promotion");
+  else if (result.value() ==
+           RPC::Database::ClaimControllerPromotionResponse::CLAIMED)
+  {
+    GetLogger()->info("Claimed Controller promotion over intent RPC");
+    OnControllerPromotionClaimed();
+  }
+  else
+    GetLogger()->info("Controller promotion is already claimed");
+}
 
 AtlasNet::AtlasNetNode::~AtlasNetNode()
 {
+  Shutdown();
   for (const auto* prefix :
        {"AtlasNet:", "ChannelBusNetworkTransport:", "HandshakeTransport:",
         "HandshakeRPC:", "ChannelBus:"})

@@ -11,5 +11,7 @@ public:
   virtual ~IDatabaseBackend() = default;
   virtual RPC::Database::RegisterNodeResponse
   RegisterNode(const RPC::Database::RegisterNodeRequest& request) = 0;
+  virtual RPC::Database::ClaimControllerPromotionResponse
+  ClaimControllerPromotion(AtlasNetNodeID nodeID) = 0;
 };
 } // namespace AtlasNet::DB

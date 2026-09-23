@@ -1,8 +1,8 @@
 #define VALKEYMODULE_API extern
 #include "ValkeyModuleBackend.hpp"
 #include "AtlasNet/Core/Serialization/NetBinarySerializer.hpp"
-#include "AtlasNet/DB/DebugMirror.hpp"
-#include "AtlasNet/DB/Keys.hpp"
+#include "AtlasNet/Node/DB/DebugMirror.hpp"
+#include "AtlasNet/Node/DB/Keys.hpp"
 
 namespace
 {
@@ -43,4 +43,25 @@ AtlasNet::DB::ValkeyModuleBackend::RegisterNode(
 #endif
   return success ? RPC::Database::RegisterNodeResponse::SUCCESS
                  : RPC::Database::RegisterNodeResponse::FAILURE;
+}
+
+AtlasNet::RPC::Database::ClaimControllerPromotionResponse
+AtlasNet::DB::ValkeyModuleBackend::ClaimControllerPromotion(
+    AtlasNetNodeID nodeID)
+{
+  const auto owner = nodeID.to_string();
+  constexpr std::string_view expiration = "30000";
+  auto* reply = ValkeyModule_Call(
+      context, "SET", "bbccc!", AtlasNet::DB::Keys::ControllerPromotion.data(),
+      AtlasNet::DB::Keys::ControllerPromotion.size(), owner.data(), owner.size(),
+      "NX", "PX", expiration.data());
+  if (!reply)
+    return RPC::Database::ClaimControllerPromotionResponse::FAILURE;
+  const auto type = ValkeyModule_CallReplyType(reply);
+  ValkeyModule_FreeCallReply(reply);
+  if (type == VALKEYMODULE_REPLY_STRING)
+    return RPC::Database::ClaimControllerPromotionResponse::CLAIMED;
+  if (type == VALKEYMODULE_REPLY_NULL)
+    return RPC::Database::ClaimControllerPromotionResponse::ALREADY_CLAIMED;
+  return RPC::Database::ClaimControllerPromotionResponse::FAILURE;
 }

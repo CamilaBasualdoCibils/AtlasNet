@@ -79,8 +79,11 @@ public:
   ClusterChannelV1(const ChannelOptions& options,
                    std::shared_ptr<ChannelTransportProxy> transport)
       : IClusterChannel(options, transport),
-        logger_(spdlog::stdout_color_mt(
-            std::format("ClusterChannelV1-{}", options.id)))
+        logger_(spdlog::get(std::format("ClusterChannelV1-{}", options.id))
+                    ? spdlog::get(
+                          std::format("ClusterChannelV1-{}", options.id))
+                    : spdlog::stdout_color_mt(
+                          std::format("ClusterChannelV1-{}", options.id)))
   {
     logger_->set_level(spdlog::level::trace);
   }

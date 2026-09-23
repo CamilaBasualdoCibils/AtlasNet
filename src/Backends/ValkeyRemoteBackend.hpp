@@ -1,5 +1,5 @@
 #pragma once
-#include "AtlasNet/DB/Backend/IDatabaseBackend.hpp"
+#include "AtlasNet/Node/DB/Backend/IDatabaseBackend.hpp"
 #include <sw/redis++/redis++.h>
 
 namespace AtlasNet::DB
@@ -10,6 +10,8 @@ public:
   explicit ValkeyRemoteBackend(const std::string& uri) : client(uri) {}
   RPC::Database::RegisterNodeResponse
   RegisterNode(const RPC::Database::RegisterNodeRequest& request) override;
+  RPC::Database::ClaimControllerPromotionResponse
+  ClaimControllerPromotion(AtlasNetNodeID nodeID) override;
 
 private:
   sw::redis::Redis client;

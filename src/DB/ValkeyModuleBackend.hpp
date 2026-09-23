@@ -1,5 +1,5 @@
 #pragma once
-#include "AtlasNet/DB/Backend/IDatabaseBackend.hpp"
+#include "AtlasNet/Node/DB/Backend/IDatabaseBackend.hpp"
 #include "valkeymodule.h"
 
 namespace AtlasNet::DB
@@ -11,6 +11,8 @@ public:
   explicit ValkeyModuleBackend(ValkeyModuleCtx* context) : context(context) {}
   RPC::Database::RegisterNodeResponse
   RegisterNode(const RPC::Database::RegisterNodeRequest& request) override;
+  RPC::Database::ClaimControllerPromotionResponse
+  ClaimControllerPromotion(AtlasNetNodeID nodeID) override;
 
 private:
   ValkeyModuleCtx* context;

@@ -85,7 +85,8 @@ public:
                        std::shared_ptr<IIntentResolver> resolver)
       : selfID(selfID), channel(channel), resolver(resolver),
         logger_(spdlog::stdout_color_mt(
-            std::format("ClusterIntentChannel-{}", channel->GetOptions().id)))
+            std::format("ClusterIntentChannel-{}-{}", selfID.to_short_string(),
+                        channel->GetOptions().id)))
   {
     if (!channel)
       throw std::invalid_argument("Channel cannot be null");

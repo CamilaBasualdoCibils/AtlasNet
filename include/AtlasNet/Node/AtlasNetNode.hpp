@@ -10,9 +10,12 @@
 #include "AtlasNet/Core/Network/Cluster/Transport/ClusterTransport.hpp"
 #include "AtlasNet/Core/Network/Ingress/IngressCommons.hpp"
 #include "AtlasNet/Core/Network/Intent/ClusterIntentChannel.hpp"
+#include "AtlasNet/Core/Network/Intent/IIntentResolver.hpp"
+#include "AtlasNet/Core/Network/RPC/ClusterIntentRPC.hpp"
 #include "AtlasNet/Core/Network/RPC/NetworkTransportRPC.hpp"
 #include "AtlasNet/Core/Network/Transport/INetworkTransport.hpp"
-#include "AtlasNet/DB/Backend/IDatabaseBackend.hpp"
+#include "AtlasNet/Node/DB/Backend/IDatabaseBackend.hpp"
+#include "AtlasNet/Node/Module/ModuleLoader.hpp"
 #include "AtlasNet/Node/NodeConfig.hpp"
 #include <atomic>
 #include <chrono>
@@ -22,6 +25,8 @@
 #include <thread>
 namespace AtlasNet
 {
+class Controller;
+
 class AtlasNetNode final
 {
 private:
@@ -29,13 +34,22 @@ private:
   const AtlasNetNodeID nodeID;
   std::shared_ptr<spdlog::logger> logger;
   std::atomic_bool stop_requested{false};
+  Module::ModuleLoader moduleLoader;
+  Module::ModuleRegistry moduleRegistry;
+  std::vector<std::unique_ptr<Module::ClientIngressListener>> ingressListeners;
+  std::unique_ptr<Controller> controller;
 
   std::shared_ptr<Network::INetworkTransport> HandshakeTransport;
   std::shared_ptr<Network::RPC::NetworkTransportRPC> HandshakeRPC;
 
+  // Runtime cluster communication. Node subsystems must use intent channels
+  // and intent RPC rather than the startup-only handshake RPC.
   std::shared_ptr<Network::INetworkTransport> baseTransport;
+  std::shared_ptr<Network::Cluster::IClusterResolver> clusterResolver;
+  std::shared_ptr<Network::Intent::IIntentResolver> intentResolver;
   std::shared_ptr<Network::Cluster::ClusterTransport> clusterTransport;
   std::shared_ptr<Network::Cluster::ChannelBus> channelBus;
+  std::shared_ptr<Network::RPC::ClusterIntentRPC> intentRPC;
 
   std::unordered_map<Network::Cluster::ReservedChannels,
                      std::shared_ptr<Network::Intent::ClusterIntentChannel>>
@@ -100,6 +114,9 @@ private:
   void Initialize();
   void Tick();
   void InitializeChannels();
+  void InitializeModules();
+  void TryClaimControllerPromotion();
+  void OnControllerPromotionClaimed();
   void Shutdown();
   std::unique_ptr<DB::IDatabaseBackend> database;
 };

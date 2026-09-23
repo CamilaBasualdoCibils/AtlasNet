@@ -1,6 +1,7 @@
 #include "AtlasNet/Core/Serialization/NetBinarySerializer.hpp"
-#include "AtlasNet/DB/DebugMirror.hpp"
-#include "AtlasNet/DB/Keys.hpp"
+#include "AtlasNet/Node/DB/DebugMirror.hpp"
+#include "AtlasNet/Node/DB/Keys.hpp"
+#include "AtlasNet/Node/Module/ModuleRegistry.hpp"
 #include "AtlasNet/Node/RPC/Database.hpp"
 #include "Standalone/Configuration.hpp"
 #include <gtest/gtest.h>
@@ -55,8 +56,73 @@ TEST(NodeConfiguration, IngressRequiresCapability)
 {
   NodeConfig config;
   config.capabilities = NodeCapability::None;
-  config.ingressSockets.push_back({});
+  config.clientIngressListeners.push_back({.transport = "TCP"});
   EXPECT_THROW(AtlasNetNode node(config), std::invalid_argument);
+}
+
+TEST(NodeConfiguration, ParsesNamedIngressListenersAndModules)
+{
+  const char* argv[] = {"node",          "--capabilities", "ClientIngress",
+                        "--module",      "WebSocket.so",   "--ingress-sockets",
+                        "WebSocket:5818"};
+  const auto config = Standalone::ParseConfiguration(7, argv);
+  ASSERT_EQ(config.node.modules.size(), 1);
+  EXPECT_EQ(config.node.modules.front(), "WebSocket.so");
+  ASSERT_EQ(config.node.clientIngressListeners.size(), 1);
+  EXPECT_EQ(config.node.clientIngressListeners.front().transport, "WebSocket");
+  EXPECT_EQ(config.node.clientIngressListeners.front().config.port, 5818);
+}
+
+namespace
+{
+class TestShardProvider final : public Module::ShardProvider
+{
+};
+class TestIngressProvider final : public Module::ClientIngressTransportProvider
+{
+public:
+  std::unique_ptr<Module::ClientIngressListener>
+  CreateListener(const Module::ClientIngressListenerConfig&) override
+  {
+    return {};
+  }
+};
+} // namespace
+
+TEST(ModuleRegistry, RejectsExclusiveAndNamedDuplicates)
+{
+  Module::ModuleRegistry registry;
+  registry.RegisterShardProvider(std::make_shared<TestShardProvider>());
+  EXPECT_THROW(
+      registry.RegisterShardProvider(std::make_shared<TestShardProvider>()),
+      std::runtime_error);
+  registry.RegisterClientIngressTransport(
+      "TCP", std::make_shared<TestIngressProvider>());
+  EXPECT_THROW(registry.RegisterClientIngressTransport(
+                   "TCP", std::make_shared<TestIngressProvider>()),
+               std::runtime_error);
+  EXPECT_NE(registry.GetClientIngressTransport("TCP"), nullptr);
+  EXPECT_EQ(registry.GetClientIngressTransport("WebSocket"), nullptr);
+}
+
+TEST(NodeRuntime, ShardCapabilityRequiresProvider)
+{
+  NodeConfig config;
+  config.capabilities = NodeCapability::Shard;
+  AtlasNetNode node(config);
+  EXPECT_THROW(node.Start(), std::runtime_error);
+}
+
+TEST(NodeRuntime, LoadsSteamNetSockModuleAndCreatesListener)
+{
+  NodeConfig config;
+  config.capabilities = NodeCapability::ClientIngress;
+  config.modules.emplace_back(ATLASNET_STEAMNETSOCK_MODULE);
+  config.clientIngressListeners.push_back(
+      {.transport = "SteamNetSock", .config = {.port = 0}});
+  AtlasNetNode node(std::move(config));
+  EXPECT_NO_THROW(node.Start());
+  EXPECT_NO_THROW(node.Poll());
 }
 
 TEST(DatabaseRPC, RegistrationCapabilitiesSurviveSerialization)
@@ -102,6 +168,7 @@ class RecordingBackend final : public DB::IDatabaseBackend
 {
 public:
   int writes = 0;
+  int promotionClaims = 0;
   RPC::Database::RegisterNodeRequest last;
   RPC::Database::RegisterNodeResponse
   RegisterNode(const RPC::Database::RegisterNodeRequest& request) override
@@ -110,20 +177,39 @@ public:
     last = request;
     return RPC::Database::RegisterNodeResponse::SUCCESS;
   }
+  RPC::Database::ClaimControllerPromotionResponse
+  ClaimControllerPromotion(AtlasNetNodeID) override
+  {
+    ++promotionClaims;
+    return RPC::Database::ClaimControllerPromotionResponse::CLAIMED;
+  }
 };
 } // namespace
 
 TEST(NodeRuntime, DatabaseUsesInjectedStorageWithoutUpstreamHandshake)
 {
   NodeConfig config;
-  config.capabilities = NodeCapability::Database | NodeCapability::Shard;
+  config.capabilities = NodeCapability::Database;
   auto backend = std::make_unique<RecordingBackend>();
   auto* recording = backend.get();
   AtlasNetNode node(config, std::move(backend));
   node.Start();
   EXPECT_EQ(recording->writes, 1);
+  EXPECT_EQ(recording->promotionClaims, 0);
   EXPECT_EQ(recording->last.capabilities, config.capabilities);
   node.Poll();
+}
+
+TEST(NodeRuntime, ControllerEligibleNodeClaimsPromotionOnStart)
+{
+  NodeConfig config;
+  config.capabilities =
+      NodeCapability::Database | NodeCapability::ControllerEligible;
+  auto backend = std::make_unique<RecordingBackend>();
+  auto* recording = backend.get();
+  AtlasNetNode node(config, std::move(backend));
+  node.Start();
+  EXPECT_EQ(recording->promotionClaims, 1);
 }
 
 namespace
