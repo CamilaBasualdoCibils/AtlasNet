@@ -1,9 +1,11 @@
 #pragma once
 
+#include "AtlasNet/Core/Memory/Memory.hpp"
 #include "AtlasNet/Core/Network/Address/SocketAddress.hpp"
 #include "AtlasNet/Core/Network/Transport/INetworkTransport.hpp"
 #include "AtlasNet/Core/Network/Transport/TransportDatagram.hpp"
 #include <boost/container/static_vector.hpp>
+#include <deque>
 #include <fcntl.h>
 #include <memory>
 #include <queue>
@@ -11,6 +13,10 @@
 #include <spdlog/sinks/stdout_color_sinks-inl.h>
 #include <sys/poll.h>
 #include <unordered_set>
+#include <vector>
+#ifdef ATLASNET_TRACY_ENABLED
+#include <tracy/Tracy.hpp>
+#endif
 namespace AtlasNet::Network
 {
 class UDPNetworkTransport : public INetworkTransport
@@ -109,6 +115,10 @@ public:
   bool Send(const SocketAddress& destination,
             std::span<const std::byte> payload) override
   {
+#ifdef ATLASNET_TRACY_ENABLED
+    ZoneScopedN("UDPNetworkTransport::Send");
+    ZoneValue(payload.size());
+#endif
     sockaddr_storage addr{};
     socklen_t addrLen;
     SocketAddress resolvedDestination = destination.Resolve();
@@ -162,6 +172,9 @@ public:
 
   size_t Receive(std::span<TransportDatagram> packets) override
   {
+#ifdef ATLASNET_TRACY_ENABLED
+    ZoneScopedN("UDPNetworkTransport::Receive");
+#endif
     if (!socket_)
     {
       throw std::runtime_error("UDPTransport socket not initialized");
@@ -183,6 +196,9 @@ public:
 
   size_t TryReceive(std::span<TransportDatagram> packets) override
   {
+#ifdef ATLASNET_TRACY_ENABLED
+    ZoneScopedN("UDPNetworkTransport::TryReceive");
+#endif
     size_t received = 0;
     while (received < packets.size())
     {
@@ -201,6 +217,7 @@ public:
       buffer->data.resize(bytes > 0 ? bytes : 0);
       if (bytes < 0)
       {
+        ReleaseBuffer(buffer);
         if (errno == EAGAIN || errno == EWOULDBLOCK)
         {
           logger->trace("recvfrom: nothing available");
@@ -275,8 +292,10 @@ private:
     boost::container::static_vector<uint8_t, MaxUDPPacketSize> data;
   };
   SocketAddress listenAddress_;
-  std::unordered_set<std::unique_ptr<UDPBuffer>> storage;
-  std::queue<UDPBuffer*> freeBuffers;
+  using UDPBufferPtr = std::unique_ptr<UDPBuffer, Memory::Deleter<UDPBuffer>>;
+  std::vector<UDPBufferPtr, Memory::Allocator<UDPBufferPtr>> storage;
+  std::queue<UDPBuffer*, std::deque<UDPBuffer*, Memory::Allocator<UDPBuffer*>>>
+      freeBuffers;
   int socket_;
   std::shared_ptr<spdlog::logger> logger;
 
@@ -284,9 +303,9 @@ private:
   {
     if (freeBuffers.empty())
     {
-      auto buffer = std::make_unique<UDPBuffer>();
+      UDPBufferPtr buffer{Memory::New<UDPBuffer>()};
       auto ptr = buffer.get();
-      storage.insert(std::move(buffer));
+      storage.push_back(std::move(buffer));
       return ptr;
     }
     else

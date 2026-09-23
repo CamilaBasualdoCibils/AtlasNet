@@ -1,9 +1,15 @@
 #include "AtlasNet/Node/AtlasNetNode.hpp"
 #include "AtlasNet/Core/Network/Transport/UDP/UDPNetworkTransport.hpp"
+#include "AtlasNet/Node/NodeCapability.hpp"
 #include <boost/describe/enum_to_string.hpp>
 #include <future>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/spdlog.h>
+#include <thread>
+#include <chrono>
+#ifdef ATLASNET_TRACY_ENABLED
+#include <tracy/Tracy.hpp>
+#endif
 
 AtlasNet::AtlasNetNode::AtlasNetNode(
     NodeConfig config, std::unique_ptr<DB::IDatabaseBackend> backend)
@@ -23,11 +29,21 @@ AtlasNet::AtlasNetNode::AtlasNetNode(
 
 void AtlasNet::AtlasNetNode::Tick()
 {
-  GetHandshakeRPC().Poll(Network::PollType::NonBlocking);
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("AtlasNetNode::Tick");
+#endif
+  if (HandshakeRPC && HandshakeTransport)
+  {
+    GetHandshakeRPC().Poll(Network::PollType::NonBlocking);
+  }
+  std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
 
 void AtlasNet::AtlasNetNode::Initialize()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("AtlasNetNode::Initialize");
+#endif
 
   for (const auto& socket : nodeConfig.ingressSockets)
   {
@@ -155,11 +171,22 @@ void AtlasNet::AtlasNetNode::Initialize()
       throw std::runtime_error("Database rejected node registration");
     GetLogger()->info("Successfully registered node with DB at {}",
                       nodeConfig.dbHandshakeAddress.to_string());
+    if (!HasCapability(nodeConfig.capabilities,
+                       AtlasNet::NodeCapability::Database))
+    {
+      GetLogger()->info(
+          "Node has no Database capability, shutting down handshake socket.");
+      HandshakeRPC.reset();
+      HandshakeTransport.reset();
+    }
   }
 }
 
 void AtlasNet::AtlasNetNode::Start()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("AtlasNetNode::Start");
+#endif
   if (started)
     throw std::logic_error("Node already started");
   switch (nodeConfig.transport.networkTransportType)
@@ -201,6 +228,9 @@ void AtlasNet::AtlasNetNode::Start()
 
 void AtlasNet::AtlasNetNode::Poll()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("AtlasNetNode::Poll");
+#endif
   if (!started)
     throw std::logic_error("Node has not started");
   Tick();
@@ -208,10 +238,17 @@ void AtlasNet::AtlasNetNode::Poll()
 
 void AtlasNet::AtlasNetNode::Run(std::stop_token stop)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  tracy::SetThreadName("AtlasNet Node");
+  ZoneScopedN("AtlasNetNode::Run");
+#endif
   Start();
   while (!stop.stop_requested() && !stop_requested.load())
   {
     Poll();
+#ifdef ATLASNET_TRACY_ENABLED
+    FrameMarkNamed("AtlasNet Node Poll");
+#endif
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
   GetLogger()->info("Shutting Down...");
@@ -221,6 +258,9 @@ void AtlasNet::AtlasNetNode::Run(std::stop_token stop)
 
 void AtlasNet::AtlasNetNode::InitializeChannels()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("AtlasNetNode::InitializeChannels");
+#endif
   channelBus = std::make_shared<Network::Cluster::ChannelBus>(
       Network::Cluster::ChannelBus::ChannelBusOptions{
           .transport = clusterTransport,

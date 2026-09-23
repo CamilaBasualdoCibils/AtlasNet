@@ -7,7 +7,7 @@
   "handshakePort": 43000,
   "valgrind": false,
   "valgrindProgram": "/usr/bin/valgrind",
-  "perf": true,
+  "perf": false,
   "perfProgram": "/usr/bin/perf",
   "perfOutput": "${workspaceFolder}/build/perf-${index}.data",
   "valkeyURI": "tcp://127.0.0.1:46380",
@@ -19,7 +19,10 @@
       "name": "Database",
       "count": 1,
       "capabilities": [
-        "Database"
+        "Database",
+        "Shard",
+        "ControllerEligible",
+        "ClientIngress"
       ],
       "args": []
     }

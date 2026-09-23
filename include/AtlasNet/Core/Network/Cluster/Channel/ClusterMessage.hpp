@@ -2,6 +2,7 @@
 
 #include "AtlasNet/Core/Core.hpp"
 #include "AtlasNet/Core/Network/Cluster/Channel/ChannelCommons.hpp"
+#include "AtlasNet/Core/Network/NetworkCommons.hpp"
 namespace AtlasNet::Network::Cluster
 {
 
@@ -10,19 +11,11 @@ class ClusterMessage
 public:
   ClusterMessage() = default;
 
-  ClusterMessage(
-      AtlasNetNodeID source,
-      ChannelID channel,
-      uint64_t sequence,
-      std::shared_ptr<const std::vector<std::byte>> storage,
-      size_t offset,
-      size_t size)
-      : source_(source),
-        channel_(channel),
-        sequence_(sequence),
-        storage_(std::move(storage)),
-        offset_(offset),
-        size_(size)
+  ClusterMessage(AtlasNetNodeID source, ChannelID channel, uint64_t sequence,
+                 std::shared_ptr<const ByteBuffer> storage, size_t offset,
+                 size_t size)
+      : source_(source), channel_(channel), sequence_(sequence),
+        storage_(std::move(storage)), offset_(offset), size_(size)
   {
   }
 
@@ -61,7 +54,7 @@ private:
   ChannelID channel_ = 0;
   uint64_t sequence_ = 0;
 
-  std::shared_ptr<const std::vector<std::byte>> storage_;
+  std::shared_ptr<const ByteBuffer> storage_;
   size_t offset_ = 0;
   size_t size_ = 0;
 };

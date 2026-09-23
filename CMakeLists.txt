@@ -16,6 +16,21 @@ set (CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(cmake/FetchDeps.cmake)
 
+# Tracy is intentionally available only to Debug configurations. AtlasNet uses
+# single-config Ninja presets, so Release builds neither fetch nor compile it.
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  include(FetchContent)
+  set(TRACY_ENABLE ON CACHE BOOL "Enable Tracy profiling" FORCE)
+  set(TRACY_ON_DEMAND ON CACHE BOOL "Connect Tracy only when requested" FORCE)
+  FetchContent_Declare(
+    tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG v0.14.0
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(tracy)
+endif()
+
 set(ATLASNET_EXAMPLES ON CACHE BOOL "Build AtlasNet examples")
 set(ATLASNET_TESTS ON CACHE BOOL "Build AtlasNet tests")
 set(ATLASNET_DEV ON CACHE BOOL "Build AtlasNet dev")
@@ -64,6 +79,11 @@ target_compile_definitions(AtlasNetCore PUBLIC
     SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 )
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(AtlasNetCore PUBLIC ATLASNET_TRACY_ENABLED)
+  target_link_libraries(AtlasNetCore PUBLIC Tracy::TracyClient)
+endif()
+
 target_link_libraries(AtlasNetCore
 PUBLIC
   Boost::beast
@@ -86,6 +106,8 @@ PUBLIC
   hiredis::hiredis_ssl
   $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
   nlohmann_json::nlohmann_json
+PRIVATE
+  mimalloc-static
 )
 set_target_properties(AtlasNetCore PROPERTIES FOLDER "AtlasNet")
 

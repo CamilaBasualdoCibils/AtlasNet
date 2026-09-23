@@ -1,9 +1,16 @@
 #include "AtlasNet/Core/Network/Cluster/Channel/V1/ClusterChannelV1.hpp"
 #include "AtlasNet/Core/Core.hpp"
+#ifdef ATLASNET_TRACY_ENABLED
+#include <tracy/Tracy.hpp>
+#endif
 
 bool AtlasNet::Network::Cluster::ClusterChannelV1::Send(
     const AtlasNetNodeID& destination, std::span<const std::byte> payload)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::Send");
+  ZoneValue(payload.size());
+#endif
   if (payload.empty())
   {
     logger_->warn("Attempted to send empty payload");
@@ -67,6 +74,9 @@ bool AtlasNet::Network::Cluster::ClusterChannelV1::Send(
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::Flush()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::Flush");
+#endif
   std::scoped_lock lock(mutex_);
 
   logger_->trace("Flushing {} peers", peers_.size());
@@ -97,6 +107,9 @@ size_t AtlasNet::Network::Cluster::ClusterChannelV1::Receive(
 size_t AtlasNet::Network::Cluster::ClusterChannelV1::TryReceive(
     std::span<ClusterMessage> messages)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::TryReceive");
+#endif
   if (messages.empty())
     return 0;
 
@@ -118,6 +131,9 @@ size_t AtlasNet::Network::Cluster::ClusterChannelV1::TryReceive(
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::Tick()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::Tick");
+#endif
 
   PumpTransport(false);
   std::scoped_lock lock(mutex_);
@@ -129,6 +145,9 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::Tick()
 bool AtlasNet::Network::Cluster::ClusterChannelV1::FlushPeer(
     const AtlasNetNodeID& destination, PeerState& peer)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::FlushPeer");
+#endif
 
   auto& queue = peer.send.queuedMessages;
 
@@ -140,7 +159,7 @@ bool AtlasNet::Network::Cluster::ClusterChannelV1::FlushPeer(
 
   while (!queue.empty())
   {
-    std::vector<QueuedMessage> packetMessages;
+    std::vector<QueuedMessage, Memory::Allocator<QueuedMessage>> packetMessages;
     size_t packetBytes = ChannelV1::PacketHeader ::NetSize();
 
     while (!queue.empty())
@@ -180,8 +199,7 @@ bool AtlasNet::Network::Cluster::ClusterChannelV1::FlushPeer(
     if (GetOptions().delivery == DeliveryMode::Reliable)
       packetSequence = peer.send.nextPacketSequence++;
 
-    std::vector<std::byte> bytes =
-        BuildPacket(peer, packetMessages, packetSequence, false);
+    ByteBuffer bytes = BuildPacket(peer, packetMessages, packetSequence, false);
 
     for (const QueuedMessage& message : packetMessages)
     {
@@ -206,13 +224,16 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::FlushPendingAcks()
     logger_->trace("Sending ACK-only packet to {} (ack={}, bits={:#018x})",
                    destination.to_string(), peer.receive.highestPacketSequence,
                    peer.receive.receivedPacketBits);
-    std::vector<std::byte> bytes = BuildPacket(peer, {}, 0, true);
+    ByteBuffer bytes = BuildPacket(peer, {}, 0, true);
 
     GetTransport()->Send(destination, bytes);
   }
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessTimers()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::ProcessTimers");
+#endif
   if (GetOptions().delivery != DeliveryMode::Reliable)
     return;
 
@@ -255,6 +276,9 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessTimers()
 size_t
 AtlasNet::Network::Cluster::ClusterChannelV1::PumpTransport(bool blocking)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::PumpTransport");
+#endif
   constexpr size_t MaxDatagramsPerPump = 128;
 
   std::array<ClusterDatagram, MaxDatagramsPerPump> packets;
@@ -264,6 +288,9 @@ AtlasNet::Network::Cluster::ClusterChannelV1::PumpTransport(bool blocking)
 
   if (received == 0)
     return 0;
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneValue(received);
+#endif
   logger_->trace("Received {} datagrams", received);
   std::scoped_lock lock(mutex_);
 
@@ -278,8 +305,13 @@ AtlasNet::Network::Cluster::ClusterChannelV1::PumpTransport(bool blocking)
 void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessDatagram(
     const ClusterDatagram& datagram)
 {
-  auto storage = std::make_shared<std::vector<std::byte>>(
-      datagram.GetPayload().begin(), datagram.GetPayload().end());
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::ProcessDatagram");
+  ZoneValue(datagram.GetPayload().size());
+#endif
+  auto storage = std::allocate_shared<ByteBuffer>(
+      Memory::Allocator<ByteBuffer>{}, datagram.GetPayload().begin(),
+      datagram.GetPayload().end());
 
   NetBinaryReader reader(*storage);
 
@@ -434,8 +466,7 @@ bool AtlasNet::Network::Cluster::ClusterChannelV1::RegisterReceivedPacket(
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessMessage(
     const AtlasNetNodeID& source, ReceiveState& state, uint64_t messageSequence,
-    std::shared_ptr<const std::vector<std::byte>> storage, size_t offset,
-    size_t size)
+    std::shared_ptr<const ByteBuffer> storage, size_t offset, size_t size)
 {
   switch (GetOptions().ordering)
   {
@@ -546,11 +577,15 @@ size_t AtlasNet::Network::Cluster::ClusterChannelV1::CopyReadyMessages(
     logger_->trace("Returned {} ready messages", count);
   return count;
 }
-std::vector<std::byte>
+AtlasNet::Network::ByteBuffer
 AtlasNet::Network::Cluster::ClusterChannelV1::BuildPacket(
     PeerState& peer, std::span<const QueuedMessage> messages,
     uint64_t packetSequence, bool ackOnly)
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  ZoneScopedN("ClusterChannelV1::BuildPacket");
+  ZoneValue(messages.size());
+#endif
   ChannelV1::PacketHeader header;
   header.channel = GetOptions().id;
   header.packetSequence = packetSequence;
@@ -590,11 +625,12 @@ AtlasNet::Network::Cluster::ClusterChannelV1::BuildPacket(
 
   peer.receive.ackPending = false;
 
-  return writer.Release();
+  auto bytes = writer.Release();
+  return ByteBuffer(bytes.begin(), bytes.end());
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::SendPacket(
-    const AtlasNetNodeID& destination, PeerState& peer,
-    std::vector<std::byte> bytes, uint64_t packetSequence)
+    const AtlasNetNodeID& destination, PeerState& peer, ByteBuffer bytes,
+    uint64_t packetSequence)
 {
 
   GetTransport()->Send(destination, bytes);

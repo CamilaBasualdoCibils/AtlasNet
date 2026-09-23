@@ -2,18 +2,23 @@
 #include "Backends/ValkeyRemoteBackend.hpp"
 #include <csignal>
 #include <iostream>
+#include <stop_token>
 #include <sw/redis++/redis++.h>
 #include <sys/wait.h>
 #include <thread>
 #include <unistd.h>
+#ifdef ATLASNET_TRACY_ENABLED
+#include <tracy/Tracy.hpp>
+#endif
 
 namespace
 {
 volatile std::sig_atomic_t stopRequested = 0;
-
+std::stop_source stopSource;
 void Stop(int)
 {
   stopRequested = 1;
+  stopSource.request_stop();
 }
 
 bool IsValkeyReady(const std::string& uri)
@@ -98,6 +103,9 @@ private:
 
 int main()
 {
+#ifdef ATLASNET_TRACY_ENABLED
+  tracy::SetThreadName("AtlasNet Local Main");
+#endif
   try
   {
     constexpr uint16_t valkeyPort = ATLASNET_LOCAL_VALKEY_PORT;
@@ -119,12 +127,7 @@ int main()
     auto backend =
         std::make_unique<AtlasNet::DB::ValkeyRemoteBackend>(valkeyURI);
     AtlasNet::AtlasNetNode node(std::move(config), std::move(backend));
-    node.Start();
-    while (!stopRequested)
-    {
-      node.Poll();
-      std::this_thread::sleep_for(std::chrono::milliseconds(10));
-    }
+    node.Run(stopSource.get_token());
     return 0;
   }
   catch (const std::exception& error)

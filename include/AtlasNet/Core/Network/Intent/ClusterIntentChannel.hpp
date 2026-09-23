@@ -162,7 +162,7 @@ private:
   struct PendingReliableMessage
   {
     AtlasNetNodeID lastDestination;
-    std::vector<std::byte> packet;
+    ByteBuffer packet;
   };
 
   size_t ReceiveImpl(std::span<IntentDatagram> messages, bool nonBlocking)
@@ -400,7 +400,7 @@ private:
   }
 
   void RegisterPendingAck(uint64_t correlationID, AtlasNetNodeID destination,
-                          std::vector<std::byte> packet)
+                          ByteBuffer packet)
   {
     pendingReliable.insert_or_assign(correlationID,
                                      PendingReliableMessage{
@@ -423,8 +423,8 @@ private:
                       { return value.Method; }, intent);
   }
 
-  std::vector<std::byte> BuildPacket(const IntentHeader& header,
-                                     std::span<const std::byte> payload)
+  ByteBuffer BuildPacket(const IntentHeader& header,
+                         std::span<const std::byte> payload)
   {
     assert(!std::holds_alternative<Recepient::InvalidRecepient>(header.intent));
 
@@ -435,7 +435,8 @@ private:
     writer->adapter().writeBuffer<sizeof(uint8_t)>(
         reinterpret_cast<const uint8_t*>(payload.data()), payload.size());
 
-    return writer.Release();
+    auto bytes = writer.Release();
+    return ByteBuffer(bytes.begin(), bytes.end());
   }
 
 private:
@@ -446,7 +447,11 @@ private:
 
   std::atomic<uint64_t> nextCorrelationID{1};
 
-  std::unordered_map<uint64_t, PendingReliableMessage> pendingReliable;
+  std::unordered_map<
+      uint64_t, PendingReliableMessage, std::hash<uint64_t>,
+      std::equal_to<uint64_t>,
+      Memory::Allocator<std::pair<const uint64_t, PendingReliableMessage>>>
+      pendingReliable;
   std::shared_ptr<spdlog::logger> logger_;
 };
 } // namespace AtlasNet::Network::Intent
