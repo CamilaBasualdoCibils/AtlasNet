@@ -1,3 +1,7 @@
 [submodule "external/valkey"]
 	path = external/valkey
 	url = https://github.com/valkey-io/valkey.git
+[submodule "integrations/AtlasNetUnity"]
+	path = integrations/AtlasNetUnity
+	url = https://github.com/dannys0n/AtlasNetUnity.git
+	branch = main
