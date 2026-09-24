@@ -20,12 +20,20 @@
       "count": 1,
       "capabilities": [
         "Database",
-        "ControllerEligible",
+        "ControllerEligible"
+      ],
+      "args": []
+    },
+    {
+      "name": "ShardWorker",
+      "count": 1,
+      "capabilities": [
+        "Shard",
         "ClientIngress"
       ],
       "args": [
         "--module",
-        "${workspaceFolder}/build/AtlasNetSteamNetSock.so"
+        "${workspaceFolder}/build/AtlasNetDummyShard.so"
       ]
     }
   ]

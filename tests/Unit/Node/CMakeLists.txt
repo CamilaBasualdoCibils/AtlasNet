@@ -2,6 +2,7 @@ add_executable(AtlasNet_tests_Node
     Node.cpp
     ${PROJECT_SOURCE_DIR}/src/Node/AtlasNetNode.cpp
     ${PROJECT_SOURCE_DIR}/src/Node/Controller/Controller.cpp
+    ${PROJECT_SOURCE_DIR}/src/Node/Shard/ShardManager.cpp
     ${PROJECT_SOURCE_DIR}/src/Node/Module/ModuleLoader.cpp
     ${PROJECT_SOURCE_DIR}/src/Standalone/Configuration.cpp
 )

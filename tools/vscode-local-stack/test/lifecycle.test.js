@@ -80,7 +80,8 @@ test('graceful stop pauses nodes and asks GDB to deliver SIGTERM', async () => {
   const config = defaults(); config.preLaunchCommand = ''; config.launchValkey = false; config.program = process.execPath; config.gdb = process.execPath; config.cwd = '/tmp'; config.groups = [{ name: 'Database', count: 1, capabilities: ['Database'], args: [] }];
   await handlers.message({ type: 'run', config });
   await handlers.message({ type: 'gracefulStop' });
-  assert.deepEqual(requests.map(r => r[0]), ['threads', 'pause', 'evaluate']);
-  assert.equal(requests[2][1].expression, '-exec signal SIGTERM');
+  assert.deepEqual(requests.map(r => r[0]), ['threads', 'pause', 'evaluate', 'evaluate']);
+  assert.equal(requests[2][1].expression, '-exec inferior 1');
+  assert.equal(requests[3][1].expression, '-exec signal SIGTERM');
   assert.deepEqual(stopped, []);
 });

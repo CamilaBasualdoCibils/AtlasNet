@@ -5,9 +5,13 @@
 #include "AtlasNet/Core/Network/Cluster/Transport/ClusterDatagram.hpp"
 #include "AtlasNet/Core/Network/Cluster/Transport/ClusterTransport.hpp"
 #include "AtlasNet/Core/Network/Cluster/Transport/IClusterResolver.hpp"
+#include "AtlasNet/Core/Network/Transport/NetworkTrafficProfiler.hpp"
 #include <memory>
 #include <spdlog/logger.h>
 #include <unordered_map>
+#ifdef ATLASNET_TRACY_ENABLED
+#include <tracy/Tracy.hpp>
+#endif
 namespace AtlasNet::Network::Cluster
 {
 class ChannelBus
@@ -19,6 +23,9 @@ class ChannelBus
                                std::shared_ptr<IClusterChannel>>>
       m_Channels;
   std::shared_ptr<spdlog::logger> logger_;
+#ifdef ATLASNET_TRACY_ENABLED
+  NetworkTrafficProfiler trafficProfiler_;
+#endif
 
 public:
   struct ChannelBusOptions
@@ -44,7 +51,13 @@ public:
   bool SendMessage(ChannelID channelID, const AtlasNetNodeID& destination,
                    std::span<const std::byte> payload)
   {
-    return m_Transport->Send(destination, payload);
+    const bool sent = m_Transport->Send(destination, payload);
+#ifdef ATLASNET_TRACY_ENABLED
+    if (sent)
+      trafficProfiler_.RecordTx(payload.size());
+    PlotNetworkTraffic();
+#endif
+    return sent;
   }
   void Receive()
   {
@@ -60,11 +73,19 @@ public:
     {
       Route(std::span<ClusterDatagram>(packets.data(), received));
     }
+#ifdef ATLASNET_TRACY_ENABLED
+    PlotNetworkTraffic();
+#endif
   }
 
 private:
   void Route(std::span<ClusterDatagram> packets)
   {
+#ifdef ATLASNET_TRACY_ENABLED
+    for (const ClusterDatagram& datagram : packets)
+      trafficProfiler_.RecordRx(datagram.GetPayload().size());
+    PlotNetworkTraffic();
+#endif
     for (const ClusterDatagram& datagram : packets)
     {
 
@@ -100,6 +121,20 @@ private:
       channelIt->second.first->PushDatagram(datagram);
     }
   }
+
+#ifdef ATLASNET_TRACY_ENABLED
+  void PlotNetworkTraffic()
+  {
+    const auto rates = trafficProfiler_.Sample();
+    if (!rates)
+      return;
+
+    TracyPlot("Channel Bus TX bytes/sec", rates->txBytesPerSecond);
+    TracyPlot("Channel Bus RX bytes/sec", rates->rxBytesPerSecond);
+    TracyPlot("Channel Bus TX packets/sec", rates->txPacketsPerSecond);
+    TracyPlot("Channel Bus RX packets/sec", rates->rxPacketsPerSecond);
+  }
+#endif
 };
 
 } // namespace AtlasNet::Network::Cluster

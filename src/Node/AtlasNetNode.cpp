@@ -124,6 +124,8 @@ void AtlasNet::AtlasNetNode::Tick()
     channelBus->TryReceive();
     intentRPC->Poll(Network::PollType::NonBlocking);
   }
+  if (shardManager)
+    shardManager->Poll();
   std::this_thread::sleep_for(std::chrono::milliseconds(16));
 }
 
@@ -306,6 +308,17 @@ void AtlasNet::AtlasNetNode::Start()
   if (started)
     throw std::logic_error("Node already started");
   InitializeModules();
+  if (HasCapability(nodeConfig.capabilities, NodeCapability::Shard))
+  {
+    auto worker = nodeConfig.shardWorkerExecutable;
+    if (worker.empty())
+      worker = std::filesystem::read_symlink("/proc/self/exe").parent_path() /
+               "AtlasNetShardWorker";
+    shardManager = std::make_unique<ShardManager>(
+        ShardManager::Config{.workerExecutable = std::move(worker),
+                             .modules = nodeConfig.modules});
+    shardManager->CreateShard();
+  }
   switch (nodeConfig.transport.networkTransportType)
   {
 
@@ -444,6 +457,11 @@ void AtlasNet::AtlasNetNode::InitializeModules()
 }
 void AtlasNet::AtlasNetNode::Shutdown()
 {
+  if (shardManager)
+  {
+    shardManager->Shutdown();
+    shardManager.reset();
+  }
   if (controller)
     controller->Stop();
   for (auto it = ingressListeners.rbegin(); it != ingressListeners.rend(); ++it)

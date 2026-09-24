@@ -11,6 +11,11 @@ test('example stack launches Valkey then five database-capable nodes then two sh
     assert.equal(launch.args[launch.args.indexOf('--DB-port') + 1], '43000');
     assert.equal(launch.type, 'cppdbg');
     assert.equal(launch.MIMode, 'gdb');
+    assert.deepEqual(launch.setupCommands.slice(1, 6).map(c => c.text), [
+      'set follow-fork-mode parent', 'set detach-on-fork off',
+      'set schedule-multiple on', 'set follow-exec-mode same',
+      'set breakpoint pending on'
+    ]);
   }
   const ports = result.slice(1).flatMap(c => [c.args[3], c.args[5]]);
   assert.equal(new Set(ports).size, 14);
@@ -38,7 +43,7 @@ test('Valgrind and perf can wrap every node together while Valkey remains direct
   const result = plan(config, '/repo');
   assert.equal(result[0].setupCommands.length, 1);
   for (const launch of result.slice(1)) {
-    const wrapper = launch.setupCommands[1].text;
+    const wrapper = launch.setupCommands.find(c => c.text.startsWith('set exec-wrapper ')).text;
     assert.match(wrapper, /^set exec-wrapper /);
     assert.match(wrapper, /\/usr\/bin\/perf.*record.*--.*\/usr\/bin\/valgrind/);
     assert.match(wrapper, /perf-[0-9]+\.data/);

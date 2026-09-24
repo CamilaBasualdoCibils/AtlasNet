@@ -65,6 +65,7 @@ function activate(context) {
       await session.customRequest('pause', { threadId });
       await new Promise(resolve => setTimeout(resolve, 100));
     }
+    await session.customRequest('evaluate', { expression: '-exec inferior 1', context: 'repl' });
     await session.customRequest('evaluate', { expression: '-exec signal SIGTERM', context: 'repl' });
   }
   async function gracefulStop() {

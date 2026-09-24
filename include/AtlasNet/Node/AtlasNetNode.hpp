@@ -17,6 +17,7 @@
 #include "AtlasNet/Node/DB/Backend/IDatabaseBackend.hpp"
 #include "AtlasNet/Node/Module/ModuleLoader.hpp"
 #include "AtlasNet/Node/NodeConfig.hpp"
+#include "AtlasNet/Node/Shard/ShardManager.hpp"
 #include <atomic>
 #include <chrono>
 #include <memory>
@@ -38,6 +39,7 @@ private:
   Module::ModuleRegistry moduleRegistry;
   std::vector<std::unique_ptr<Module::ClientIngressListener>> ingressListeners;
   std::unique_ptr<Controller> controller;
+  std::unique_ptr<ShardManager> shardManager;
 
   std::shared_ptr<Network::INetworkTransport> HandshakeTransport;
   std::shared_ptr<Network::RPC::NetworkTransportRPC> HandshakeRPC;

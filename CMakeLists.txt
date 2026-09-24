@@ -139,6 +139,14 @@ target_include_directories(AtlasNetNode PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src
 target_link_libraries(AtlasNetNode PRIVATE AtlasNetCore AtlasNetModule)
 set_target_properties(AtlasNetNode PROPERTIES FOLDER "AtlasNet")
 
+add_executable(AtlasNetShardWorker
+    src/ShardWorker/Entry.cpp
+    src/Node/Module/ModuleLoader.cpp
+)
+target_include_directories(AtlasNetShardWorker PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AtlasNetShardWorker PRIVATE AtlasNetCore AtlasNetModule)
+set_target_properties(AtlasNetShardWorker PROPERTIES FOLDER "AtlasNet")
+
 # The embedded host compiles the same runtime with only the Module API backend.
 file(GLOB_RECURSE _db_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/DB/*.cpp"
@@ -192,6 +200,17 @@ set_target_properties(AtlasNetNode-Local PROPERTIES FOLDER "AtlasNet/Development
 # ========= ATLASNET MODULES ========
 add_library(AtlasNetSteamNetSock MODULE
     modules/SteamNetSock/SteamNetSockModule.cpp
+)
+add_library(AtlasNetDummyShard MODULE
+    modules/DummyShard/DummyShardModule.cpp
+)
+target_link_libraries(AtlasNetDummyShard PRIVATE
+    AtlasNetCore
+    AtlasNetModule
+)
+set_target_properties(AtlasNetDummyShard PROPERTIES
+    PREFIX ""
+    FOLDER "AtlasNet/Modules"
 )
 target_link_libraries(AtlasNetSteamNetSock PRIVATE
     AtlasNetModule

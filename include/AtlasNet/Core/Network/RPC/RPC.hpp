@@ -74,8 +74,8 @@ public:
   void Call(const Target& target, std::string_view methodName,
             std::span<const std::byte> payload)
   {
-    logger->debug("Calling RPC {} on target {}[ResponseExpected={}]", methodName,
-                 target.to_string(), false);
+    logger->debug("Calling RPC {} on target {}[ResponseExpected={}]",
+                  methodName, target.to_string(), false);
     RPCMethodID methodId = HashRPC(methodName);
 
     RPCCallID callId = nextCallID++;
@@ -85,8 +85,8 @@ public:
   Call_R(const Target& target, std::string_view methodName,
          std::span<const std::byte> payload)
   {
-    logger->debug("Calling RPC {} on target {}[ResponseExpected={}]", methodName,
-                 target.to_string(), true);
+    logger->debug("Calling RPC {} on target {}[ResponseExpected={}]",
+                  methodName, target.to_string(), true);
     RPCMethodID methodId = HashRPC(methodName);
 
     RPCCallID callId = nextCallID++;
@@ -195,8 +195,10 @@ protected:
       RPCResult result;
       CallContext callContext{.intendedTarget = intendedTarget,
                               .caller = caller};
-                              logger->debug("Calling RPC method ID {} from caller {} with intended target {}",
-                      header.methodId, CallerToString(caller), TargetToString(intendedTarget));
+      logger->debug(
+          "Calling RPC method ID {} from caller {} with intended target {}",
+          header.methodId, CallerToString(caller),
+          TargetToString(intendedTarget));
       result = it->second(callContext, payload);
       NetBinaryWriter resultWriter;
       resultWriter(result);
