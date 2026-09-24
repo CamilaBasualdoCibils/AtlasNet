@@ -79,7 +79,11 @@ public:
   ClusterChannelV1(const ChannelOptions& options,
                    std::shared_ptr<ChannelTransportProxy> transport)
       : IClusterChannel(options, transport),
-        logger_(spdlog::stdout_color_mt(std::format("ClusterChannelV1-{}", options.id)))
+        logger_(spdlog::get(std::format("ClusterChannelV1-{}", options.id))
+                    ? spdlog::get(
+                          std::format("ClusterChannelV1-{}", options.id))
+                    : spdlog::stdout_color_mt(
+                          std::format("ClusterChannelV1-{}", options.id)))
   {
     logger_->set_level(spdlog::level::trace);
   }
@@ -100,13 +104,13 @@ private:
   struct QueuedMessage
   {
     uint64_t sequence = 0;
-    std::vector<std::byte> payload;
+    ByteBuffer payload;
   };
 
   struct PendingPacket
   {
     uint64_t packetSequence = 0;
-    std::vector<std::byte> bytes;
+    ByteBuffer bytes;
 
     Clock::time_point lastSent;
     uint32_t attempts = 0;
@@ -118,16 +122,18 @@ private:
     uint64_t nextMessageSequence = 1;
 
     size_t queuedBytes = 0;
-    std::deque<QueuedMessage> queuedMessages;
+    std::deque<QueuedMessage, Memory::Allocator<QueuedMessage>> queuedMessages;
 
     // Packets waiting for an ACK.
-    std::map<uint64_t, PendingPacket> pendingPackets;
+    std::map<uint64_t, PendingPacket, std::less<uint64_t>,
+             Memory::Allocator<std::pair<const uint64_t, PendingPacket>>>
+        pendingPackets;
   };
 
   struct BufferedMessage
   {
     uint64_t sequence = 0;
-    std::shared_ptr<const std::vector<std::byte>> storage;
+    std::shared_ptr<const ByteBuffer> storage;
     size_t offset = 0;
     size_t size = 0;
   };
@@ -142,7 +148,9 @@ private:
     uint64_t nextOrderedSequence = 1;
     uint64_t highestSequencedMessage = 0;
 
-    std::map<uint64_t, BufferedMessage> reorderBuffer;
+    std::map<uint64_t, BufferedMessage, std::less<uint64_t>,
+             Memory::Allocator<std::pair<const uint64_t, BufferedMessage>>>
+        reorderBuffer;
 
     bool ackPending = false;
   };
@@ -158,13 +166,17 @@ private:
     AtlasNetNodeID source;
     uint64_t sequence = 0;
 
-    std::shared_ptr<const std::vector<std::byte>> storage;
+    std::shared_ptr<const ByteBuffer> storage;
     size_t offset = 0;
     size_t size = 0;
   };
 
-  std::unordered_map<AtlasNetNodeID, PeerState> peers_;
-  std::deque<ReadyMessage> readyMessages_;
+  std::unordered_map<
+      AtlasNetNodeID, PeerState, std::hash<AtlasNetNodeID>,
+      std::equal_to<AtlasNetNodeID>,
+      Memory::Allocator<std::pair<const AtlasNetNodeID, PeerState>>>
+      peers_;
+  std::deque<ReadyMessage, Memory::Allocator<ReadyMessage>> readyMessages_;
 
   std::mutex mutex_;
   std::shared_ptr<spdlog::logger> logger_;
@@ -187,19 +199,19 @@ private:
 
   void ProcessMessage(const AtlasNetNodeID& source, ReceiveState& state,
                       uint64_t messageSequence,
-                      std::shared_ptr<const std::vector<std::byte>> storage,
-                      size_t offset, size_t size);
+                      std::shared_ptr<const ByteBuffer> storage, size_t offset,
+                      size_t size);
 
   void DeliverOrderedMessages(const AtlasNetNodeID& source,
                               ReceiveState& state);
 
   size_t CopyReadyMessages(std::span<ClusterMessage> output);
 
-  std::vector<std::byte> BuildPacket(PeerState& peer,
-                                     std::span<const QueuedMessage> messages,
-                                     uint64_t packetSequence, bool ackOnly);
+  ByteBuffer BuildPacket(PeerState& peer,
+                         std::span<const QueuedMessage> messages,
+                         uint64_t packetSequence, bool ackOnly);
 
   void SendPacket(const AtlasNetNodeID& destination, PeerState& peer,
-                  std::vector<std::byte> bytes, uint64_t packetSequence);
+                  ByteBuffer bytes, uint64_t packetSequence);
 };
 } // namespace AtlasNet::Network::Cluster

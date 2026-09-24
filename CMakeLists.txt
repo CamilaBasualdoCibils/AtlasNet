@@ -16,6 +16,21 @@ set (CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(cmake/FetchDeps.cmake)
 
+# Tracy is intentionally available only to Debug configurations. AtlasNet uses
+# single-config Ninja presets, so Release builds neither fetch nor compile it.
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  include(FetchContent)
+  set(TRACY_ENABLE ON CACHE BOOL "Enable Tracy profiling" FORCE)
+  set(TRACY_ON_DEMAND ON CACHE BOOL "Connect Tracy only when requested" FORCE)
+  FetchContent_Declare(
+    tracy
+    GIT_REPOSITORY https://github.com/wolfpld/tracy.git
+    GIT_TAG v0.14.0
+    GIT_SHALLOW TRUE
+  )
+  FetchContent_MakeAvailable(tracy)
+endif()
+
 set(ATLASNET_EXAMPLES ON CACHE BOOL "Build AtlasNet examples")
 set(ATLASNET_TESTS ON CACHE BOOL "Build AtlasNet tests")
 set(ATLASNET_DEV ON CACHE BOOL "Build AtlasNet dev")
@@ -64,6 +79,11 @@ target_compile_definitions(AtlasNetCore PUBLIC
     SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
 )
 
+if (CMAKE_BUILD_TYPE STREQUAL "Debug")
+  target_compile_definitions(AtlasNetCore PUBLIC ATLASNET_TRACY_ENABLED)
+  target_link_libraries(AtlasNetCore PUBLIC Tracy::TracyClient)
+endif()
+
 target_link_libraries(AtlasNetCore
 PUBLIC
   Boost::beast
@@ -86,50 +106,59 @@ PUBLIC
   hiredis::hiredis_ssl
   $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
   nlohmann_json::nlohmann_json
+PRIVATE
+  mimalloc-static
+  ${CMAKE_DL_LIBS}
 )
 set_target_properties(AtlasNetCore PROPERTIES FOLDER "AtlasNet")
+
+# ========= ATLASNET MODULE SDK ========
+# Shared by the node host and loadable modules so registry calls cross the
+# dynamic-library boundary through one implementation.
+add_library(AtlasNetModule SHARED
+    src/Node/Module/ModuleRegistry.cpp
+)
+target_include_directories(AtlasNetModule PUBLIC
+    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+)
+set_target_properties(AtlasNetModule PROPERTIES FOLDER "AtlasNet")
 
 # ========= ATLASNET Node ========
 file(GLOB_RECURSE _node_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/Node/*.cpp"
 )
+list(FILTER _node_sources EXCLUDE REGEX "/Module/ModuleRegistry\\.cpp$")
 
-add_executable(AtlasNetNode ${_node_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetNode
-      PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-    "${CMAKE_CURRENT_SOURCE_DIR}/src"
-
+add_executable(AtlasNetNode
+    ${_node_sources}
+    src/Standalone/Entry.cpp
+    src/Standalone/Configuration.cpp
+    src/Backends/ValkeyRemoteBackend.cpp
 )
-
-target_link_libraries(AtlasNetNode AtlasNetCore)
+target_include_directories(AtlasNetNode PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AtlasNetNode PRIVATE AtlasNetCore AtlasNetModule)
 set_target_properties(AtlasNetNode PROPERTIES FOLDER "AtlasNet")
 
-# ========= ATLASNET DB ========
+# The embedded host compiles the same runtime with only the Module API backend.
 file(GLOB_RECURSE _db_sources CONFIGURE_DEPENDS
   "${CMAKE_CURRENT_SOURCE_DIR}/src/DB/*.cpp"
 )
-
-add_library(AtlasNetDB SHARED ${_db_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetDB
-      PRIVATE
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
+add_library(AtlasNetNode-ValkeyModule SHARED ${_node_sources} ${_db_sources})
+target_include_directories(AtlasNetNode-ValkeyModule PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
     "${CMAKE_SOURCE_DIR}/external/valkey/src"
-
 )
-target_link_libraries(AtlasNetDB AtlasNetCore)
-set_target_properties(AtlasNetDB PROPERTIES FOLDER "AtlasNet")
+target_link_libraries(AtlasNetNode-ValkeyModule PRIVATE AtlasNetCore AtlasNetModule)
+set_target_properties(AtlasNetNode-ValkeyModule PROPERTIES FOLDER "AtlasNet")
 
 # DB Debug
 add_custom_target(Valkey-Server-Compile
     COMMAND make -j${NPROC} valkey-server
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/external/valkey
-    COMMENT "Compiling Valkey Server for AtlasNetDB debugging"
+    COMMENT "Compiling Valkey Server for AtlasNetNode-ValkeyModule debugging"
     VERBATIM
 )
+
 add_executable(Valkey-Server-Debug IMPORTED GLOBAL)
 
 set_target_properties(Valkey-Server-Debug PROPERTIES
@@ -140,7 +169,37 @@ set_target_properties(Valkey-Server-Debug PROPERTIES
 add_dependencies(
     Valkey-Server-Debug
     Valkey-Server-Compile
-    AtlasNetDB
+    AtlasNetNode-ValkeyModule
+)
+
+set(ATLASNET_LOCAL_VALKEY_PORT 16379 CACHE STRING
+    "Valkey port used by the AtlasNetNode-Local development target")
+
+add_executable(AtlasNetNode-Local
+    ${_node_sources}
+    src/Standalone/LocalEntry.cpp
+    src/Backends/ValkeyRemoteBackend.cpp
+)
+target_include_directories(AtlasNetNode-Local PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}/src")
+target_link_libraries(AtlasNetNode-Local PRIVATE AtlasNetCore AtlasNetModule)
+target_compile_definitions(AtlasNetNode-Local PRIVATE
+    ATLASNET_LOCAL_VALKEY_SERVER="${CMAKE_SOURCE_DIR}/external/valkey/src/valkey-server"
+    ATLASNET_LOCAL_VALKEY_PORT=${ATLASNET_LOCAL_VALKEY_PORT}
+)
+add_dependencies(AtlasNetNode-Local Valkey-Server-Compile)
+set_target_properties(AtlasNetNode-Local PROPERTIES FOLDER "AtlasNet/Development")
+
+# ========= ATLASNET MODULES ========
+add_library(AtlasNetSteamNetSock MODULE
+    modules/SteamNetSock/SteamNetSockModule.cpp
+)
+target_link_libraries(AtlasNetSteamNetSock PRIVATE
+    AtlasNetModule
+    GameNetworkingSockets::GameNetworkingSockets_s
+)
+set_target_properties(AtlasNetSteamNetSock PROPERTIES
+    PREFIX ""
+    FOLDER "AtlasNet/Modules"
 )
 
 # ========= ATLASNET CARTOGRAPH ========
@@ -179,49 +238,3 @@ if (ATLASNET_CARTOGRAPH)
       VERBATIM
   )
 endif()
-
-# ========= ATLASNET Server API ========
-file(GLOB_RECURSE _API_Server_sources CONFIGURE_DEPENDS
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Server/*.cpp"
-)
-add_library(AtlasNetServerAPI STATIC ${_API_Server_sources})
-add_library(AtlasNetServerAPI_s SHARED ${_API_Server_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetServerAPI
-      PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-      "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Server"
-
-)
-target_include_directories(AtlasNetServerAPI_s
-      PUBLIC
-        "${CMAKE_CURRENT_SOURCE_DIR}/include"
-      "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Server"
-
-)
-target_link_libraries(AtlasNetServerAPI AtlasNetCore)
-target_link_libraries(AtlasNetServerAPI_s AtlasNetCore)
-set_target_properties(AtlasNetServerAPI PROPERTIES FOLDER "AtlasNet/SDK")
-set_target_properties(AtlasNetServerAPI_s PROPERTIES FOLDER "AtlasNet/SDK")
-
-# ========= ATLASNET CLIENT API ========
-file(GLOB_RECURSE _API_client_sources CONFIGURE_DEPENDS
-  "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Client/*.cpp"
-)
-add_library(AtlasNetClientAPI_s STATIC ${_API_client_sources})
-add_library(AtlasNetClientAPI SHARED ${_API_client_sources})
-# Optional, but common: local includes
-target_include_directories(AtlasNetClientAPI
-PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Client"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-)
-target_include_directories(AtlasNetClientAPI_s
-PUBLIC
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/SDK/Client"
-    "${CMAKE_CURRENT_SOURCE_DIR}/include"
-)
-target_link_libraries(AtlasNetClientAPI AtlasNetCore)
-target_link_libraries(AtlasNetClientAPI_s AtlasNetCore)
-set_target_properties(AtlasNetClientAPI PROPERTIES FOLDER "AtlasNet/SDK")
-set_target_properties(AtlasNetClientAPI_s PROPERTIES FOLDER "AtlasNet/SDK")

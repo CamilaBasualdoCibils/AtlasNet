@@ -1,0 +1,3 @@
+add_executable(AtlasNet_tests_Memory MemoryTests.cpp)
+target_link_libraries(AtlasNet_tests_Memory PRIVATE AtlasNetCore gtest)
+gtest_discover_tests(AtlasNet_tests_Memory PROPERTIES LABELS Memory)

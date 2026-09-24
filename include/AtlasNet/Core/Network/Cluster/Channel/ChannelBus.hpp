@@ -3,8 +3,8 @@
 #include "AtlasNet/Core/Network/Cluster/Channel/IClusterChannel.hpp"
 #include "AtlasNet/Core/Network/Cluster/Channel/V1/ClusterChannelV1.hpp"
 #include "AtlasNet/Core/Network/Cluster/Transport/ClusterDatagram.hpp"
-#include "AtlasNet/Core/Network/Cluster/Transport/IClusterResolver.hpp"
 #include "AtlasNet/Core/Network/Cluster/Transport/ClusterTransport.hpp"
+#include "AtlasNet/Core/Network/Cluster/Transport/IClusterResolver.hpp"
 #include <memory>
 #include <spdlog/logger.h>
 #include <unordered_map>
@@ -18,15 +18,17 @@ class ChannelBus
                      std::pair<std::shared_ptr<ChannelTransportProxy>,
                                std::shared_ptr<IClusterChannel>>>
       m_Channels;
-  std::shared_ptr<spdlog::logger> logger_ =
-      spdlog::stdout_color_mt("ChannelBus");
+  std::shared_ptr<spdlog::logger> logger_;
 
 public:
   struct ChannelBusOptions
   {
     std::shared_ptr<ClusterTransport> transport;
+    std::string name = "ChannelBus";
   };
-  ChannelBus(const ChannelBusOptions& options) : m_Transport(options.transport)
+  ChannelBus(const ChannelBusOptions& options)
+      : m_Transport(options.transport),
+        logger_(spdlog::stdout_color_mt(options.name))
   {
   }
   std::shared_ptr<IClusterChannel> MakeChannel(const ChannelOptions& options)

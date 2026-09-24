@@ -11,6 +11,11 @@ struct ClusterIntentRPCCaller
 {
   Intent::VIntent intent;
   AtlasNetNodeID nodeID;
+
+  operator Intent::VIntent() const
+  {
+    return Intent::Recepient::NodeRecepient{.nodeID = nodeID};
+  }
 };
 class ClusterIntentRPC : public RPC<Intent::VIntent, ClusterIntentRPCCaller>
 {
@@ -46,7 +51,8 @@ protected:
       {
         ClusterIntentRPCCaller caller{receiveBuffer[i].Header().intent,
                                       receiveBuffer[i].Header().source};
-        HandleIncomingPacket(caller, receiveBuffer[i].Payload());
+        HandleIncomingPacket(caller, receiveBuffer[i].Header().intent,
+                             receiveBuffer[i].Payload());
       }
       if (receiveNum < receiveBufferSize)
       {
@@ -58,6 +64,11 @@ protected:
   std::string TargetToString(const Intent::VIntent& target) const override
   {
     return Intent::IntentToString(target);
+  }
+
+  std::string CallerToString(const ClusterIntentRPCCaller& caller) const override
+  {
+    return caller.nodeID.to_string();
   }
 
 private:

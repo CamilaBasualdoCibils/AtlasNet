@@ -8,6 +8,7 @@
 #include "AtlasNet/Core/Network/Transport/TransportDatagram.hpp"
 #include <spdlog/logger.h>
 #include <spdlog/sinks/stdout_color_sinks-inl.h>
+#include <spdlog/spdlog.h>
 #include <stdexcept>
 
 namespace AtlasNet::Network::Cluster
@@ -17,7 +18,10 @@ class ClusterTransport
 public:
   ClusterTransport(std::shared_ptr<INetworkTransport> transport,
                    std::shared_ptr<IClusterResolver> resolver)
-      : transport(std::move(transport)), nodeResolver(std::move(resolver))
+      : transport(std::move(transport)), nodeResolver(std::move(resolver)),
+        logger(spdlog::get("ClusterTransport")
+                   ? spdlog::get("ClusterTransport")
+                   : spdlog::stdout_color_mt("ClusterTransport"))
   {
   }
   virtual ~ClusterTransport() = default;
@@ -49,6 +53,7 @@ public:
                      transportDatagram.source.to_string());
         continue;
       }
+      datagram.source = *sourceID;
       packets[outputPacket++] = datagram;
     }
     return outputPacket;
@@ -72,6 +77,7 @@ public:
                      transportDatagram.source.to_string());
         continue;
       }
+      datagram.source = *sourceID;
       packets[outputPacket++] = datagram;
     }
     return outputPacket;
@@ -86,7 +92,6 @@ protected:
 private:
   std::shared_ptr<INetworkTransport> transport;
   std::shared_ptr<IClusterResolver> nodeResolver;
-  std::shared_ptr<spdlog::logger> logger =
-      spdlog::stdout_color_mt("ClusterTransport");
+  std::shared_ptr<spdlog::logger> logger;
 };
 } // namespace AtlasNet::Network::Cluster

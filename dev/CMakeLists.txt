@@ -10,7 +10,7 @@ add_custom_target(AtlasNetDevDockerBuildStage
         $<TARGET_FILE:AtlasNetNode>
         "${DEV_STAGE_DIR}/"
     COMMAND ${CMAKE_COMMAND} -E copy
-        $<TARGET_FILE:AtlasNetDB>
+        $<TARGET_FILE:AtlasNetNode-ValkeyModule>
         "${DEV_STAGE_DIR}/"
 
     COMMAND ${CMAKE_COMMAND} -E copy
@@ -20,7 +20,7 @@ add_custom_target(AtlasNetDevDockerBuildStage
     DEPENDS
         $<TARGET_FILE:AtlasNetCartographBackend>
         $<TARGET_FILE:AtlasNetNode>
-        $<TARGET_FILE:AtlasNetDB>
+        $<TARGET_FILE:AtlasNetNode-ValkeyModule>
 
     USES_TERMINAL
     VERBATIM
