@@ -153,6 +153,7 @@ public:
       throw std::invalid_argument("Unsupported address family");
     }
   }
+#ifdef ATLASNET_STEAMNETSOCK
   explicit SocketAddress(const SteamNetworkingIPAddr& steamAddr)
   {
     if (steamAddr.m_port == 0)
@@ -190,6 +191,7 @@ public:
                          static_cast<uint16_t>(ipv6_bytes[15]));
     }
   }
+#endif
 
   bool IsIPv4() const
   {
@@ -240,6 +242,7 @@ public:
     return std::get<SteamIDAddress>(address);
   } */
 
+#ifdef ATLASNET_STEAMNETSOCK
   SteamNetworkingIPAddr ToSteamAddr() const
   {
     auto FromIPv4 = [](const IPv4& ipv4, PortType port) -> SteamNetworkingIPAddr
@@ -286,6 +289,7 @@ public:
 
     throw std::runtime_error("Invalid SocketAddress variant");
   }
+#endif
   SocketAddress Resolve() const
   {
     if (!IsValid())
@@ -439,6 +443,9 @@ public:
 
   std::size_t hash() const noexcept override
   {
+    if (address.valueless_by_exception())
+      return 0u;
+
     std::size_t h = std::visit(
         [](const auto& addr) -> std::size_t
         {

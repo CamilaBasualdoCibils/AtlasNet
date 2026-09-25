@@ -48,7 +48,7 @@ struct PacketHeader
     archive(magic, version, flags, channel, packetSequence, ackSequence,
             ackBits, messageCount, payloadBytes);
   }
-  constexpr static size_t NetSize() noexcept
+  static size_t NetSize() noexcept
   {
     NetBinaryWriter writer;
     writer(PacketHeader());
@@ -64,7 +64,7 @@ struct MessageHeader
   {
     archive(messageSequence, payloadBytes);
   }
-  constexpr static size_t NetSize() noexcept
+  static size_t NetSize() noexcept
   {
     NetBinaryWriter writer;
     writer(MessageHeader());
@@ -78,7 +78,7 @@ class ClusterChannelV1 : public IClusterChannel
 public:
   ClusterChannelV1(const ChannelOptions& options,
                    std::shared_ptr<ChannelTransportProxy> transport)
-      : IClusterChannel(options, transport),
+      : IClusterChannel(options, std::move(transport)),
         logger_(spdlog::stdout_color_mt(std::format("ClusterChannelV1-{}", options.id)))
   {
     logger_->set_level(spdlog::level::trace);

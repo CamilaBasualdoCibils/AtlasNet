@@ -23,12 +23,11 @@
       "name" : "spdlog",
       "features" : [ "fmt" ]
     },
-    "gamenetworkingsockets",
     {
       "name": "redis-plus-plus",
       "features": [
         "tls",
-        "cxx17",
+        "cxx17", 
         "async",
         "async-std"
       ]
@@ -43,6 +42,13 @@
   ],
 
   "features": {
+    "steamnetsock": {
+      "description": "AtlasNet SteamNetworkingSockets transport dependencies",
+      "dependencies": [
+        "gamenetworkingsockets"
+      ]
+    },
+
     "cartograph": {
       "description": "AtlasNet Cartograph dashboard dependencies",
       "dependencies": [

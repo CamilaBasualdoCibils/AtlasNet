@@ -1,5 +1,23 @@
 cmake_minimum_required(VERSION 3.10)
 
+option(ATLASNET_EXAMPLES "Build AtlasNet examples" ON)
+option(ATLASNET_TESTS "Build AtlasNet tests" ON)
+option(ATLASNET_DEV "Build AtlasNet dev" ON)
+option(ATLASNET_CARTOGRAPH "Build AtlasNet web interface" ON)
+option(ATLASNET_STEAMNETSOCK "Build SteamNetworkingSockets support" OFF)
+
+# vcpkg resolves manifest features while project() initializes its toolchain.
+if (ATLASNET_TESTS)
+  list(APPEND VCPKG_MANIFEST_FEATURES testing)
+endif()
+if (ATLASNET_CARTOGRAPH)
+  list(APPEND VCPKG_MANIFEST_FEATURES cartograph)
+endif()
+if (ATLASNET_STEAMNETSOCK)
+  list(APPEND VCPKG_MANIFEST_FEATURES steamnetsock)
+endif()
+list(REMOVE_DUPLICATES VCPKG_MANIFEST_FEATURES)
+
 #set(CMAKE_C_COMPILER clang)
 #set(CMAKE_CXX_COMPILER clang++)
 project(AtlasNet  LANGUAGES C CXX)
@@ -16,10 +34,6 @@ set (CMAKE_POLICY_VERSION_MINIMUM 3.5)
 
 include(cmake/FetchDeps.cmake)
 
-set(ATLASNET_EXAMPLES ON CACHE BOOL "Build AtlasNet examples")
-set(ATLASNET_TESTS ON CACHE BOOL "Build AtlasNet tests")
-set(ATLASNET_DEV ON CACHE BOOL "Build AtlasNet dev")
-set(ATLASNET_CARTOGRAPH ON CACHE BOOL "Build AtlasNet web interface")
 add_compile_definitions(
     $<$<CONFIG:Debug>:DEBUG>
     ATLASNET_DB_DEBUG_HANDSHAKE_PORT=5000
@@ -62,7 +76,9 @@ target_include_directories(AtlasNetCore
 )
 target_compile_definitions(AtlasNetCore PUBLIC
     SPDLOG_ACTIVE_LEVEL=SPDLOG_LEVEL_TRACE
+    $<$<BOOL:${ATLASNET_STEAMNETSOCK}>:ATLASNET_STEAMNETSOCK>
 )
+target_compile_features(AtlasNetCore PUBLIC cxx_std_23)
 
 target_link_libraries(AtlasNetCore
 PUBLIC
@@ -79,14 +95,19 @@ PUBLIC
   Boost::program_options
   spdlog::spdlog
   Bitsery::bitsery
-  GameNetworkingSockets::GameNetworkingSockets_s
   glm::glm
   redis++::redis++_static
   hiredis::hiredis
   hiredis::hiredis_ssl
   $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
   nlohmann_json::nlohmann_json
+  EnTT::EnTT
 )
+if (ATLASNET_STEAMNETSOCK)
+  target_link_libraries(AtlasNetCore PUBLIC
+    GameNetworkingSockets::GameNetworkingSockets_s
+  )
+endif()
 set_target_properties(AtlasNetCore PROPERTIES FOLDER "AtlasNet")
 
 # ========= ATLASNET Node ========

@@ -49,7 +49,8 @@ public:
                      transportDatagram.source.to_string());
         continue;
       }
-      packets[outputPacket++] = datagram;
+      datagram.source = *sourceID;
+      packets[outputPacket++] = std::move(datagram);
     }
     return outputPacket;
   }
@@ -72,7 +73,8 @@ public:
                      transportDatagram.source.to_string());
         continue;
       }
-      packets[outputPacket++] = datagram;
+      datagram.source = *sourceID;
+      packets[outputPacket++] = std::move(datagram);
     }
     return outputPacket;
   }

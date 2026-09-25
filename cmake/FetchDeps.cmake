@@ -15,7 +15,9 @@ find_package(Boost REQUIRED CONFIG COMPONENTS
 )
 
 find_package(spdlog CONFIG REQUIRED)
-find_package(GameNetworkingSockets CONFIG REQUIRED)
+if (ATLASNET_STEAMNETSOCK)
+  find_package(GameNetworkingSockets CONFIG REQUIRED)
+endif()
 find_package(glm CONFIG REQUIRED)
 find_package(hiredis CONFIG REQUIRED)
 find_package(hiredis_ssl CONFIG REQUIRED)
@@ -24,4 +26,12 @@ find_package(nlohmann_json CONFIG REQUIRED)
 find_package(redis++ CONFIG REQUIRED)
 find_package(Bitsery CONFIG REQUIRED)
 
-
+# EnTT is header-only; scoped for SpatialObject / component backend.
+include(FetchContent)
+FetchContent_Declare(
+  entt
+  URL https://github.com/skypjack/entt/archive/refs/tags/v3.16.0.tar.gz
+  DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+)
+set(ENTT_BUILD_TESTING OFF CACHE BOOL "" FORCE)
+FetchContent_MakeAvailable(entt)

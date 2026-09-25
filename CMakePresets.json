@@ -2,6 +2,21 @@
     "version": 6,
     "configurePresets": [
         {
+            "name": "linux-vcpkg-ci",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_C_COMPILER": "/usr/bin/gcc-14",
+                "CMAKE_CXX_COMPILER": "/usr/bin/g++-14",
+                "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+                "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/vcpkg-triplets/gcc-toolchain.cmake",
+                "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/vcpkg-triplets",
+                "VCPKG_TARGET_TRIPLET": "x64-linux-gcc",
+                "VCPKG_MANIFEST_FEATURES": "testing"
+            }
+        },
+        {
             "name": "linux-vcpkg-debug",
             "generator": "Ninja",
             "binaryDir": "${sourceDir}/build",

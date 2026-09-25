@@ -1,0 +1,11 @@
+repos:
+  - repo: local
+    hooks:
+      - id: clang-tidy
+        name: clang-tidy
+        description: Lint staged C and C++ translation units using the CMake compile database
+        entry: dev/run-clang-tidy.sh
+        language: system
+        files: \.(c|cc|cpp|cxx)$
+        exclude: ^(external/|src_prev/)
+        require_serial: true
