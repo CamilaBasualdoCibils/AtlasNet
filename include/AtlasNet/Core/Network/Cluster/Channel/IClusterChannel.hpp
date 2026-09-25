@@ -16,7 +16,7 @@ struct ChannelOptions
   OrderingMode ordering = OrderingMode::Unordered;
   BatchMode batching = BatchMode::Automatic;
 
-  size_t maxBatchBytes = 32 * 1024;
+  size_t maxBatchBytes = size_t{32} * 1024;
   size_t maxQueuedMessages = 256;
 
   constexpr bool Validate() const noexcept
@@ -50,7 +50,7 @@ class IClusterChannel
 public:
   IClusterChannel(const ChannelOptions& options,
                   std::shared_ptr<ChannelTransportProxy> transport)
-      : options(options), transport(transport)
+      : options(options), transport(std::move(transport))
   {
     if (!options.Validate())
     {

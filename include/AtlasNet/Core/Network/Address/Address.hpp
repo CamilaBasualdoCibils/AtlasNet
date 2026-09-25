@@ -1,7 +1,10 @@
 #pragma once
-#include "steam/steamclientpublic.h"
-#include "steam/steamnetworkingtypes.h"
-#include "steam/steamtypes.h"
+#ifdef ATLASNET_STEAMNETSOCK
+#include <steam/steam_api_common.h>
+#include <steam/steamclientpublic.h>
+#include <steam/steamnetworkingtypes.h>
+#include <steam/steamtypes.h>
+#endif
 #include <array>
 #include <cctype>
 #include <concepts>
@@ -14,7 +17,6 @@
 #include <optional>
 #include <sstream>
 #include <stdexcept>
-#include <steam/steam_api_common.h>
 #include <string>
 #include <sys/types.h>
 #include <variant>
@@ -422,6 +424,7 @@ private:
   }
 };
 
+#ifdef ATLASNET_STEAMNETSOCK
 class SteamIDAddress : public IAddress
 {
   SteamNetworkingIdentity identity{};
@@ -482,6 +485,7 @@ public:
 
 
 };
+#endif
 
 class HostName : public IAddress
 {
@@ -591,7 +595,11 @@ public:
 
 class HostAddress : public IAddress
 {
+#ifdef ATLASNET_STEAMNETSOCK
   std::variant<std::monostate, IPv4, IPv6, HostName, SteamIDAddress> address;
+#else
+  std::variant<std::monostate, IPv4, IPv6, HostName> address;
+#endif
 
 public:
   HostAddress() = default;
@@ -602,7 +610,9 @@ public:
   HostAddress(const IPv4& ipv4) : address(ipv4) {}
   HostAddress(const IPv6& ipv6) : address(ipv6) {}
   HostAddress(const HostName& hostName) : address(hostName) {}
+#ifdef ATLASNET_STEAMNETSOCK
   HostAddress(const SteamIDAddress& steamID) : address(steamID) {}
+#endif
 
   bool IsIPv4() const
   {
@@ -616,10 +626,12 @@ public:
   {
     return std::holds_alternative<HostName>(address);
   }
+#ifdef ATLASNET_STEAMNETSOCK
   bool IsSteamID() const
   {
     return std::holds_alternative<SteamIDAddress>(address);
   }
+#endif
   bool IsValid() const
   {
     return !std::holds_alternative<std::monostate>(address);
@@ -646,12 +658,14 @@ public:
     return std::get<HostName>(address);
   }
 
+#ifdef ATLASNET_STEAMNETSOCK
   const SteamIDAddress& get_steam_id() const
   {
     if (!IsSteamID())
       throw std::bad_variant_access();
     return std::get<SteamIDAddress>(address);
   }
+#endif
 
   std::string to_string() const override
   {
@@ -689,6 +703,9 @@ public:
 
   std::size_t hash() const noexcept override
   {
+    if (address.valueless_by_exception())
+      return 0u;
+
     return std::visit(
         [](const auto& addr) -> std::size_t
         {
@@ -728,8 +745,10 @@ public:
       return *a == std::get<IPv6>(other.address);
     if (const auto* a = std::get_if<HostName>(&address))
       return *a == std::get<HostName>(other.address);
+#ifdef ATLASNET_STEAMNETSOCK
     if (const auto* a = std::get_if<SteamIDAddress>(&address))
       return *a == std::get<SteamIDAddress>(other.address);
+#endif
 
     return std::holds_alternative<std::monostate>(address) &&
            std::holds_alternative<std::monostate>(other.address);
@@ -756,6 +775,7 @@ template <> struct hash<AtlasNet::Network::IPv6>
   }
 };
 
+#ifdef ATLASNET_STEAMNETSOCK
 template <> struct hash<AtlasNet::Network::SteamIDAddress>
 {
   std::size_t operator()(const AtlasNet::Network::SteamIDAddress& a) const noexcept
@@ -763,6 +783,7 @@ template <> struct hash<AtlasNet::Network::SteamIDAddress>
     return a.hash();
   }
 };
+#endif
 
 template <> struct hash<AtlasNet::Network::HostName>
 {

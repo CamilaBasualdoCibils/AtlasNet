@@ -40,10 +40,11 @@ bool AtlasNet::Network::Cluster::ClusterChannelV1::Send(
 
   message.payload.assign(payload.begin(), payload.end());
 
+  const uint64_t sequence = message.sequence;
   peer.send.queuedBytes += framedSize;
   peer.send.queuedMessages.push_back(std::move(message));
   logger_->trace("Queued message for {} ({} bytes, seq={})",
-                 destination.to_string(), payload.size(), message.sequence);
+                 destination.to_string(), payload.size(), sequence);
 
   switch (options.batching)
   {
@@ -208,7 +209,8 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::FlushPendingAcks()
                    peer.receive.receivedPacketBits);
     std::vector<std::byte> bytes = BuildPacket(peer, {}, 0, true);
 
-    GetTransport()->Send(destination, bytes);
+    if (GetTransport()->Send(destination, bytes))
+      peer.receive.ackPending = false;
   }
 }
 void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessTimers()
@@ -265,12 +267,18 @@ AtlasNet::Network::Cluster::ClusterChannelV1::PumpTransport(bool blocking)
   if (received == 0)
     return 0;
   logger_->trace("Received {} datagrams", received);
-  std::scoped_lock lock(mutex_);
-
-  for (size_t index = 0; index < received; ++index)
   {
-    ProcessDatagram(packets[index]);
-    packets[index].Release();
+    std::scoped_lock lock(mutex_);
+
+    for (size_t index = 0; index < received; ++index)
+    {
+      ProcessDatagram(packets[index]);
+      packets[index].Release();
+    }
+
+    // Receiving must advance reliability even when the caller is not driving
+    // Tick(). A failed ACK stays pending for the next receive or tick.
+    FlushPendingAcks();
   }
 
   return received;
@@ -330,7 +338,7 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessDatagram(
   if (header.messageCount > GetOptions().maxQueuedMessages)
     return;
 
-  for (uint16_t index = 0; index < header.messageCount; ++index)
+  for (uint64_t index = 0; index < header.messageCount; ++index)
   {
     ChannelV1::MessageHeader messageHeader;
     messageHeader.serialize(reader);
@@ -458,6 +466,11 @@ void AtlasNet::Network::Cluster::ClusterChannelV1::ProcessMessage(
     }
 
     state.highestSequencedMessage = messageSequence;
+
+    // Only expose the newest message from this peer that has not already been
+    // consumed. A newer message supersedes an older ready one.
+    std::erase_if(readyMessages_, [&source](const ReadyMessage& ready)
+                  { return ready.source == source; });
 
     readyMessages_.push_back({
         .source = source,

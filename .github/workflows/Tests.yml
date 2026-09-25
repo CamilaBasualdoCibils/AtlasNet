@@ -1,68 +1,82 @@
-name: CI
+name: Build and Test
 
 on:
-  pull_request:
   push:
-    branches: [main, NetworkRework, Development]
+    branches:
+      - main
+      - Development
+  pull_request:
+  workflow_dispatch:
 
 jobs:
-  test:
+  build-and-test:
+    name: Build & Test
     runs-on: ubuntu-latest
 
-    env:
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-cache
-      # Match local / builtin-baseline in vcpkg.json
-      VCPKG_COMMIT: b773faa425fbb6804af8dcdaa6bd725409fc4c80
-
     steps:
-      - name: Checkout
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           submodules: recursive
 
-      - name: Install system packages
+      - name: Install build dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y \
-            ninja-build gcc-14 g++-14 pkg-config \
-            autoconf autoconf-archive automake libtool \
-            libssl-dev zlib1g-dev \
-            libgl1-mesa-dev libx11-dev libxrandr-dev libxinerama-dev \
-            libxcursor-dev libxi-dev libxext-dev
-          command -v g++-14
-          command -v ninja
-          dpkg -l autoconf-archive | tail -1
+            build-essential \
+            cmake \
+            ninja-build \
+            pkg-config \
+            autoconf \
+            automake \
+            autoconf-archive \
+            libtool \
+            linux-libc-dev \
+            libxrandr-dev \
+            libxinerama-dev \
+            libxcursor-dev \
+            libxi-dev \
+            libgl1-mesa-dev
 
-      - name: Setup vcpkg
-        uses: lukka/run-vcpkg@v11
-        with:
-          vcpkgDirectory: ${{ env.VCPKG_ROOT }}
-          vcpkgGitCommitId: ${{ env.VCPKG_COMMIT }}
+      - name: Download vcpkg
+        run: |
+          git clone https://github.com/microsoft/vcpkg.git "${{ github.workspace }}/vcpkg"
 
-      - name: Cache vcpkg installed packages
+      - name: Bootstrap vcpkg
+        run: |
+          "${{ github.workspace }}/vcpkg/bootstrap-vcpkg.sh" -disableMetrics
+
+      - name: Configure vcpkg binary cache
+        run: |
+          mkdir -p "${{ github.workspace }}/.vcpkg-cache"
+          echo "VCPKG_BINARY_SOURCES=clear;files,${{ github.workspace }}/.vcpkg-cache,readwrite" >> "$GITHUB_ENV"
+
+      - name: Restore vcpkg binary cache
         uses: actions/cache@v4
         with:
-          path: |
-            ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
-            ${{ github.workspace }}/build/vcpkg_installed
-          key: vcpkg-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-${{ hashFiles('vcpkg.json', 'vcpkg-triplets/**') }}
+          path: .vcpkg-cache
+          key: vcpkg-${{ runner.os }}-${{ hashFiles('vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ runner.os }}-${{ env.VCPKG_COMMIT }}-
             vcpkg-${{ runner.os }}-
 
       - name: Configure
         run: |
-          mkdir -p "${VCPKG_DEFAULT_BINARY_CACHE}"
-          cmake --preset linux-vcpkg-ci \
-            -DVCPKG_MANIFEST_FEATURES=testing \
-            -DATLASNET_CARTOGRAPH=OFF \
-            -DATLASNET_EXAMPLES=OFF \
-            -DATLASNET_DEV=OFF \
-            -DATLASNET_TESTS=ON
+          cmake \
+            -S . \
+            -B build \
+            -G Ninja \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_TOOLCHAIN_FILE="${{ github.workspace }}/vcpkg/scripts/buildsystems/vcpkg.cmake" \
+            -DATLASNET_TESTS=ON \
+            -DATLASNET_STEAMNETSOCK=ON \
+            -DATLASNET_CARTOGRAPH=ON
 
-      - name: Build
-        run: cmake --build build --config Debug -j"$(nproc)"
+      - name: Build everything
+        run: |
+          cmake --build build --parallel
 
-      - name: Run tests
-        run: ctest --test-dir build --output-on-failure
+      - name: Run all tests
+        run: |
+          ctest \
+            --test-dir build \
+            --output-on-failure

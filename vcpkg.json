@@ -1,7 +1,6 @@
 {
   "name": "atlasnet",
   "version-string": "0.1.0",
-  "builtin-baseline": "b773faa425fbb6804af8dcdaa6bd725409fc4c80",
 
   "dependencies": [
     "glm",
@@ -24,7 +23,6 @@
       "name" : "spdlog",
       "features" : [ "fmt" ]
     },
-    "gamenetworkingsockets",
     {
       "name": "redis-plus-plus",
       "features": [
@@ -44,6 +42,13 @@
   ],
 
   "features": {
+    "steamnetsock": {
+      "description": "AtlasNet SteamNetworkingSockets transport dependencies",
+      "dependencies": [
+        "gamenetworkingsockets"
+      ]
+    },
+
     "cartograph": {
       "description": "AtlasNet Cartograph dashboard dependencies",
       "dependencies": [

@@ -91,6 +91,26 @@ flowchart LR
 ---
 ## Development
 
+### Pre-commit linting
+
+AtlasNet uses `clang-tidy` to lint staged C and C++ source files. Install
+[`pre-commit`](https://pre-commit.com/), configure the project once so that
+`build/compile_commands.json` exists, and install the hook:
+
+```sh
+cmake --preset linux-vcpkg-debug
+pre-commit install
+```
+
+Run it against every tracked source file with:
+
+```sh
+pre-commit run clang-tidy --all-files
+```
+
+If your CMake build directory is not `build`, set `ATLASNET_BUILD_DIR` to its
+path when running the hook.
+
 ### Server
 
 A game server must implement our AtlasNetServer interface

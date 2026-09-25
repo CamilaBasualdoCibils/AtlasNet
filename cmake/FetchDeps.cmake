@@ -15,7 +15,9 @@ find_package(Boost REQUIRED CONFIG COMPONENTS
 )
 
 find_package(spdlog CONFIG REQUIRED)
-find_package(GameNetworkingSockets CONFIG REQUIRED)
+if (ATLASNET_STEAMNETSOCK)
+  find_package(GameNetworkingSockets CONFIG REQUIRED)
+endif()
 find_package(glm CONFIG REQUIRED)
 find_package(hiredis CONFIG REQUIRED)
 find_package(hiredis_ssl CONFIG REQUIRED)
@@ -33,4 +35,3 @@ FetchContent_Declare(
 )
 set(ENTT_BUILD_TESTING OFF CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(entt)
-
